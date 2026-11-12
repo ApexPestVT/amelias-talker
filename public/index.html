@@ -691,7 +691,7 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v10) ---'+
+      dbgText = '\n--- Listening check (v11) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -1051,17 +1051,14 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
   /* Every picture goes through here: hold time, lift-to-speak, and ignoring extra taps. */
   var lastTapAt = 0;
   function onPress(b, fn){
-    var downAt = 0, downOn = false;
-    b.addEventListener('pointerdown', function(){ downAt = Date.now(); downOn = true; b.classList.add('pressing'); });
-    ['pointerleave','pointercancel'].forEach(function(ev){ b.addEventListener(ev, function(){ downOn = false; b.classList.remove('pressing'); }); });
+    var downAt = 0;
+    b.addEventListener('pointerdown', function(){ downAt = Date.now(); b.classList.add('pressing'); });
+    ['pointerup','pointerleave','pointercancel'].forEach(function(ev){ b.addEventListener(ev, function(){ b.classList.remove('pressing'); }); });
     b.addEventListener('click', function(e){
       b.classList.remove('pressing');
-      var now = Date.now(), byTouch = e.detail !== 0;             // detail 0 = keyboard
-      if(byTouch){
-        if(!downOn) return;                                        // finger slid in from another picture
-        if(state.hold > 0 && now - downAt < state.hold*1000) return;
-      }
-      downOn = false;
+      var now = Date.now(), byTouch = e.detail !== 0;             // detail 0 = keyboard or switch
+      // The browser only sends a click when the finger lifts on the picture it landed on, so no extra check is needed for sliding.
+      if(byTouch && state.hold > 0 && downAt && now - downAt < state.hold*1000) return;
       if(state.repeat > 0 && now - lastTapAt < state.repeat*1000) return;   // extra tap
       lastTapAt = now;
       fn();
