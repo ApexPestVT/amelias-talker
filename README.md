@@ -15,3 +15,13 @@ New Project -> Deploy from GitHub repo -> pick this repo. No variables needed.
 - `server.js` static server
 - `public/index.html` the whole app (words, sentence engine, settings)
 - `public/sw.js` offline cache; `public/manifest.webmanifest` install info
+
+## Cloud listening (iPad and Android)
+Set one variable in Railway and redeploy:
+- `ASSEMBLYAI_API_KEY` = your AssemblyAI key
+
+To try Deepgram instead: set `STT_PROVIDER=deepgram` and `DEEPGRAM_API_KEY`.
+With no key set, the app falls back to Chrome's built-in listening (Android/desktop Chrome only).
+
+The key never reaches the tablet. The tablet asks `/api/stt/token` for a 60-second token and connects to the speech service itself.
+It only connects while it hears a voice and hangs up after 20 quiet seconds.

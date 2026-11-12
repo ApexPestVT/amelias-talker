@@ -470,7 +470,7 @@ if(typeof module!=='undefined') module.exports = {LOOKUP:LOOKUP, compose:compose
   var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {};
-  var diag = { voice:'checking', mic:'checking', store:'checking', error:'' };
+  var diag = { voice:'checking', mic:'checking', cloud:'', store:'checking', error:'' };
 
   /* ---------- settings (small) and pictures (IndexedDB), both on this device only ---------- */
   try{
@@ -518,7 +518,7 @@ if(typeof module!=='undefined') module.exports = {LOOKUP:LOOKUP, compose:compose
   }
 
   function showDiag(){
-    $('diag').textContent = 'Voice: '+diag.voice+'\nMicrophone: '+diag.mic+'\nPhotos: '+diag.store+(diag.error?'\nLast problem: '+diag.error:'');
+    $('diag').textContent = 'Voice: '+diag.voice+'\nMicrophone: '+diag.mic+(diag.cloud?'\nSpeech service: '+diag.cloud:'')+'\nPhotos: '+diag.store+(diag.error?'\nLast problem: '+diag.error:'');
   }
   window.addEventListener('error', function(e){ diag.error = (e.message||'script error'); showDiag(); });
   window.addEventListener('unhandledrejection', function(e){ diag.error = String((e.reason&&(e.reason.code||e.reason.message))||e.reason||'promise'); showDiag(); });
@@ -579,12 +579,13 @@ if(typeof module!=='undefined') module.exports = {LOOKUP:LOOKUP, compose:compose
   var hosted = !!(window.claude && typeof window.claude.use==='function');   // preview inside Claude
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   var rec = null, restartT = null, fails = 0, dict = null;
+  var mode = hosted ? 'hosted' : 'browser';      // 'cloud' once the server says a speech key is set
 
   function setEar(){
-    var b = $('earBtn'), can = hosted ? !!dict : !!SR;
+    var b = $('earBtn'), can = mode==='hosted' ? !!dict : (mode==='cloud' ? true : !!SR);
     b.classList.toggle('on', listening);
     b.classList.toggle('off-air', !can || !state.listen);
-    $('earTxt').textContent = listening ? 'Listening' : (!can ? 'No microphone here' : (!state.listen ? 'Listening is off' : (blocked ? 'Tap to allow mic' : (hosted ? 'Tap to listen' : 'Starting'))));
+    $('earTxt').textContent = listening ? 'Listening' : (!can ? 'No microphone here' : (!state.listen ? 'Listening is off' : (blocked ? 'Tap to allow mic' : (mode==='hosted' ? 'Tap to listen' : (mode==='cloud' ? 'Tap to start listening' : 'Starting')))));
   }
   function showHeard(text, partial){
     var h = $('heard');
@@ -614,7 +615,7 @@ if(typeof module!=='undefined') module.exports = {LOOKUP:LOOKUP, compose:compose
 
   /* Real web address: the browser's own speech recognition, always on, restarts itself. */
   function srStart(){
-    if(hosted || !SR || !state.listen || blocked || document.hidden || rec) return;
+    if(mode!=='browser' || !SR || !state.listen || blocked || document.hidden || rec) return;
     try{
       rec = new SR(); rec.continuous = true; rec.interimResults = true; rec.lang = 'en-US';
       rec.onstart = function(){ listening = true; fails = 0; diag.mic = 'listening'; setEar(); showDiag(); };
@@ -643,7 +644,141 @@ if(typeof module!=='undefined') module.exports = {LOOKUP:LOOKUP, compose:compose
     if(rec){ try{ rec.onend = null; rec.stop(); }catch(e){} rec = null; }
     listening = false; setEar();
   }
-  document.addEventListener('visibilitychange', function(){ if(hosted) return; if(document.hidden) srStop(); else srStart(); });
+  document.addEventListener('visibilitychange', function(){
+    if(mode==='hosted') return;
+    if(document.hidden){ srStop(); cloudStop(); } else if(mode==='cloud') cloudStart(); else srStart();
+  });
+
+  /* Cloud listening (iPad and Android): the tablet's mic audio goes to a speech service.
+     To keep cost down it only connects while it hears a voice, and hangs up after 20 quiet seconds. */
+  var cloud = { on:false, starting:false, ctx:null, stream:null, src:null, node:null, ws:null, opening:false, ring:[],
+                lastVoice:0, backoff:0, openedAt:0, usedMs:0, provider:'', dgBuf:'' };
+  var VOICE_RMS = 0.012, QUIET_HANGUP = 20000, PRE_ROLL = 14, RING_MAX = 60;
+  function cloudNote(t){
+    var mins = Math.round((cloud.usedMs + (cloud.openedAt ? Date.now()-cloud.openedAt : 0))/6000)/10;
+    diag.cloud = cloud.provider+', '+t+'. Used '+mins+' min since the app opened.'; showDiag();
+  }
+  function toPcm16(f32, inRate){
+    var ratio = inRate/16000, n = Math.floor(f32.length/ratio), out = new Int16Array(n), sum = 0;
+    for(var i=0;i<n;i++){
+      var a = Math.floor(i*ratio), b = Math.min(f32.length, Math.floor((i+1)*ratio)), acc = 0, c = 0;
+      for(var j=a;j<b;j++){ acc += f32[j]; c++; }
+      var v = c ? acc/c : 0; sum += v*v;
+      out[i] = Math.max(-32768, Math.min(32767, Math.round(v*32767)));
+    }
+    return { pcm:out, rms: n ? Math.sqrt(sum/n) : 0 };
+  }
+  function onAudio(f32){
+    if(!cloud.on) return;
+    var now = Date.now();
+    if(state.speaking || now-state.spokeEnd < 800) return;          // never send the talker's own voice
+    var r = toPcm16(f32, cloud.ctx.sampleRate);
+    if(r.rms > VOICE_RMS) cloud.lastVoice = now;
+    if(cloud.ws && cloud.ws.readyState===1 && !cloud.opening){
+      try{ cloud.ws.send(r.pcm.buffer); }catch(e){}
+      if(now-cloud.lastVoice > QUIET_HANGUP) cloudHangup('quiet, waiting for a voice');
+      return;
+    }
+    cloud.ring.push(r.pcm);
+    if(cloud.ring.length > (cloud.opening ? RING_MAX : PRE_ROLL)) cloud.ring.shift();
+    if(r.rms > VOICE_RMS && !cloud.opening && !cloud.ws && now > cloud.backoff) cloudConnect();
+  }
+  function cloudConnect(){
+    cloud.opening = true; cloudNote('connecting');
+    fetch('api/stt/token', {method:'POST'}).then(function(r){
+      return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||('error '+r.status)); return d; });
+    }).then(function(t){
+      if(!cloud.on){ cloud.opening=false; return; }
+      var ws = t.protocols ? new WebSocket(t.url, t.protocols) : new WebSocket(t.url);
+      ws.binaryType = 'arraybuffer'; cloud.ws = ws; cloud.dgBuf = '';
+      ws.onopen = function(){
+        cloud.opening = false; cloud.openedAt = Date.now(); fails = 0;
+        cloud.ring.forEach(function(c){ try{ ws.send(c.buffer); }catch(e){} }); cloud.ring = [];
+        cloudNote('connected');
+      };
+      ws.onmessage = function(ev){
+        var m; try{ m = JSON.parse(ev.data); }catch(e){ return; }
+        var text = '', fin = false;
+        if(m.type==='Turn'){ text = m.transcript||''; fin = !!m.end_of_turn; }
+        else if(m.type==='Results'){
+          var alt = m.channel && m.channel.alternatives && m.channel.alternatives[0]; var piece = (alt && alt.transcript)||'';
+          if(m.is_final){ cloud.dgBuf = (cloud.dgBuf+' '+piece).trim(); text = cloud.dgBuf; fin = true; if(m.speech_final) cloud.dgBuf = ''; }
+          else text = (cloud.dgBuf+' '+piece).trim();
+        }
+        else if(m.error || m.type==='Error'){ cloudNote('problem: '+(m.error||m.description||m.message||'unknown')); return; }
+        if(!text || isEcho(text)) return;
+        cloud.lastVoice = Date.now();
+        if(fin) setHeard(text); else showHeard(text, true);
+      };
+      ws.onerror = function(){ fails++; };
+      ws.onclose = function(ev){
+        if(cloud.ws!==ws) return;
+        if(cloud.openedAt){ cloud.usedMs += Date.now()-cloud.openedAt; cloud.openedAt = 0; }
+        cloud.ws = null; cloud.opening = false;
+        if(ev.code!==1000 && ev.code!==1005){ fails++; cloud.backoff = Date.now()+Math.min(3000*fails, 30000); cloudNote('connection dropped (code '+ev.code+'), will retry'); }
+      };
+    }).catch(function(err){
+      cloud.opening = false; fails++; cloud.backoff = Date.now()+Math.min(5000*fails, 60000);
+      cloudNote('could not connect ('+(err&&err.message||'no internet')+')');
+    });
+  }
+  function cloudHangup(note){
+    var ws = cloud.ws; if(!ws) return;
+    if(cloud.openedAt){ cloud.usedMs += Date.now()-cloud.openedAt; cloud.openedAt = 0; }
+    cloud.ws = null; cloud.opening = false;
+    try{ ws.send(JSON.stringify({type: cloud.provider==='deepgram' ? 'CloseStream' : 'Terminate'})); }catch(e){}
+    try{ ws.close(1000); }catch(e){}
+    cloudNote(note||'idle');
+  }
+  function cloudStart(){
+    if(mode!=='cloud' || cloud.on || cloud.starting || !state.listen || blocked || document.hidden) return;
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ diag.mic = 'this browser will not share the microphone'; showDiag(); return; }
+    cloud.starting = true;
+    navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true, autoGainControl:true, channelCount:1}}).then(function(stream){
+      var AC = window.AudioContext || window.webkitAudioContext, ctx = new AC();
+      cloud.stream = stream; cloud.ctx = ctx; cloud.src = ctx.createMediaStreamSource(stream);
+      var mute = ctx.createGain(); mute.gain.value = 0; mute.connect(ctx.destination);
+      var ready = function(node){
+        cloud.node = node; cloud.src.connect(node); node.connect(mute);
+        cloud.on = true; cloud.starting = false; listening = (ctx.state==='running');
+        diag.mic = listening ? 'listening' : 'ready. Tap anywhere once to start listening.';
+        cloudNote('idle, waiting for a voice'); setEar();
+      };
+      var classic = function(){
+        var sp = ctx.createScriptProcessor(4096, 1, 1);
+        sp.onaudioprocess = function(e){ onAudio(new Float32Array(e.inputBuffer.getChannelData(0))); };
+        ready(sp);
+      };
+      ctx.onstatechange = function(){ if(!cloud.on) return; listening = (ctx.state==='running'); if(listening) diag.mic='listening'; setEar(); showDiag(); };
+      if(ctx.audioWorklet && window.AudioWorkletNode){
+        var code = "class T extends AudioWorkletProcessor{constructor(){super();this.b=new Float32Array(4096);this.n=0;}process(i){var c=i[0]&&i[0][0];if(c){for(var k=0;k<c.length;k++){this.b[this.n++]=c[k];if(this.n===4096){this.port.postMessage(this.b.slice(0));this.n=0;}}}return true;}}registerProcessor('talker-tap',T);";
+        var url = URL.createObjectURL(new Blob([code], {type:'application/javascript'}));
+        ctx.audioWorklet.addModule(url).then(function(){
+          var node = new AudioWorkletNode(ctx, 'talker-tap'); node.port.onmessage = function(e){ onAudio(e.data); }; ready(node);
+        }, classic);
+      } else classic();
+    }, function(err){
+      cloud.starting = false;
+      if(err && (err.name==='NotAllowedError' || err.name==='SecurityError')){ blocked = true; diag.mic = 'microphone is blocked. Tap the listening button, then Allow.'; }
+      else diag.mic = 'no microphone found ('+((err&&err.name)||'error')+')';
+      setEar(); showDiag();
+    });
+  }
+  function cloudStop(){
+    cloudHangup('off');
+    if(cloud.node){ try{ cloud.node.disconnect(); }catch(e){} }
+    if(cloud.src){ try{ cloud.src.disconnect(); }catch(e){} }
+    if(cloud.stream){ cloud.stream.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} }); }
+    if(cloud.ctx){ try{ cloud.ctx.close(); }catch(e){} }
+    cloud.on = false; cloud.starting = false; cloud.ctx = cloud.stream = cloud.src = cloud.node = null; cloud.ring = [];
+    listening = false; setEar();
+  }
+  /* iPad only lets sound start after a touch: the first tap anywhere wakes the microphone. */
+  document.addEventListener('pointerdown', function(){
+    if(mode!=='cloud' || !state.listen) return;
+    if(cloud.ctx && cloud.ctx.state==='suspended'){ cloud.ctx.resume().catch(function(){}); }
+    else if(!cloud.on && !blocked) cloudStart();
+  }, true);
 
   /* Preview inside Claude: listening needs one tap there. */
   function wireHosted(){
@@ -665,6 +800,7 @@ if(typeof module!=='undefined') module.exports = {LOOKUP:LOOKUP, compose:compose
   }
   $('earBtn').addEventListener('click', function(){
     if(listening || !state.listen) return;          // a child's tap can start listening, never stop it
+    if(mode==='cloud'){ blocked = false; fails = 0; cloud.backoff = 0; if(cloud.ctx && cloud.ctx.state==='suspended') cloud.ctx.resume().catch(function(){}); else cloudStart(); return; }
     if(hosted){
       if(!dict) return;
       dict.start().catch(function(err){
@@ -676,6 +812,7 @@ if(typeof module!=='undefined') module.exports = {LOOKUP:LOOKUP, compose:compose
   });
   function applyListen(){
     if(hosted){ if(!state.listen && dict && listening) dict.stop().catch(function(){}); }
+    else if(mode==='cloud'){ if(state.listen) cloudStart(); else cloudStop(); }
     else if(state.listen) srStart(); else srStop();
     setEar();
   }
@@ -896,8 +1033,15 @@ if(typeof module!=='undefined') module.exports = {LOOKUP:LOOKUP, compose:compose
 
   if(hosted) wireHosted();
   else {
-    if(!SR){ diag.mic = 'this browser cannot listen yet. Taps and voice still work.'; showDiag(); }
-    srStart();
+    var browserListen = function(){
+      mode = 'browser';
+      if(!SR){ diag.mic = 'listening is not set up yet for this tablet. Taps and voice still work.'; showDiag(); }
+      setEar(); srStart();
+    };
+    fetch('api/stt/status').then(function(r){ return r.json(); }).then(function(st){
+      if(st && st.enabled){ mode = 'cloud'; cloud.provider = st.provider||'speech service'; setEar(); cloudStart(); }
+      else browserListen();
+    }, browserListen);
     if('serviceWorker' in navigator){ try{ navigator.serviceWorker.register('sw.js').catch(function(){}); }catch(e){} }
   }
 })();
