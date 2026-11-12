@@ -1,0 +1,10 @@
+{
+  "name": "Amelia's Talker",
+  "short_name": "Talker",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#f3f6fb",
+  "theme_color": "#16223a",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

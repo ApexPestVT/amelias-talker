@@ -1,0 +1,8 @@
+{
+  "name": "amelias-talker",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Amelia's Talker - a picture talker that listens and grows with the child",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}
