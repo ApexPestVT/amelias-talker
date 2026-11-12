@@ -111,7 +111,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .key.stop{background:var(--stop);border-color:var(--stop-edge)}
 
 /* question pop-up: big answers over the grid */
-.ask{position:fixed;inset:0;z-index:5;background:var(--paper);display:flex;flex-direction:column;gap:12px;padding:16px}
+.ask{position:fixed;inset:0;z-index:5;background:var(--paper);display:flex;flex-direction:column;gap:12px;padding:16px max(16px, calc(var(--edge, 5vmin) + 8px)) max(16px, calc(var(--edge, 5vmin) + 8px))}
 .ask-q{flex:none;font-size:clamp(18px,3.4vh,30px);font-weight:600;color:var(--ink-soft);text-align:center;text-wrap:balance}
 .ask-q::first-letter{text-transform:uppercase}
 .ask-opts{flex:1;min-height:0;display:flex;gap:16px}
@@ -215,6 +215,14 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
         <option value="0.5">Hold 0.5 seconds</option>
       </select>
       <small>Pictures speak when her finger lifts. A hand resting on the screen to hold the tablet is ignored.</small>
+    </div>
+    <div class="row">
+      <label for="edgeSel">Ignore touches at the edges (where a holding hand sits)</label>
+      <select id="edgeSel">
+        <option value="0">Off</option>
+        <option value="0.05">Thin strip on the sides and bottom</option>
+        <option value="0.09">Wide strip on the sides and bottom</option>
+      </select>
     </div>
     <label class="check"><input type="checkbox" id="kioskOn"> Child lock: fill the screen, keep it on, block swipes and the back button</label>
     <label class="check"><input type="checkbox" id="listenOn"> Listen to people talking to her</label>
@@ -632,7 +640,7 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
     {n:2, name:'2. More words',  note:'20 pictures'},
     {n:3, name:'3. Word pages',  note:'Adds people, food, feelings, places, things'}
   ];
-  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, repeat:0.8, hold:0, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, repeat:0.8, hold:0, edge:0.05, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {};
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', store:'checking', error:'' };
@@ -652,10 +660,11 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
       if(typeof saved.glow==='boolean') state.glow=saved.glow;
       if(typeof saved.repeat==='number') state.repeat=saved.repeat;
       if(typeof saved.hold==='number') state.hold=saved.hold;
+      if(typeof saved.edge==='number') state.edge=saved.edge;
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,repeat:state.repeat,hold:state.hold,ask:state.ask,voiceName:state.voiceName})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,repeat:state.repeat,hold:state.hold,edge:state.edge,ask:state.ask,voiceName:state.voiceName})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -691,7 +700,7 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v12) ---'+
+      dbgText = '\n--- Listening check (v13) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -1054,10 +1063,16 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
      the other hand. A touch counts as a choice only if it lifts fairly soon, on the picture it landed on.
      A touch that stays down longer than REST_MS is a resting hand and is ignored when it finally lifts. */
   var REST_MS = 1500;
+  function inEdge(e){
+    if(!(state.edge > 0) || e.pointerType==='mouse') return false;
+    var band = state.edge * Math.min(window.innerWidth, window.innerHeight);
+    return e.clientX < band || e.clientX > window.innerWidth - band || e.clientY > window.innerHeight - band;
+  }
   function onPress(b, fn, opts){
     var downs = {};                                   // pointerId -> time it went down
     b.addEventListener('pointerdown', function(e){
       if(e.pointerType==='mouse' && e.button!==0) return;
+      if(inEdge(e)) return;                                        // the strip where a holding hand sits
       downs[e.pointerId] = Date.now();
       b.classList.add('pressing');
       setTimeout(function(){ if(downs[e.pointerId] && Date.now()-downs[e.pointerId] >= REST_MS) b.classList.remove('pressing'); }, REST_MS+20);
@@ -1150,9 +1165,12 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
   }
   function finish(){
     state.fresh = true;
-    if(!state.sentences || !state.taps.length) return;
+    var waiting = pendingQ; pendingQ = null;
+    var askLater = function(delay){ if(waiting && Date.now()-waiting.at < 15000) setTimeout(function(){ maybeAsk(waiting.text); }, delay); };
+    if(!state.sentences || !state.taps.length){ askLater(200); return; }
     var out = compose(state.taps, currentHeard(), state.name);
-    if(!out.sentence) return;
+    if(!out.sentence){ askLater(200); return; }
+    if(!out.usedHeard) askLater(1800);            // she did not answer it with her own taps, so offer the big answers
     renderBar(out.sentence, false);
     var single = state.taps.length===1 && norm(out.sentence)===norm(word(state.taps[0]).label);
     if(!single) speak(out.sentence);              // then the modeled sentence
@@ -1203,7 +1221,7 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
   document.addEventListener('touchmove', function(e){ if(e.touches && e.touches.length>1) e.preventDefault(); }, {passive:false});
 
   /* ---------- question pop-up ---------- */
-  var askT = null;
+  var askT = null, pendingQ = null;
   function hideAsk(){ clearTimeout(askT); $('ask').hidden = true; $('askOpts').textContent = ''; $('askSkip').style.visibility = ''; }
   /* She often taps twice. The first tap is her answer: the pop-up stays up showing it for a moment and
      swallows extra taps, then the board ignores taps briefly so a late one cannot change what she said. */
@@ -1232,7 +1250,7 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
   function maybeAsk(text){
     if(state.ask==='off' || $('panel').classList.contains('open')) return;
     if(askDone && !$('ask').hidden) return;                        // her answer is still showing
-    if(!state.fresh && state.taps.length) return;                 // she is in the middle of saying something
+    if(!state.fresh && state.taps.length){ pendingQ = {text:text, at:Date.now()}; return; }   // mid-message: ask right after
     if(state.ask==='name' && !nameHeard(text, state.name)) return;
     var q = detectQuestion(text, state.name); if(!q) return;
     var box = $('askOpts'); box.textContent = '';
@@ -1289,7 +1307,7 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
   }
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
-    $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
+    $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
     hideAsk(); renderStages(); renderPicList(); renderVoices(); showDiag(); $('panel').classList.add('open');
   }
   function closePanel(){ $('panel').classList.remove('open'); }
@@ -1305,6 +1323,7 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
   $('glowOn').addEventListener('change', function(){ state.glow = this.checked; save(); });
   $('repeatSel').addEventListener('change', function(){ state.repeat = +this.value; save(); });
   $('holdSel').addEventListener('change', function(){ state.hold = +this.value; save(); });
+  $('edgeSel').addEventListener('change', function(){ state.edge = +this.value; save(); document.documentElement.style.setProperty('--edge', (state.edge*100)+'vmin'); });
   $('kioskOn').addEventListener('change', function(){ state.kiosk = this.checked; save(); applyKiosk(); });
   $('askSel').addEventListener('change', function(){ state.ask = this.value; save(); });
   $('typeOn').addEventListener('change', function(){ state.typing = this.checked; save(); renderAll(); });
@@ -1369,6 +1388,7 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
   document.addEventListener('contextmenu', function(e){ if(!$('panel').classList.contains('open')) e.preventDefault(); });
 
   /* ---------- start ---------- */
+  document.documentElement.style.setProperty('--edge', (state.edge*100)+'vmin');
   renderAll(); setEar(); applyKiosk();
   idbLoad().then(function(all){
     Object.keys(all).forEach(function(k){ if(k.indexOf('pic:')===0) pics[k.slice(4)] = all[k]; });
