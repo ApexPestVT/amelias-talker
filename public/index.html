@@ -37,7 +37,7 @@ html,body{height:100%;margin:0;overscroll-behavior:none}
 body{
   background:var(--paper);color:var(--ink);font-family:var(--font);
   display:flex;flex-direction:column;gap:8px;padding:8px 16px 12px;
-  overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:manipulation;
+  overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:none;
 }
 button,select,input{font-family:inherit;color:inherit}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--describe-edge);outline-offset:2px}
@@ -83,13 +83,13 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .type button{font-size:18px;font-weight:700;padding:0 20px;border-radius:14px;border:3px solid var(--describe-edge);background:var(--describe);min-height:48px}
 
 /* page tabs (stage 3 and up) */
-.tabs{flex:none;display:flex;gap:8px;overflow-x:auto}
+.tabs{flex:none;display:flex;gap:8px;overflow-x:auto;touch-action:pan-x}
 .tab{flex:1;min-width:84px;min-height:48px;border-radius:14px;border:3px solid var(--line);background:var(--bar);font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;padding:4px 8px}
 .tab.sel{background:var(--ink);color:#fff;border-color:var(--ink)}
 
 /* picture grid: positions never change (motor planning) */
 .grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(4,1fr);gap:10px}
-.grid.fringe{grid-template-rows:none;grid-auto-rows:minmax(23%,1fr);overflow-y:auto}
+.grid.fringe{grid-template-rows:none;grid-auto-rows:minmax(23%,1fr);overflow-y:auto;touch-action:pan-y}
 .key{
   border-radius:22px;border:4px solid;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
   padding:4px;min-width:0;min-height:0;cursor:pointer;transition:transform .08s;overflow:hidden;
@@ -127,7 +127,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 /* grown-up panel */
 .panel{position:fixed;inset:0;background:rgba(22,34,58,.55);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
 .panel.open{display:flex}
-.sheet{background:var(--bar);border-radius:20px;max-width:620px;width:100%;max-height:100%;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:18px;user-select:text;-webkit-user-select:text}
+.sheet{touch-action:pan-y;background:var(--bar);border-radius:20px;max-width:620px;width:100%;max-height:100%;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:18px;user-select:text;-webkit-user-select:text}
 .sheet h2{margin:0;font-size:22px}
 .sheet h3{margin:0;font-size:16px;border-top:2px solid var(--line);padding-top:14px}
 .row{display:flex;flex-direction:column;gap:6px}
@@ -214,7 +214,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
         <option value="0.3">Hold 0.3 seconds</option>
         <option value="0.5">Hold 0.5 seconds</option>
       </select>
-      <small>Pictures speak when her finger lifts, so sliding onto the wrong picture and lifting does nothing.</small>
+      <small>Pictures speak when her finger lifts. A hand resting on the screen to hold the tablet is ignored.</small>
     </div>
     <label class="check"><input type="checkbox" id="kioskOn"> Child lock: fill the screen, keep it on, block swipes and the back button</label>
     <label class="check"><input type="checkbox" id="listenOn"> Listen to people talking to her</label>
@@ -691,7 +691,7 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v11) ---'+
+      dbgText = '\n--- Listening check (v12) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -1050,18 +1050,37 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
   }
   /* Every picture goes through here: hold time, lift-to-speak, and ignoring extra taps. */
   var lastTapAt = 0;
-  function onPress(b, fn){
-    var downAt = 0;
-    b.addEventListener('pointerdown', function(){ downAt = Date.now(); b.classList.add('pressing'); });
-    ['pointerup','pointerleave','pointercancel'].forEach(function(ev){ b.addEventListener(ev, function(){ b.classList.remove('pressing'); }); });
-    b.addEventListener('click', function(e){
+  /* Each finger is tracked on its own, so a hand resting on the screen (holding the tablet) does not block
+     the other hand. A touch counts as a choice only if it lifts fairly soon, on the picture it landed on.
+     A touch that stays down longer than REST_MS is a resting hand and is ignored when it finally lifts. */
+  var REST_MS = 1500;
+  function onPress(b, fn, opts){
+    var downs = {};                                   // pointerId -> time it went down
+    b.addEventListener('pointerdown', function(e){
+      if(e.pointerType==='mouse' && e.button!==0) return;
+      downs[e.pointerId] = Date.now();
+      b.classList.add('pressing');
+      setTimeout(function(){ if(downs[e.pointerId] && Date.now()-downs[e.pointerId] >= REST_MS) b.classList.remove('pressing'); }, REST_MS+20);
+    });
+    b.addEventListener('pointercancel', function(e){ delete downs[e.pointerId]; b.classList.remove('pressing'); });
+    b.addEventListener('pointerup', function(e){
+      var t0 = downs[e.pointerId]; delete downs[e.pointerId];
       b.classList.remove('pressing');
-      var now = Date.now(), byTouch = e.detail !== 0;             // detail 0 = keyboard or switch
-      // The browser only sends a click when the finger lifts on the picture it landed on, so no extra check is needed for sliding.
-      if(byTouch && state.hold > 0 && downAt && now - downAt < state.hold*1000) return;
-      if(state.repeat > 0 && now - lastTapAt < state.repeat*1000) return;   // extra tap
+      if(!t0) return;
+      var now = Date.now(), held = now - t0;
+      if(held >= REST_MS) return;                                  // a resting hand lifting off
+      if(state.hold > 0 && held < state.hold*1000) return;         // too quick: a brush
+      var under = document.elementFromPoint(e.clientX, e.clientY); // finger slid to another picture before lifting
+      if(under && !b.contains(under)) return;
+      if(!(opts && opts.noRepeatGuard) && state.repeat > 0 && now - lastTapAt < state.repeat*1000) return;   // extra tap
       lastTapAt = now;
       fn();
+    });
+    b.addEventListener('click', function(e){                       // keyboard and switch access only; touches are handled above
+      if(e.detail !== 0) return;
+      var now = Date.now();
+      if(state.repeat > 0 && now - lastTapAt < state.repeat*1000) return;
+      lastTapAt = now; fn();
     });
   }
   function keyFor(w, cat){
@@ -1097,10 +1116,10 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
       var i = document.createElement('span'); i.textContent = p.pic; i.setAttribute('aria-hidden','true');
       var l = document.createElement('span'); l.textContent = p.label;
       b.appendChild(i); b.appendChild(l);
-      b.addEventListener('click', function(){
+      onPress(b, function(){
         state.page = p.id; renderTabs(); renderGrid();
         if(!state.fresh && state.taps.length){ clearTimeout(state.timer); state.timer = setTimeout(finish, PAGE_WAIT); }
-      });
+      }, {noRepeatGuard:true});
       t.appendChild(b);
     });
   }
@@ -1228,7 +1247,7 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
     $('ask').hidden = false;
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
   }
-  $('askSkip').addEventListener('click', function(){ if(askDone) return; tapBlockUntil = Date.now()+BOARD_HOLD; hideAsk(); });
+  onPress($('askSkip'), function(){ if(askDone) return; tapBlockUntil = Date.now()+BOARD_HOLD; hideAsk(); }, {noRepeatGuard:true});
 
   /* ---------- grown-up panel (press and hold the lock) ---------- */
   var hold = null, lock = $('lockBtn');
