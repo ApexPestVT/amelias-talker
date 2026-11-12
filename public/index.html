@@ -113,6 +113,8 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .ask-opts .key .pic{font-size:min(26vh,22vw)}
 .ask-opts .key img.pic{height:58%}
 .ask-opts .key .lab{font-size:min(8vh,7vw)}
+.ask-opts .key.dim{opacity:.25}
+.ask-opts .key.picked{transform:scale(1.03);box-shadow:0 0 0 8px var(--ink)}
 .ask-skip{flex:none;align-self:center;min-height:52px;padding:0 28px;border-radius:26px;border:3px solid var(--line);background:var(--bar);font-size:18px;font-weight:600;color:var(--ink-soft)}
 @media (orientation:portrait){.ask-opts{flex-direction:column}}
 
@@ -635,7 +637,7 @@ if(typeof module!=='undefined') module.exports = {detectQuestion:detectQuestion,
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v8) ---'+
+      dbgText = '\n--- Listening check (v9) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -1015,6 +1017,7 @@ if(typeof module!=='undefined') module.exports = {detectQuestion:detectQuestion,
     var t = $('sayText'); t.textContent = text; t.classList.toggle('hint', !!hint);
   }
   function tap(id, el){
+    if(Date.now() < tapBlockUntil) return;        // a stray second tap right after a pop-up answer
     el.classList.add('hit'); setTimeout(function(){ el.classList.remove('hit'); }, 160);
     if(state.fresh){ state.taps=[]; state.fresh=false; }
     if(state.taps[state.taps.length-1]!==id){ state.taps.push(id); if(state.taps.length>4) state.taps.shift(); }
@@ -1083,9 +1086,19 @@ if(typeof module!=='undefined') module.exports = {detectQuestion:detectQuestion,
 
   /* ---------- question pop-up ---------- */
   var askT = null;
-  function hideAsk(){ clearTimeout(askT); $('ask').hidden = true; $('askOpts').textContent = ''; }
-  function sayAnswer(sentence, ids){
-    hideAsk();
+  function hideAsk(){ clearTimeout(askT); $('ask').hidden = true; $('askOpts').textContent = ''; $('askSkip').style.visibility = ''; }
+  /* She often taps twice. The first tap is her answer: the pop-up stays up showing it for a moment and
+     swallows extra taps, then the board ignores taps briefly so a late one cannot change what she said. */
+  var askDone = false, tapBlockUntil = 0, ANSWER_HOLD = 1600, BOARD_HOLD = 900;
+  function sayAnswer(sentence, ids, btn){
+    if(askDone) return;
+    askDone = true; clearTimeout(askT);
+    var all = $('askOpts').children;
+    for(var i=0;i<all.length;i++){ if(all[i]!==btn) all[i].classList.add('dim'); }
+    if(btn) btn.classList.add('picked');
+    $('askSkip').style.visibility = 'hidden';
+    tapBlockUntil = Date.now()+ANSWER_HOLD+BOARD_HOLD;
+    setTimeout(hideAsk, ANSWER_HOLD);
     clearTimeout(state.timer); state.taps = (ids||[]).filter(function(id){ return LOOKUP[id]; }); state.fresh = true;
     renderBar(sentence, false); speak(sentence);
     state.heard = ''; setTimeout(function(){ showHeard('', false); }, 2500);
@@ -1095,11 +1108,12 @@ if(typeof module!=='undefined') module.exports = {detectQuestion:detectQuestion,
     b.type = 'button'; b.className = 'key '+cat; b.setAttribute('aria-label', label);
     if(w) b.appendChild(picNode(w, 'pic'));
     var l = document.createElement('span'); l.className = 'lab'; l.textContent = label; b.appendChild(l);
-    b.addEventListener('click', function(){ sayAnswer(sentence, ids); });
+    b.addEventListener('click', function(){ sayAnswer(sentence, ids, b); });
     return b;
   }
   function maybeAsk(text){
     if(state.ask==='off' || $('panel').classList.contains('open')) return;
+    if(askDone && !$('ask').hidden) return;                        // her answer is still showing
     if(!state.fresh && state.taps.length) return;                 // she is in the middle of saying something
     if(state.ask==='name' && !nameHeard(text, state.name)) return;
     var q = detectQuestion(text, state.name); if(!q) return;
@@ -1111,10 +1125,11 @@ if(typeof module!=='undefined') module.exports = {detectQuestion:detectQuestion,
     } else {
       q.options.forEach(function(o){ box.appendChild(askKey(o.id ? LOOKUP[o.id] : null, o.label, 'thing', o.sentence, o.id ? [o.id] : [])); });
     }
+    askDone = false; $('askSkip').style.visibility = '';
     $('ask').hidden = false;
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
   }
-  $('askSkip').addEventListener('click', hideAsk);
+  $('askSkip').addEventListener('click', function(){ if(askDone) return; tapBlockUntil = Date.now()+BOARD_HOLD; hideAsk(); });
 
   /* ---------- grown-up panel (press and hold the lock) ---------- */
   var hold = null, lock = $('lockBtn');
