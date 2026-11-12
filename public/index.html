@@ -119,6 +119,9 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .ask-opts .key .pic{font-size:min(26vh,22vw)}
 .ask-opts .key img.pic{height:58%}
 .ask-opts .key .lab{font-size:min(8vh,7vw)}
+.ask-opts.many{display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:1fr}
+.ask-opts.many .key .pic{font-size:min(14vh,13vw)}
+.ask-opts.many .key .lab{font-size:min(5vh,4.5vw)}
 .ask-opts .key.dim{opacity:.25}
 .ask-opts .key.picked{transform:scale(1.03);box-shadow:0 0 0 8px var(--ink)}
 .ask-skip{flex:none;align-self:center;min-height:52px;padding:0 28px;border-radius:26px;border:3px solid var(--line);background:var(--bar);font-size:18px;font-weight:600;color:var(--ink-soft)}
@@ -628,7 +631,17 @@ function detectQuestion(text, name){
     return {kind:'yesno', question:t, yes:'Yes.', no:'No.'};
   return null;
 }
-if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
+/* Open questions ("what do you want to eat?") point at a page of words. Returns a page id or null. */
+function detectOpenQuestion(text, name){
+  var t = clean(text, name); if(!t) return null;
+  if(/\bhow\b.*\b(feel|feeling)\b/.test(t) || /\bhow are you\b/.test(t) || /\b(what's|whats|what is) (wrong|the matter)\b/.test(t)) return 'feelings';
+  if(/\bwhat\b.*\b(eat|eating|drink|drinking|snack|lunch|dinner|breakfast|hungry|thirsty)\b/.test(t)) return 'food';
+  if(/\bwhere\b.*\b(go|going|play)\b/.test(t)) return 'places';
+  if(/\bwho\b.*\b(want|with|help|see|play|get)\b/.test(t)) return 'people';
+  if(/\bwhat\b.*\b(play|toy|read|watch|wear)\b/.test(t)) return 'things';
+  return null;
+}
+if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
 </script>
 
 <script>
@@ -700,7 +713,7 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v13) ---'+
+      dbgText = '\n--- Listening check (v14) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -1252,8 +1265,10 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
     if(askDone && !$('ask').hidden) return;                        // her answer is still showing
     if(!state.fresh && state.taps.length){ pendingQ = {text:text, at:Date.now()}; return; }   // mid-message: ask right after
     if(state.ask==='name' && !nameHeard(text, state.name)) return;
-    var q = detectQuestion(text, state.name); if(!q) return;
+    var q = detectQuestion(text, state.name);
+    if(!q){ openPageFor(text); return; }
     var box = $('askOpts'); box.textContent = '';
+    box.classList.remove('many');
     $('askQ').textContent = q.question+'?';
     if(q.kind==='yesno'){
       box.appendChild(askKey(LOOKUP.yes, LOOKUP.yes.label, 'action', q.yes, ['yes']));
@@ -1261,6 +1276,28 @@ if(typeof module!=='undefined') module.exports = {glowMatches:glowMatches, detec
     } else {
       q.options.forEach(function(o){ box.appendChild(askKey(o.id ? LOOKUP[o.id] : null, o.label, 'thing', o.sentence, o.id ? [o.id] : [])); });
     }
+    askDone = false; $('askSkip').style.visibility = '';
+    $('ask').hidden = false;
+    clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
+  }
+  /* "What do you want to eat?" -> the Food words. At Stage 3 her board flips to that page.
+     Before Stage 3 she has no pages yet, so up to six of those words pop up as big choices. */
+  var pageT = null;
+  function openPageFor(text){
+    var page = detectOpenQuestion(text, state.name); if(!page) return;
+    var words = custom.concat(FRINGE).filter(function(w){ return w.page===page; });
+    if(!words.length) return;
+    if(state.stage >= 3){
+      state.page = page; renderTabs(); renderGrid();
+      glowOne($('tabs').querySelector('[data-page="'+page+'"]'));
+      clearTimeout(pageT);
+      pageT = setTimeout(function(){ if(state.page===page && (state.fresh || !state.taps.length)){ state.page='core'; renderTabs(); renderGrid(); } }, 25000);
+      return;
+    }
+    var box = $('askOpts'); box.textContent = ''; box.classList.add('many');
+    $('askQ').textContent = clean(text, state.name)+'?';
+    var pg = PAGES.filter(function(x){ return x.id===page; })[0];
+    words.slice(0, 6).forEach(function(w){ box.appendChild(askKey(w, w.label, pg.cat || 'thing', wordSentence(w), [w.id])); });
     askDone = false; $('askSkip').style.visibility = '';
     $('ask').hidden = false;
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
