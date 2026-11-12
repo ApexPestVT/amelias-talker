@@ -32,7 +32,7 @@
   --font: "Lexend", "Atkinson Hyperlegible", Verdana, system-ui, sans-serif;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;margin:0}
+html,body{height:100%;margin:0;overscroll-behavior:none}
 body{
   background:var(--paper);color:var(--ink);font-family:var(--font);
   display:flex;flex-direction:column;gap:8px;padding:8px 16px 12px;
@@ -187,6 +187,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
       <label for="nameIn">Child's name</label>
       <input type="text" id="nameIn" autocomplete="off">
     </div>
+    <label class="check"><input type="checkbox" id="kioskOn"> Child lock: fill the screen, keep it on, block swipes and the back button</label>
     <label class="check"><input type="checkbox" id="listenOn"> Listen to people talking to her</label>
     <div class="row">
       <label for="askSel">When a question is heard</label>
@@ -578,10 +579,10 @@ if(typeof module!=='undefined') module.exports = {detectQuestion:detectQuestion,
     {n:2, name:'2. More words',  note:'20 pictures'},
     {n:3, name:'3. Word pages',  note:'Adds people, food, feelings, places, things'}
   ];
-  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {};
-  var diag = { voice:'checking', mic:'checking', cloud:'', store:'checking', error:'' };
+  var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', store:'checking', error:'' };
 
   /* ---------- settings (small) and pictures (IndexedDB), both on this device only ---------- */
   try{
@@ -594,10 +595,11 @@ if(typeof module!=='undefined') module.exports = {detectQuestion:detectQuestion,
       if(typeof saved.voiceName==='string') state.voiceName=saved.voiceName;
       if(saved.stage>=1) state.stage=Math.min(3, +saved.stage);
       if(typeof saved.typing==='boolean') state.typing=saved.typing;
+      if(typeof saved.kiosk==='boolean') state.kiosk=saved.kiosk;
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,ask:state.ask,voiceName:state.voiceName})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,ask:state.ask,voiceName:state.voiceName})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -633,7 +635,7 @@ if(typeof module!=='undefined') module.exports = {detectQuestion:detectQuestion,
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v7) ---'+
+      dbgText = '\n--- Listening check (v8) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -641,7 +643,7 @@ if(typeof module!=='undefined') module.exports = {detectQuestion:detectQuestion,
         '\nLast reply: '+(d.last||'none')+
         (d.closed?'\nLast close: '+d.closed:'');
     }
-    $('diag').textContent = 'Voice: '+diag.voice+'\nMicrophone: '+diag.mic+(diag.cloud?'\nSpeech service: '+diag.cloud:'')+'\nPhotos: '+diag.store+(diag.error?'\nLast problem: '+diag.error:'')+dbgText;
+    $('diag').textContent = 'Voice: '+diag.voice+'\nMicrophone: '+diag.mic+(diag.cloud?'\nSpeech service: '+diag.cloud:'')+(diag.kiosk?'\nChild lock: '+diag.kiosk:'')+'\nPhotos: '+diag.store+(diag.error?'\nLast problem: '+diag.error:'')+dbgText;
   }
   window.addEventListener('error', function(e){ diag.error = (e.message||'script error'); showDiag(); });
   window.addEventListener('unhandledrejection', function(e){ diag.error = String((e.reason&&(e.reason.code||e.reason.message))||e.reason||'promise'); showDiag(); });
@@ -1042,6 +1044,43 @@ if(typeof module!=='undefined') module.exports = {detectQuestion:detectQuestion,
     renderBar(v, false); speak(v); $('typeIn').value='';
   });
 
+  /* ---------- child lock: as much as a web page is allowed to do ---------- */
+  var wake = null, isApple = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && (navigator.maxTouchPoints||0)>1);
+  var standalone = (window.matchMedia && (matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: standalone)').matches)) || navigator.standalone===true;
+  function kioskNote(){
+    if(!state.kiosk){ diag.kiosk = 'off'; return; }
+    var full = !!document.fullscreenElement || standalone;
+    diag.kiosk = 'on. Screen stays on: '+(wake ? 'yes' : 'not on this tablet')+'. Full screen: '+(full ? 'yes' : (isApple ? 'add to Home Screen for that' : 'after the next tap'));
+  }
+  function keepAwake(){
+    if(!state.kiosk || wake || !navigator.wakeLock || document.hidden) return;
+    navigator.wakeLock.request('screen').then(function(w){
+      wake = w; kioskNote();
+      w.addEventListener('release', function(){ wake = null; kioskNote(); });
+    }, function(){});
+  }
+  function goFull(){
+    if(!state.kiosk || hosted || isApple || standalone || document.fullscreenElement) return;
+    if($('panel').classList.contains('open')) return;
+    var el = document.documentElement; if(!el.requestFullscreen) return;
+    try{ var p = el.requestFullscreen({navigationUI:'hide'}); if(p && p.catch) p.catch(function(){}); }catch(e){}
+  }
+  function applyKiosk(){
+    if(state.kiosk){ keepAwake(); try{ history.pushState({talker:1}, ''); }catch(e){} }
+    else {
+      if(wake){ try{ wake.release(); }catch(e){} wake = null; }
+      if(document.fullscreenElement){ try{ document.exitFullscreen(); }catch(e){} }
+    }
+    kioskNote(); showDiag();
+  }
+  document.addEventListener('pointerdown', function(){ keepAwake(); goFull(); }, true);
+  document.addEventListener('fullscreenchange', function(){ kioskNote(); });
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) keepAwake(); });
+  window.addEventListener('popstate', function(){ if(state.kiosk){ try{ history.pushState({talker:1}, ''); }catch(e){} } });   // back button does nothing
+  window.addEventListener('beforeunload', function(e){ if(state.kiosk && !hosted){ e.preventDefault(); e.returnValue = ''; } });
+  ['gesturestart','gesturechange'].forEach(function(ev){ document.addEventListener(ev, function(e){ e.preventDefault(); }); });   // no pinch zoom on iPad
+  document.addEventListener('touchmove', function(e){ if(e.touches && e.touches.length>1) e.preventDefault(); }, {passive:false});
+
   /* ---------- question pop-up ---------- */
   var askT = null;
   function hideAsk(){ clearTimeout(askT); $('ask').hidden = true; $('askOpts').textContent = ''; }
@@ -1117,7 +1156,7 @@ if(typeof module!=='undefined') module.exports = {detectQuestion:detectQuestion,
   }
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
-    $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
+    $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
     hideAsk(); renderStages(); renderPicList(); renderVoices(); showDiag(); $('panel').classList.add('open');
   }
   function closePanel(){ $('panel').classList.remove('open'); }
@@ -1130,6 +1169,7 @@ if(typeof module!=='undefined') module.exports = {detectQuestion:detectQuestion,
   $('nameIn').addEventListener('input', function(){ state.name = this.value.trim(); save(); });
   $('sentOn').addEventListener('change', function(){ state.sentences = this.checked; save(); });
   $('listenOn').addEventListener('change', function(){ state.listen = this.checked; save(); applyListen(); });
+  $('kioskOn').addEventListener('change', function(){ state.kiosk = this.checked; save(); applyKiosk(); });
   $('askSel').addEventListener('change', function(){ state.ask = this.value; save(); });
   $('typeOn').addEventListener('change', function(){ state.typing = this.checked; save(); renderAll(); });
   $('voiceSel').addEventListener('change', function(){ state.voiceName = this.value; save(); pickVoice(); });
@@ -1193,7 +1233,7 @@ if(typeof module!=='undefined') module.exports = {detectQuestion:detectQuestion,
   document.addEventListener('contextmenu', function(e){ if(!$('panel').classList.contains('open')) e.preventDefault(); });
 
   /* ---------- start ---------- */
-  renderAll(); setEar(); showDiag();
+  renderAll(); setEar(); applyKiosk();
   idbLoad().then(function(all){
     Object.keys(all).forEach(function(k){ if(k.indexOf('pic:')===0) pics[k.slice(4)] = all[k]; });
     if(Array.isArray(all.custom)){ custom = all.custom; registerWords(custom); }
