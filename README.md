@@ -20,6 +20,8 @@ New Project -> Deploy from GitHub repo -> pick this repo. No variables needed.
 Set one variable in Railway and redeploy:
 - `ASSEMBLYAI_API_KEY` = your AssemblyAI key
 
+To try Whisper on the same AssemblyAI key: add `STT_MODEL=whisper-rt` (costs about double).
+
 To try Deepgram instead: set `STT_PROVIDER=deepgram` and `DEEPGRAM_API_KEY`.
 With no key set, the app falls back to Chrome's built-in listening (Android/desktop Chrome only).
 

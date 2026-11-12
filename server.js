@@ -14,6 +14,9 @@ const TYPES = {
 // ---- Speech service (cloud listening). The key stays here; tablets only get a short-lived token. ----
 const STT_PROVIDER = (process.env.STT_PROVIDER || 'assemblyai').toLowerCase();
 const STT_KEY = STT_PROVIDER === 'deepgram' ? process.env.DEEPGRAM_API_KEY : process.env.ASSEMBLYAI_API_KEY;
+// AssemblyAI model: 'universal-streaming-english' (default, $0.15/hr) or 'whisper-rt' (Whisper streaming, about $0.30/hr).
+const STT_MODELS = ['universal-streaming-english', 'universal-streaming-multilingual', 'whisper-rt'];
+const STT_MODEL = STT_MODELS.includes(process.env.STT_MODEL) ? process.env.STT_MODEL : STT_MODELS[0];
 const hits = new Map();           // ip -> [timestamps]
 const PER_IP_PER_HOUR = 90, ALL_PER_HOUR = 900;
 function allowed(ip) {
@@ -44,12 +47,12 @@ async function sttToken() {
   if (!r.ok) throw new Error('assemblyai ' + r.status);
   const d = await r.json();
   return { provider: 'assemblyai',
-    url: 'wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&speech_model=universal-streaming-english&token=' + encodeURIComponent(d.token) };
+    url: 'wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&speech_model=' + STT_MODEL + '&token=' + encodeURIComponent(d.token) };
 }
 
 http.createServer((req, res) => {
   let p = decodeURIComponent((req.url || '/').split('?')[0]);
-  if (p === '/api/stt/status') return json(res, 200, { enabled: !!STT_KEY, provider: STT_PROVIDER });
+  if (p === '/api/stt/status') return json(res, 200, { enabled: !!STT_KEY, provider: STT_PROVIDER === 'deepgram' ? 'deepgram' : 'assemblyai ' + STT_MODEL });
   if (p === '/api/stt/token') {
     if (req.method !== 'POST') return json(res, 405, { error: 'POST only' });
     if (!STT_KEY) return json(res, 503, { error: 'no speech key set' });
