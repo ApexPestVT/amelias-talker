@@ -518,7 +518,18 @@ if(typeof module!=='undefined') module.exports = {LOOKUP:LOOKUP, compose:compose
   }
 
   function showDiag(){
-    $('diag').textContent = 'Voice: '+diag.voice+'\nMicrophone: '+diag.mic+(diag.cloud?'\nSpeech service: '+diag.cloud:'')+'\nPhotos: '+diag.store+(diag.error?'\nLast problem: '+diag.error:'');
+    var dbgText = '';
+    if(typeof cloud !== 'undefined' && mode==='cloud'){
+      var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
+      dbgText = '\n--- Listening check (v6) ---'+
+        '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
+        '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
+        '\nReplies from service: '+kinds+
+        '\nLast words back: '+(d.lastText||'none')+(d.echo?' ('+d.echo+' ignored as her own voice)':'')+
+        '\nLast reply: '+(d.last||'none')+
+        (d.closed?'\nLast close: '+d.closed:'');
+    }
+    $('diag').textContent = 'Voice: '+diag.voice+'\nMicrophone: '+diag.mic+(diag.cloud?'\nSpeech service: '+diag.cloud:'')+'\nPhotos: '+diag.store+(diag.error?'\nLast problem: '+diag.error:'')+dbgText;
   }
   window.addEventListener('error', function(e){ diag.error = (e.message||'script error'); showDiag(); });
   window.addEventListener('unhandledrejection', function(e){ diag.error = String((e.reason&&(e.reason.code||e.reason.message))||e.reason||'promise'); showDiag(); });
@@ -612,6 +623,7 @@ if(typeof module!=='undefined') module.exports = {LOOKUP:LOOKUP, compose:compose
     return '';
   }
   setInterval(currentHeard, 5000);
+  setInterval(function(){ if($('panel').classList.contains('open')) showDiag(); }, 1000);
 
   /* Real web address: the browser's own speech recognition, always on, restarts itself. */
   function srStart(){
@@ -652,7 +664,8 @@ if(typeof module!=='undefined') module.exports = {LOOKUP:LOOKUP, compose:compose
   /* Cloud listening (iPad and Android): the tablet's mic audio goes to a speech service.
      To keep cost down it only connects while it hears a voice, and hangs up after 20 quiet seconds. */
   var cloud = { on:false, starting:false, ctx:null, stream:null, src:null, node:null, ws:null, opening:false, ring:[],
-                lastVoice:0, backoff:0, openedAt:0, usedMs:0, provider:'', dgBuf:'' };
+                lastVoice:0, backoff:0, openedAt:0, usedMs:0, provider:'', dgBuf:'',
+                dbg:{level:0, peak:0, chunks:0, sent:0, skipped:0, msgs:{}, last:'', lastText:'', echo:0, closed:''} };
   var VOICE_RMS = 0.012, QUIET_HANGUP = 20000, PRE_ROLL = 14, RING_MAX = 60;
   function cloudNote(t){
     var mins = Math.round((cloud.usedMs + (cloud.openedAt ? Date.now()-cloud.openedAt : 0))/6000)/10;
@@ -671,11 +684,12 @@ if(typeof module!=='undefined') module.exports = {LOOKUP:LOOKUP, compose:compose
   function onAudio(f32){
     if(!cloud.on) return;
     var now = Date.now();
-    if(state.speaking || now-state.spokeEnd < 800) return;          // never send the talker's own voice
     var r = toPcm16(f32, cloud.ctx.sampleRate);
+    cloud.dbg.chunks++; cloud.dbg.level = r.rms; if(r.rms > cloud.dbg.peak) cloud.dbg.peak = r.rms;
+    if(state.speaking || now-state.spokeEnd < 800){ cloud.dbg.skipped++; return; }   // never send the talker's own voice
     if(r.rms > VOICE_RMS) cloud.lastVoice = now;
     if(cloud.ws && cloud.ws.readyState===1 && !cloud.opening){
-      try{ cloud.ws.send(r.pcm.buffer); }catch(e){}
+      try{ cloud.ws.send(r.pcm.buffer); cloud.dbg.sent++; }catch(e){}
       if(now-cloud.lastVoice > QUIET_HANGUP) cloudHangup('quiet, waiting for a voice');
       return;
     }
@@ -693,11 +707,15 @@ if(typeof module!=='undefined') module.exports = {LOOKUP:LOOKUP, compose:compose
       ws.binaryType = 'arraybuffer'; cloud.ws = ws; cloud.dgBuf = '';
       ws.onopen = function(){
         cloud.opening = false; cloud.openedAt = Date.now(); fails = 0;
-        cloud.ring.forEach(function(c){ try{ ws.send(c.buffer); }catch(e){} }); cloud.ring = [];
+        cloud.ring.forEach(function(c){ try{ ws.send(c.buffer); cloud.dbg.sent++; }catch(e){} }); cloud.ring = [];
         cloudNote('connected');
       };
       ws.onmessage = function(ev){
-        var m; try{ m = JSON.parse(ev.data); }catch(e){ return; }
+        var raw = ev.data, m;
+        if(typeof raw !== 'string'){ try{ raw = new TextDecoder().decode(raw); }catch(e){ raw = ''; } }
+        try{ m = JSON.parse(raw); }catch(e){ cloud.dbg.msgs.unreadable = (cloud.dbg.msgs.unreadable||0)+1; cloud.dbg.last = String(raw).slice(0,120); return; }
+        var kind = m.type || (m.error ? 'error' : 'other');
+        cloud.dbg.msgs[kind] = (cloud.dbg.msgs[kind]||0)+1; cloud.dbg.last = String(raw).slice(0,160);
         var text = '', fin = false;
         if(m.type==='Turn'){ text = m.transcript||''; fin = !!m.end_of_turn; }
         else if(m.type==='Results'){
@@ -706,7 +724,9 @@ if(typeof module!=='undefined') module.exports = {LOOKUP:LOOKUP, compose:compose
           else text = (cloud.dgBuf+' '+piece).trim();
         }
         else if(m.error || m.type==='Error'){ cloudNote('problem: '+(m.error||m.description||m.message||'unknown')); return; }
-        if(!text || isEcho(text)) return;
+        if(!text) return;
+        cloud.dbg.lastText = text;
+        if(isEcho(text)){ cloud.dbg.echo++; return; }
         cloud.lastVoice = Date.now();
         if(fin) setHeard(text); else showHeard(text, true);
       };
@@ -715,6 +735,8 @@ if(typeof module!=='undefined') module.exports = {LOOKUP:LOOKUP, compose:compose
         if(cloud.ws!==ws) return;
         if(cloud.openedAt){ cloud.usedMs += Date.now()-cloud.openedAt; cloud.openedAt = 0; }
         cloud.ws = null; cloud.opening = false;
+        cloud.dbg.closed = 'code '+ev.code+(ev.reason?' '+ev.reason:'');
+        if(ev.code===1000 || ev.code===1005) cloudNote('the service closed the connection ('+cloud.dbg.closed+')');
         if(ev.code!==1000 && ev.code!==1005){ fails++; cloud.backoff = Date.now()+Math.min(3000*fails, 30000); cloudNote('connection dropped (code '+ev.code+'), will retry'); }
       };
     }).catch(function(err){
