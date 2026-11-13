@@ -148,6 +148,10 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .stage.sel{border-color:var(--ink);background:var(--describe)}
 .check{display:flex;gap:10px;align-items:center;font-size:16px;font-weight:600}
 .check input{width:24px;height:24px}
+.favs{display:flex;flex-wrap:wrap;gap:8px}
+.fav{min-height:44px;padding:6px 12px;border-radius:22px;border:2px solid var(--line);background:var(--paper);font-size:15px;font-weight:600;display:flex;align-items:center;gap:6px}
+.fav.sel{border-color:var(--ink);background:var(--describe)}
+.fav b{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;font-size:13px}
 .mine{display:flex;flex-direction:column;gap:6px}
 .mine div{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:15px;background:var(--paper);border-radius:10px;padding:6px 10px}
 .diag{font-size:13px;color:var(--ink-soft);background:var(--paper);border-radius:12px;padding:10px 12px;line-height:1.5;white-space:pre-wrap}
@@ -269,6 +273,14 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
       </div>
       <input type="file" id="picFile" accept="image/*" hidden>
       <small id="picMsg">Photos and word changes stay on this tablet.</small>
+    </div>
+
+    <h3>Choices she is offered</h3>
+    <div class="row">
+      <label for="favPage">When someone asks an open question, offer these</label>
+      <select id="favPage"></select>
+      <div class="favs" id="favList"></div>
+      <small id="favMsg">Tap up to six. They pop up in the order you pick them. Add her own words below and they show up here too.</small>
     </div>
 
     <h3>Add a word</h3>
@@ -653,7 +665,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     {n:2, name:'2. More words',  note:'20 pictures'},
     {n:3, name:'3. Word pages',  note:'Adds people, food, feelings, places, things'}
   ];
-  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, repeat:0.8, hold:0, edge:0.05, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, repeat:0.8, hold:0, edge:0.05, favs:{}, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {};
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', store:'checking', error:'' };
@@ -674,10 +686,11 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
       if(typeof saved.repeat==='number') state.repeat=saved.repeat;
       if(typeof saved.hold==='number') state.hold=saved.hold;
       if(typeof saved.edge==='number') state.edge=saved.edge;
+      if(saved.favs && typeof saved.favs==='object') state.favs=saved.favs;
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,repeat:state.repeat,hold:state.hold,edge:state.edge,ask:state.ask,voiceName:state.voiceName})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -713,7 +726,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v14) ---'+
+      dbgText = '\n--- Listening check (v15) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -1283,9 +1296,40 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   /* "What do you want to eat?" -> the Food words. At Stage 3 her board flips to that page.
      Before Stage 3 she has no pages yet, so up to six of those words pop up as big choices. */
   var pageT = null;
+  /* The words offered for an open question: the grown-up's picks in their order, else her added words, then the built-in ones. */
+  function offered(page){
+    var all = custom.concat(FRINGE).filter(function(w){ return w.page===page; });
+    var picks = (state.favs[page]||[]).map(function(id){ return LOOKUP[id]; }).filter(function(w){ return w && w.page===page; });
+    return picks.length ? picks : all;
+  }
+  function renderFavs(){
+    var sel = $('favPage');
+    if(!sel.options.length){
+      PAGES.filter(function(x){ return x.id!=='core'; }).forEach(function(x){ var o=document.createElement('option'); o.value=x.id; o.textContent=x.label; sel.appendChild(o); });
+      sel.addEventListener('change', renderFavs);
+    }
+    var page = sel.value, picks = (state.favs[page]||[]).filter(function(id){ return LOOKUP[id] && LOOKUP[id].page===page; });
+    state.favs[page] = picks;
+    var box = $('favList'); box.textContent = '';
+    custom.concat(FRINGE).filter(function(w){ return w.page===page; }).forEach(function(w){
+      var b = document.createElement('button'), at = picks.indexOf(w.id);
+      b.type = 'button'; b.className = 'fav'+(at>=0?' sel':''); b.setAttribute('aria-pressed', at>=0 ? 'true' : 'false');
+      if(at>=0){ var n = document.createElement('b'); n.textContent = String(at+1); b.appendChild(n); }
+      b.appendChild(document.createTextNode(w.label));
+      b.addEventListener('click', function(){
+        var list = state.favs[page] || [], i = list.indexOf(w.id);
+        if(i>=0) list.splice(i,1);
+        else if(list.length < 6) list.push(w.id);
+        else { $('favMsg').textContent = 'Six is the most. Tap one to remove it first.'; return; }
+        state.favs[page] = list; save(); renderFavs();
+        $('favMsg').textContent = list.length ? 'She will be offered these '+list.length+', in this order.' : 'None picked: she is offered the first six on the list.';
+      });
+      box.appendChild(b);
+    });
+  }
   function openPageFor(text){
     var page = detectOpenQuestion(text, state.name); if(!page) return;
-    var words = custom.concat(FRINGE).filter(function(w){ return w.page===page; });
+    var words = offered(page);
     if(!words.length) return;
     if(state.stage >= 3){
       state.page = page; renderTabs(); renderGrid();
@@ -1337,7 +1381,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
       b.addEventListener('click', function(){
         custom = custom.filter(function(x){ return x.id!==w.id; }); delete LOOKUP[w.id]; delete pics[w.id];
         idbSet('custom', custom).catch(storeFail); idbDel('pic:'+w.id).catch(function(){});
-        renderPicList(); renderAll();
+        renderPicList(); renderFavs(); renderAll();
       });
       d.appendChild(s); d.appendChild(b); m.appendChild(d);
     });
@@ -1345,7 +1389,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
     $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
-    hideAsk(); renderStages(); renderPicList(); renderVoices(); showDiag(); $('panel').classList.add('open');
+    hideAsk(); renderStages(); renderPicList(); renderFavs(); renderVoices(); showDiag(); $('panel').classList.add('open');
   }
   function closePanel(){ $('panel').classList.remove('open'); }
   function holdStart(e){ e.preventDefault(); lock.classList.add('holding'); hold = setTimeout(function(){ holdEnd(); openPanel(); }, 1500); }
@@ -1388,7 +1432,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
         c.getContext('2d').drawImage(img, (img.naturalWidth-side)/2, (img.naturalHeight-side)/2, side, side, 0, 0, S, S);
         var data = c.toDataURL('image/jpeg', 0.85);
         URL.revokeObjectURL(url);
-        pics[id] = data; renderPicList(); renderAll();
+        pics[id] = data; renderPicList(); renderFavs(); renderAll();
         $('picMsg').textContent = 'Photo set for "'+word(id).label+'".';
         idbSet('pic:'+id, data).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
       }catch(e){ $('picMsg').textContent = 'That photo could not be used. Try another one.'; }
@@ -1400,17 +1444,17 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   function saveLabels(){ idbSet('labels', labels).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail); idbSet('custom', custom).catch(function(){}); }
   $('nameSave').addEventListener('click', function(){
     var id = $('picWord').value, v = $('wordName').value.trim().replace(/\s+/g,' '); if(!id || !v || !LOOKUP[id]) return;
-    LOOKUP[id].label = v; labels[id] = v; saveLabels(); renderPicList(); renderAll();
+    LOOKUP[id].label = v; labels[id] = v; saveLabels(); renderPicList(); renderFavs(); renderAll();
     $('picMsg').textContent = 'Word changed to "'+v+'".';
   });
   $('nameReset').addEventListener('click', function(){
     var id = $('picWord').value; if(!id || !LOOKUP[id]) return;
-    LOOKUP[id].label = LOOKUP[id].base; delete labels[id]; saveLabels(); renderPicList(); renderAll();
+    LOOKUP[id].label = LOOKUP[id].base; delete labels[id]; saveLabels(); renderPicList(); renderFavs(); renderAll();
     $('picMsg').textContent = 'Back to "'+LOOKUP[id].base+'".';
   });
   $('picReset').addEventListener('click', function(){
     var id = $('picWord').value; if(!id) return;
-    delete pics[id]; idbDel('pic:'+id).catch(function(){}); renderPicList(); renderAll();
+    delete pics[id]; idbDel('pic:'+id).catch(function(){}); renderPicList(); renderFavs(); renderAll();
     $('picMsg').textContent = 'Back to the drawing for "'+word(id).label+'".';
   });
   $('addWord').addEventListener('click', function(){
@@ -1419,7 +1463,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     var w = {id:'custom:'+Date.now(), label:label, pic:'🔲', page:page, np:defaultNp(page, label)};
     custom.push(w); registerWords([w]); $('newWord').value='';
     idbSet('custom', custom).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
-    renderPicList(); $('picWord').value = w.id; renderAll();
+    renderPicList(); $('picWord').value = w.id; renderFavs(); renderAll();
     $('picMsg').textContent = '"'+label+'" added. Choose a photo for it.';
   });
   document.addEventListener('contextmenu', function(e){ if(!$('panel').classList.contains('open')) e.preventDefault(); });
