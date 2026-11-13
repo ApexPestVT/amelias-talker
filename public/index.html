@@ -183,6 +183,11 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .fav{min-height:44px;padding:6px 12px;border-radius:22px;border:2px solid var(--line);background:var(--paper);font-size:15px;font-weight:600;display:flex;align-items:center;gap:6px}
 .fav.sel{border-color:var(--ink);background:var(--describe)}
 .fav b{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;font-size:13px}
+.research details{border:2px solid var(--line);border-radius:12px;padding:8px 12px;margin-top:6px;background:var(--paper)}
+.research summary{font-size:15px;font-weight:700;cursor:pointer;min-height:32px;display:flex;align-items:center}
+.research p{margin:8px 0 2px;font-size:14px;line-height:1.4}
+.research a{color:var(--describe-edge);font-weight:600;word-break:break-word}
+.research span{display:block;font-size:13px;color:var(--ink-soft);line-height:1.4}
 .mine{display:flex;flex-direction:column;gap:6px}
 .mine div{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:15px;background:var(--paper);border-radius:10px;padding:6px 10px}
 .diag{font-size:13px;color:var(--ink-soft);background:var(--paper);border-radius:12px;padding:10px 12px;line-height:1.5;white-space:pre-wrap}
@@ -351,6 +356,12 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
       </div>
       <small>New words appear on their page at Stage 3 and up. Add a photo above.</small>
       <div class="mine" id="mine"></div>
+    </div>
+
+    <h3>The research behind this</h3>
+    <div class="row">
+      <small>Why the talker works the way it does. Most studies in this field are small, so treat these as good bets, not guarantees. Share this list with her speech therapist.</small>
+      <div class="research" id="research"></div>
     </div>
 
     <h3>Test</h3>
@@ -785,7 +796,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v20) ---'+
+      dbgText = '\n--- Listening check (v21) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nPaid listening on this tablet: '+usageText()+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1463,6 +1474,61 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     img.src = url;
   });
 
+  /* ---------- research library (grown-ups) ---------- */
+  var RESEARCH = [
+    ['Coffin-Siris syndrome and communication', [
+      ['Coffin-Siris Syndrome (GeneReviews, the main clinical reference)', 'https://www.ncbi.nlm.nih.gov/books/NBK131811/', 'Speaking is usually harder than understanding. Recommends a talker and says it supports speech, not hinders it. Lists hearing, vision and muscle-tone rates.'],
+      ['Language Impairments in Individuals With Coffin-Siris Syndrome (2022)', 'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8811135/', 'Registry study: 65% had speaking more limited than understanding. Why her vocabulary is not capped low.'],
+      ['ARID1B-Related Disorder (GeneReviews)', 'https://www.ncbi.nlm.nih.gov/books/NBK541502/', 'Details for the most common Coffin-Siris gene, including speech and vision.'],
+      ['Coffin-Siris Syndrome (NORD)', 'https://rarediseases.org/rare-diseases/coffin-siris-syndrome/', 'Plain-language overview for families.']
+    ]],
+    ['Teaching by showing: Glow-along and modeling', [
+      ['Effects of aided AAC input, a meta-analysis (2018)', 'https://rerc2020.aac-learning-center.org/?p=2467', 'Adults pointing to pictures while talking is the best-proven teaching method. Glow-along automates the pointing; that automation is untested.'],
+      ['Communication partner instruction, a systematic review (2018)', 'https://pubs.asha.org/doi/10.1044/2018_AJSLP-18-0024', 'Training the adults around the child is where talkers succeed or fail.']
+    ]],
+    ['Which words, and building sentences', [
+      ['What Are Core Words Anyway? (PRC-Saltillo handout)', 'https://saltillo.com/uploads/What_Are_Core_Words_Anyway_Handout_Part_1.pdf', 'A small set of words covers most of what toddlers say. Basis for her main board.'],
+      ['Tracking early sentence-building in graphic symbol communication', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC7225017', 'Children need to learn to build sentences word by word. Why a sentence-growth path is on the to-do list.'],
+      ['AAC Generative Language Intervention with young children with Down syndrome (2025)', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC12303605', 'Model sentences only a little longer than what the child uses now.'],
+      ['Applying a Developmental Model to Preliterate Aided Language Learning (2024)', 'https://pubs.asha.org/doi/10.1044/2023_AJSLP-23-00098', 'Use typical language development as the map for what to add next.']
+    ]],
+    ['Listening and question pop-ups', [
+      ['Context-aware AAC with just-in-time response options (Holyfield and colleagues)', 'https://par.nsf.gov/biblio/10574893-preliminary-investigation-context-aware-augmentative-alternative-communication-automated-just-time-cloze-phrase-response-options-social-participation-from-children-autism-spectrum', 'The closest study to this talker: answers offered from what a partner just said. Three children, prototype, early evidence.'],
+      ['Context-aware AAC for academic participation (preschoolers)', 'https://synapsesocial.com/papers/6975b2c8feba4585c2d6e4e8', 'Second small study: faster, more accurate answers with context-aware choices.']
+    ]],
+    ['Photo scenes', [
+      ['Visual scene displays for beginning communicators (Penn State)', 'https://rerc2009.aac-learning-center.org/index.php/projects/show/id/1', 'Real photos with touchable spots suit very young children.'],
+      ['Scenes compared with grids (2024)', 'https://e-space.mmu.ac.uk/636277', 'Both worked about equally in this trial. Why the talker has scenes and a grid, not one or the other.'],
+      ['Click AAC: vocabulary generated from photographs', 'https://cacm.acm.org/research-highlights/aac-with-automated-vocabulary-from-photographs-insights-from-school-and-speech-language-therapy-settings', 'Words suggested from a photo cut the work for adults. Basis for Suggest words.'],
+      ['QuickPic: topic boards from photographs', 'https://escholarship.mcgill.ca/downloads/jq085r838', 'Therapists rated AI-suggested words from photos as more fitting than older methods.']
+    ]],
+    ['Early reading', [
+      ['Transition to Literacy feature and sight words', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC9214510', 'A written word that appears as the picture is spoken taught sight words in small studies. Used on photo spots; planned for the main board.'],
+      ['Transition to Literacy software features (RESNA)', 'https://www.resna.org/sites/default/files/conference/2018/cac/Mandak.html', 'Small static labels on pictures have no evidence of teaching reading.']
+    ]],
+    ['Touch and access', [
+      ['Proloquo2Go access method settings', 'https://assistiveware.com/support/proloquo2go/alternative-access/access-method', 'Hold time and ignoring repeat taps are standard in leading talkers.'],
+      ['Aided AAC for people with visual impairments, a meta-analysis (2025)', 'https://pubs.asha.org/doi/10.1044/2024_AJSLP-24-00242', 'Adjusting the display for vision was largely effective. Seeing options are on the to-do list.']
+    ]],
+    ['Cautions about AI in talkers', [
+      ['A thoughtful approach to AI and AAC (AssistiveWare)', 'https://download.assistiveware.com/assistiveware/files/let%27s-look-before-we-leap-a-thoughtful-approach-to-ai-and-aac.pdf', 'Risks: whose words are they, privacy, and getting in the way of learning. Why answers are choices she picks, not text written for her.'],
+      ['The less I type, the better (Google Research)', 'https://research.google/pubs/the-less-i-type-the-better-how-ai-language-models-can-enhance-or-impede-communication-for-aac-users/', 'Adult users accept some AI help for speed but want control of their voice.']
+    ]]
+  ];
+  function renderResearch(){
+    var box = $('research'); if(box.childNodes.length) return;
+    RESEARCH.forEach(function(group){
+      var d = document.createElement('details'), sm = document.createElement('summary');
+      sm.textContent = group[0]+' ('+group[1].length+')'; d.appendChild(sm);
+      group[1].forEach(function(r){
+        var p = document.createElement('p'), a = document.createElement('a'), n = document.createElement('span');
+        a.href = r[1]; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = r[0];
+        n.textContent = r[2]; p.appendChild(a); p.appendChild(n); d.appendChild(p);
+      });
+      box.appendChild(d);
+    });
+  }
+
   function renderAll(){
     $('typeBar').hidden = !state.typing;
     $('heard').classList.toggle('big', state.typing);
@@ -1688,7 +1754,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
     $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
-    hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderVoices(); showDiag(); $('panel').classList.add('open');
+    hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderResearch(); renderVoices(); showDiag(); $('panel').classList.add('open');
   }
   function closePanel(){ $('panel').classList.remove('open'); }
   function holdStart(e){ e.preventDefault(); lock.classList.add('holding'); hold = setTimeout(function(){ holdEnd(); openPanel(); }, 1500); }
