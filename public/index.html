@@ -1156,7 +1156,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v45) ---'+
+      dbgText = '\n--- Listening check (v46) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+

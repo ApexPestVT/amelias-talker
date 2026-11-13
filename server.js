@@ -172,6 +172,8 @@ function askPrompt(level, words) {
     '- Each option has a short label and a full first-person sentence the tablet will say. The sentence must only say what the label means. Add no facts, names, reasons or feelings that were not asked about.',
     '- Every option needs a picture: one single standard emoji that shows what the label means (soccer gets the soccer ball, not sure gets the thinking or shrugging face). Never a flag, never text.',
     '- When the question asks for a favorite or a pick from a well-known group (sports, animals, seasons, school subjects and the like), use every choice you are allowed, with the most common answers for a person in the United States first. For sports that includes football.',
+    '- Never answer with the word that was asked about: "restaurant" is not an answer to "what is your favorite restaurant".',
+    '- When the true answer would be a particular business or place you cannot know (a restaurant, a store, a park), first offer any matching names from their board words. Then fill the remaining choices with kinds a person that age would say (for restaurants: "pizza place", "burger place", "tacos", "chicken place", "ice cream shop"). Never invent or use a brand name that is not on their board.',
     '- Never use the name of a real person. No slang. Nothing rude, scary, medical or grown-up for a young child.',
     words && words.length ? '- Words already on their board (prefer these as labels when they fit): ' + words.join(', ') + '.' : '',
     'Reply only by calling offer_answers.'
