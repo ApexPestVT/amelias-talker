@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, interactive-widget=resizes-content">
 <meta name="theme-color" content="#16223a">
-<title>Amelia's Talker</title>
+<title>Chime In</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon.svg">
+<link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -326,6 +326,8 @@ body.typing #tabs, body.typing #grid{display:none}
         <option value="off">Do not pop up answers</option>
       </select>
     </div>
+    <label class="check"><input type="checkbox" id="smartOn"> Use AI for harder questions</label>
+    <small id="smartMsg">Off: only the built-in rules are used.</small>
     <div class="row">
       <label for="favPage">When someone asks an open question, offer these</label>
       <select id="favPage"></select>
@@ -479,6 +481,7 @@ body.typing #tabs, body.typing #grid{display:none}
       <b>What the talker does by itself</b>
       <ol class="coach">
         <li><b>It listens.</b> No button. When someone asks your child a yes or no question, a this-or-that question, or "what do you want to drink?", big answers pop up. Set this under "When a question is heard".</li>
+        <li><b>It can ask an AI for help.</b> Off by default. Turn on "Use AI for harder questions" and questions the rules miss, like "how was school?", get answer buttons matched to the stage. Only the words heard are sent.</li>
         <li><b>It glows.</b> As people talk, the pictures for the words they say light up on the board. That shows where words live without anyone pointing.</li>
         <li><b>It shows the written word</b> for 3 seconds on every tap, so the spelling is seen with the sound.</li>
         <li><b>It keeps count.</b> "Progress" above shows which words are used. Press Copy report and send it to the therapist.</li>
@@ -510,7 +513,7 @@ body.typing #tabs, body.typing #grid{display:none}
     <div class="row">
       <label for="testIn">Pretend someone said this</label>
       <div class="inline">
-        <input type="text" id="testIn" placeholder="Amelia, would you like to play with us?" autocomplete="off">
+        <input type="text" id="testIn" placeholder="Would you like to play with us?" autocomplete="off">
         <button class="btn" id="testBtn" type="button">Hear it</button>
       </div>
     </div>
@@ -978,7 +981,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving your own'},
     {n:6, name:'6. Teen and adult words', note:'Adds 96 of the most used everyday words on four pages. Sentences are said word for word'}
   ];
-  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
@@ -994,6 +997,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
       if(typeof saved.voiceName==='string') state.voiceName=saved.voiceName;
       if(saved.stage>=1) state.stage=Math.min(6, +saved.stage);
       if(Array.isArray(saved.questions)) state.questions = saved.questions.filter(function(q){ return typeof q==='string' && q.trim(); }).slice(0, 12);
+      state.smart = saved.smart===true;
       state.older = typeof saved.older==='boolean' ? saved.older : state.stage >= 5;
       if(Array.isArray(saved.mine)) state.mine = saved.mine.filter(function(q){ return typeof q==='string' && q.trim(); }).slice(0, 40);
       if(typeof saved.typing==='boolean') state.typing=saved.typing;
@@ -1009,7 +1013,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -1045,7 +1049,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v32) ---'+
+      dbgText = '\n--- Listening check (v33) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nPaid listening on this tablet: '+usageText()+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2183,6 +2187,62 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     renderBar(sentence, false); speak(sentence);
     state.heard = ''; setTimeout(function(){ showHeard('', false); }, 2500);
   }
+  /* ----- AI help for harder questions (off unless a grown-up turns it on) ----- */
+  var askAiOn = false, smartSeen = {}, smartBusy = false;
+  function smartNote(){
+    var el = $('smartMsg'); if(!el) return;
+    el.textContent = !askAiOn ? 'Not available: the AI key is not set on the server.'
+      : state.smart ? 'On. When the built-in rules cannot tell what was asked, the words heard (never the sound) go to an AI service, which suggests answers to tap. Your child still chooses. Answers are matched to the stage. If it is slow or unsure, nothing extra pops up.'
+      : 'Off: only the built-in rules are used. Turn on to let an AI service suggest answers for questions the rules miss. It gets the words heard, never the sound.';
+  }
+  function looksAsked(t){
+    t = t.replace(/^((so|hey|okay|ok|and|well|um|uh|oh|now|then|honey|sweetie|buddy)\s+)+/, '');   // people rarely start cleanly
+    return /^(what|how|which|who|where|when|why|is|are|was|do|does|did|can|could|will|would|should|have|has|wanna|want|you want|you wanna|shall)\b/.test(t) || / or /.test(' '+t+' ') || /\b(right|okay|ok|huh)$/.test(t);
+  }
+  function smartWanted(text, q){
+    if(!state.smart || !askAiOn || smartBusy) return false;
+    var t = norm(clean(text, state.name)); if(t.length < 6 || t.split(' ').length < 3) return false;
+    if(smartSeen[t] && Date.now()-smartSeen[t] < 60000) return false;
+    if(q && q.kind==='yesno') return false;                            // the rules are sure
+    if(q){                                                              // a this-or-that the rules cut up badly ("better the red one")
+      return q.options.some(function(o){ return !o.id && String(o.label).split(' ').length >= 3; });
+    }
+    if(detectOpenQuestion(text, state.name)) return false;             // the rules already know which page to open
+    return looksAsked(t);
+  }
+  function smartAsk(text, q){
+    var t = norm(clean(text, state.name)); smartSeen[t] = Date.now(); smartBusy = true;
+    var done = false, finish = function(a){
+      if(done) return; done = true; smartBusy = false; clearTimeout(slow);
+      if(askDone && !$('ask').hidden) return;                          // an answer is already showing
+      if(!state.fresh && state.taps.length) return;                    // a message was started while we waited: leave it alone
+      if(a && a.kind==='yesno' && a.options && a.options.length===2) showSmart(text, a, 'yesno');
+      else if(a && a.kind==='choices' && a.options && a.options.length>=2) showSmart(text, a, 'choice');
+      else showAsk(text, q);                                           // AI unsure or failed: fall back to what the rules found (maybe nothing)
+    };
+    var slow = setTimeout(function(){ finish(null); }, 3500);
+    var words = allWords().filter(function(w){ return w.page==='core' ? (w.s||1) <= state.stage : state.stage >= 3 && !w.lit; }).map(function(w){ return w.label; });
+    fetch('api/ask', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({heard:clean(text, state.name), stage:state.stage, words:words})})
+      .then(function(r){ return r.ok ? r.json() : null; }).then(finish, function(){ finish(null); });
+  }
+  function boardWord(label){
+    var l = String(label).toLowerCase(), hit = null;
+    allWords().forEach(function(w){ if(!hit && !w.lit && String(w.label).toLowerCase()===l && (w.page==='core' ? (w.s||1) <= state.stage : state.stage >= 3)) hit = w; });
+    return hit;
+  }
+  function showSmart(text, a, kind){
+    var max = state.stage >= 5 ? 6 : (state.stage >= 3 ? 4 : 3), opts = a.options.slice(0, max);
+    var box = $('askOpts'); box.textContent = ''; box.classList.toggle('many', opts.length > 3);
+    $('askQ').textContent = clean(text, state.name)+'?';
+    opts.forEach(function(o){
+      var w = boardWord(o.label), cat = o.label==='yes' ? 'action' : (o.label==='no' ? 'stop' : 'thing');
+      box.appendChild(askKey(w, o.label, cat, o.sentence, w ? [w.id] : []));
+    });
+    askKind = kind; plogAdd('asked', kind);
+    askDone = false; $('askSkip').style.visibility = '';
+    $('ask').hidden = false;
+    clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
+  }
   function askKey(w, label, cat, sentence, ids){
     var b = document.createElement('button');
     b.type = 'button'; b.className = 'key '+cat; b.setAttribute('aria-label', label);
@@ -2195,8 +2255,12 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     if(state.ask==='off' || $('panel').classList.contains('open')) return;
     if(askDone && !$('ask').hidden) return;                        // her answer is still showing
     if(!state.fresh && state.taps.length){ pendingQ = {text:text, at:Date.now()}; return; }   // mid-message: ask right after
-    if(state.ask==='name' && !nameHeard(text, state.name)) return;
+    if(state.ask==='name' && state.name && !nameHeard(text, state.name)) return;
     var q = detectQuestion(text, state.name);
+    if(smartWanted(text, q)){ smartAsk(text, q); return; }             // the rules are unsure: let the AI try first, rules stay as the fallback
+    showAsk(text, q);
+  }
+  function showAsk(text, q){
     if(!q){ openPageFor(text); return; }
     var box = $('askOpts'); box.textContent = '';
     box.classList.remove('many');
@@ -2317,7 +2381,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
   }
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
-    $('qList').value = state.questions.join('\n'); $('olderOn').checked = state.older;
+    $('qList').value = state.questions.join('\n'); $('olderOn').checked = state.older; $('smartOn').checked = state.smart; smartNote();
     $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('wordsOn').checked = state.words; $('modelOn').checked = state.modelBtn; $('logOn').checked = state.log !== false; renderReport(); clearArmed = false; $('reportClear').textContent = 'Clear the log'; $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
     hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderResearch(); renderVoices(); showDiag(); $('panel').classList.add('open');
   }
@@ -2351,6 +2415,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
   $('kioskOn').addEventListener('change', function(){ state.kiosk = this.checked; save(); applyKiosk(); });
   $('askSel').addEventListener('change', function(){ state.ask = this.value; save(); });
   $('typeOn').addEventListener('change', function(){ state.typing = this.checked; save(); renderAll(); });
+  $('smartOn').addEventListener('change', function(){ state.smart = this.checked; save(); smartNote(); });
   $('olderOn').addEventListener('change', function(){ state.older = this.checked; setOlder(state.older, labels); save(); renderPicList(); renderFavs(); renderAll(); });
   $('qList').addEventListener('change', function(){ state.questions = this.value.split('\n').map(function(q){ return q.trim().slice(0, 80); }).filter(Boolean).slice(0, 12); this.value = state.questions.join('\n'); save(); if(state.page==='questions') renderGrid(); });
   $('voiceSel').addEventListener('change', function(){ state.voiceName = this.value; save(); pickVoice(); cvUnlock(); cvWarm(); });
@@ -2439,6 +2504,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
       try{ if(cv.on) localStorage.setItem('talker-cv', JSON.stringify(cv.voices)); else localStorage.removeItem('talker-cv'); }catch(e){}
       renderVoices(); cvMsg(); if(cv.loaded) cvWarm();
     }, function(){});
+    fetch('api/ask/status').then(function(r){ return r.json(); }).then(function(v){ askAiOn = !!(v && v.enabled); smartNote(); }, function(){});
     fetch('api/vision/status').then(function(r){ return r.json(); }).then(function(v){ visionOn = !!(v && v.enabled); }, function(){});
     fetch('api/stt/status').then(function(r){ return r.json(); }).then(function(st){
       if(st && st.enabled){ mode = 'cloud'; cloud.provider = st.provider||'speech service'; setEar(); cloudStart(); }

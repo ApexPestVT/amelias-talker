@@ -1,4 +1,6 @@
-# Amelia's Talker
+# Chime In
+
+First built as Amelia's Talker.
 
 A picture talker (AAC) that listens to people talking to the child and turns her tap into a full sentence. It grows with her in stages.
 

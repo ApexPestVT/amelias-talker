@@ -1,4 +1,4 @@
-// Amelia's Talker: tiny static server for Railway. No dependencies.
+// Chime In: tiny static server for Railway. No dependencies.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -146,6 +146,79 @@ async function sceneWords(image, w, h, model) {
 }
 let lastVision = null;
 
+// ---- Harder questions: ask Claude what was asked and which answers fit. Only the heard words are sent, never sound. ----
+const ASK_URL = process.env.ANTHROPIC_ENDPOINT || 'https://api.anthropic.com';   // override is for local tests only
+const ASK_LEVELS = {
+  1: 'a beginner with about 20 picture words (think of a toddler). If yes or no can answer it, use yes/no. Otherwise give 2 or 3 choices, each ONE very common word. Sentences of 3 to 5 words.',
+  2: 'a young child who uses word pages and short sentences. Give 2 to 4 choices of one or two simple words. Sentences of 3 to 7 words.',
+  3: 'a teenager or adult. Give 2 to 6 choices that can be short phrases. Use ordinary grown-up wording, never baby talk. Sentences up to 10 words.'
+};
+function askPrompt(level, words) {
+  return [
+    'A person who cannot speak uses a talking tablet. Someone nearby just said something to them. Decide whether it is a question for them, and if so offer answers they can tap.',
+    'The person is ' + ASK_LEVELS[level],
+    'Rules:',
+    '- If it is not a question to them, or you are not sure what is being asked, use kind "none" with no options. Offering nothing is better than offering a wrong answer.',
+    '- If yes or no answers it, use kind "yesno" with exactly two options labelled "yes" and "no".',
+    '- Otherwise use kind "choices". Take the choices from the question itself when it names them ("the red one or the blue one" gives "red" and "blue").',
+    '- For open questions with no named choices, offer the most ordinary answers a person that age would give. Include one honest negative or unsure answer when it fits ("bad", "not sure").',
+    '- Each option has a short label and a full first-person sentence the tablet will say. The sentence must only say what the label means. Add no facts, names, reasons or feelings that were not asked about.',
+    '- Never use the name of a real person. No slang. Nothing rude, scary, medical or grown-up for a young child.',
+    words && words.length ? '- Words already on their board (prefer these as labels when they fit): ' + words.join(', ') + '.' : '',
+    'Reply only by calling offer_answers.'
+  ].filter(Boolean).join('\n');
+}
+const askHits = new Map();
+function askAllowed(ip) {
+  const now = Date.now(), mine = (askHits.get(ip) || []).filter(t => now - t < 3600e3);
+  if (mine.length >= 240) return false;
+  mine.push(now); askHits.set(ip, mine); return true;
+}
+const askCache = new Map();       // same question at the same level: answer once
+let lastAsk = null;
+async function askHelp(heard, stage, words) {
+  const text = String(heard || '').replace(/[^\p{L}\p{N} ,.?!'’-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (text.length < 4) return { kind: 'none', options: [] };
+  const level = stage >= 5 ? 3 : (stage >= 3 ? 2 : 1), max = level === 3 ? 6 : (level === 2 ? 4 : 3);
+  const board = (Array.isArray(words) ? words : []).map(w => String(w).toLowerCase().replace(/[^a-z0-9' -]/g, '').trim().slice(0, 24)).filter(Boolean).slice(0, 160);
+  const key = level + '|' + text.toLowerCase();
+  if (askCache.has(key)) return askCache.get(key);
+  const r = await fetch(ASK_URL + '/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': VISION_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: VISION_MODEL, max_tokens: 500,
+      tools: [{ name: 'offer_answers', description: 'Offer answers the person can tap, or none.',
+        input_schema: { type: 'object', required: ['kind', 'options'], properties: {
+          kind: { type: 'string', enum: ['yesno', 'choices', 'none'] },
+          options: { type: 'array', items: { type: 'object', required: ['label', 'sentence'], properties: {
+            label: { type: 'string', description: 'what is shown on the button, lowercase, 1 to 3 words' },
+            sentence: { type: 'string', description: 'the full first-person sentence the tablet says' } } } } } } }],
+      tool_choice: { type: 'tool', name: 'offer_answers' },
+      messages: [{ role: 'user', content: askPrompt(level, board) + '\n\nWhat was said: "' + text + '"' }]
+    })
+  });
+  if (!r.ok) { const t = await r.text().catch(() => ''); throw new Error('AI service ' + r.status + ' ' + t.slice(0, 140)); }
+  const d = await r.json();
+  const form = (d.content || []).filter(b => b.type === 'tool_use' && b.input)[0];
+  const inp = (form && form.input) || {};
+  let kind = ['yesno', 'choices', 'none'].includes(inp.kind) ? inp.kind : 'none';
+  const seen = new Set();
+  let options = (Array.isArray(inp.options) ? inp.options : []).map(o => ({
+    label: String((o && o.label) || '').toLowerCase().replace(/[^a-z0-9' -]/g, '').trim().slice(0, 28),
+    sentence: String((o && o.sentence) || '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 90)
+  })).filter(o => o.label && o.sentence && !seen.has(o.label) && seen.add(o.label));
+  if (kind === 'yesno') {
+    const y = options.find(o => o.label === 'yes'), n = options.find(o => o.label === 'no');
+    if (y && n) options = [y, n]; else kind = 'none';
+  } else if (kind === 'choices') { options = options.slice(0, max); if (options.length < 2) kind = 'none'; }
+  if (kind === 'none') options = [];
+  const out = { kind, options, level };
+  lastAsk = { at: new Date().toISOString(), level, kind, options: options.length, stop: d.stop_reason || '?' };   // never the words heard
+  if (askCache.size < 500) askCache.set(key, out);
+  return out;
+}
+
 // ---- Child voices (Amazon Polly). Keys stay here. Tablets save each clip, so a word is paid for once. ----
 const crypto = require('crypto');
 const AWS_ID = process.env.AWS_ACCESS_KEY_ID, AWS_SECRET = process.env.AWS_SECRET_ACCESS_KEY;
@@ -212,6 +285,27 @@ http.createServer((req, res) => {
     const tm = /model=sonnet/.test(req.url || '') ? 'claude-sonnet-5-5' : VISION_MODEL;
     return sceneWords(SELFTEST_IMG, 256, 192, tm).then(words => json(res, 200, { ok: true, model: tm, expected: 'ball near x31 y52, box near x74 y52', words }), e => json(res, 200, { ok: false, model: tm, error: e.message }));
   }
+  if (p === '/api/ask/status') return json(res, 200, { enabled: !!VISION_KEY });
+  if (p === '/api/ask/last') return json(res, 200, lastAsk || { note: 'no question has been sent to the AI since the server last restarted' });
+  if (p === '/api/ask/selftest') {             // fixed sample questions (nothing from a user) so the live answers can be read from outside
+    if (!VISION_KEY) return json(res, 200, { ok: false, error: 'no AI key set' });
+    const now = Date.now(); selftests = selftests.filter(t => now - t < 3600e3);
+    if (selftests.length >= 24) return json(res, 429, { ok: false, error: 'self-test limit reached, try again in an hour' });
+    selftests.push(now);
+    const samples = ['how was school today', 'is your tummy hurting', 'which one do you like better the red one or the blue one', 'what color do you want', 'it is raining outside'];
+    const u = new URL(req.url, 'http://x'), st = Math.max(1, Math.min(6, +u.searchParams.get('stage') || 2));
+    return Promise.all(samples.map(q => askHelp(q, st, ['yes', 'no', 'more', 'want', 'play', 'eat', 'drink', 'help', 'hurt', 'happy', 'sad', 'tired', 'good', 'bad']).then(a => ({ q, kind: a.kind, options: a.options }), e => ({ q, error: e.message }))))
+      .then(out => json(res, 200, { ok: out.every(o => !o.error), stage: st, model: VISION_MODEL, results: out }));
+  }
+  if (p === '/api/ask') {
+    if (req.method !== 'POST') return json(res, 405, { error: 'POST only' });
+    if (!VISION_KEY) return json(res, 503, { error: 'no AI key set' });
+    if (!sameSite(req)) return json(res, 403, { error: 'wrong site' });
+    const ip4 = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    if (!askAllowed(ip4)) return json(res, 429, { error: 'too many questions this hour' });
+    return readBody(req, 8192).then(b => { const q = JSON.parse(b); return askHelp(q.heard, +q.stage || 1, q.words); })
+      .then(a => json(res, 200, a), e => { console.error('ask failed:', e.message); json(res, 502, { error: e.message }); });
+  }
   if (p === '/api/voice/status') return json(res, 200, { enabled: !!(AWS_ID && AWS_SECRET), region: AWS_REGION, voices: VOICES });
   if (p === '/api/voice/last') return json(res, 200, lastVoice || { note: 'no child-voice request has run since the server last restarted' });
   if (p === '/api/voice/selftest') {           // says one short word so a key or region problem can be read from outside
@@ -266,6 +360,6 @@ http.createServer((req, res) => {
     });
     res.end(data);
   });
-}).listen(PORT, () => console.log('Amelia\'s Talker listening on ' + PORT));
+}).listen(PORT, () => console.log('Chime In listening on ' + PORT));
 
 if (process.env.TALKER_TEST) module.exports = { signPolly };
