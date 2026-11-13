@@ -1,4 +1,4 @@
-// Chime In: tiny static server for Railway. No dependencies.
+// My Turn: tiny static server for Railway. No dependencies.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -65,6 +65,12 @@ const SCENE_PROMPT = [
   'Step 2: call place_words with the list, for example {"words":[{"label":"dog","x_percent":25,"y_percent":61}]}. You must call place_words.'
 ].join('\n');
 let selftests = [];
+// What the AI service charges, in dollars per million tokens (Claude Haiku 5.5 list price read Nov 2026). Change with AI_PRICE_IN / AI_PRICE_OUT.
+const AI_PRICE_IN = Number(process.env.AI_PRICE_IN) || 0.10, AI_PRICE_OUT = Number(process.env.AI_PRICE_OUT) || 0.50;
+function aiCost(usage) {
+  const i = (usage && usage.input_tokens) || 0, o = (usage && usage.output_tokens) || 0;
+  return { tokensIn: i, tokensOut: o, usd: +((i * AI_PRICE_IN + o * AI_PRICE_OUT) / 1e6).toFixed(6) };
+}
 const visionHits = new Map();   // ip -> [timestamps], separate from the listening allowance
 function visionAllowed(ip) {
   const now = Date.now(), mine = (visionHits.get(ip) || []).filter(t => now - t < 3600e3);
@@ -141,6 +147,7 @@ async function sceneWords(image, w, h, model) {
     blocks: blocks.map(b => b.type).join(',') || 'none', itemsSeen: items.length, wordsKept: words.length, treatedAsPixels: !!pixels,
     said: text.slice(0, 400), form: JSON.stringify(forms.map(f => f.input)).slice(0, 900)
   };
+  words.cost = aiCost(d.usage);
   if (!words.length) throw new Error('AI answered without usable words (stop: ' + lastVision.stop + '; blocks: ' + lastVision.blocks + '; items: ' + items.length + ')');
   return words;
 }
@@ -182,7 +189,7 @@ async function askHelp(heard, stage, words) {
   const level = stage >= 5 ? 3 : (stage >= 3 ? 2 : 1), max = level === 3 ? 6 : (level === 2 ? 4 : 3);
   const board = (Array.isArray(words) ? words : []).map(w => String(w).toLowerCase().replace(/[^a-z0-9' -]/g, '').trim().slice(0, 24)).filter(Boolean).slice(0, 160);
   const key = level + '|' + text.toLowerCase();
-  if (askCache.has(key)) return askCache.get(key);
+  if (askCache.has(key)) return Object.assign({}, askCache.get(key), { cost: { tokensIn: 0, tokensOut: 0, usd: 0, reused: true } });   // already answered once: no new charge
   const r = await fetch(ASK_URL + '/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': VISION_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
@@ -213,7 +220,7 @@ async function askHelp(heard, stage, words) {
     if (y && n) options = [y, n]; else kind = 'none';
   } else if (kind === 'choices') { options = options.slice(0, max); if (options.length < 2) kind = 'none'; }
   if (kind === 'none') options = [];
-  const out = { kind, options, level };
+  const out = { kind, options, level, cost: aiCost(d.usage) };
   lastAsk = { at: new Date().toISOString(), level, kind, options: options.length, stop: d.stop_reason || '?' };   // never the words heard
   if (askCache.size < 500) askCache.set(key, out);
   return out;
@@ -294,8 +301,8 @@ http.createServer((req, res) => {
     selftests.push(now);
     const samples = ['how was school today', 'is your tummy hurting', 'which one do you like better the red one or the blue one', 'what color do you want', 'it is raining outside'];
     const u = new URL(req.url, 'http://x'), st = Math.max(1, Math.min(6, +u.searchParams.get('stage') || 2));
-    return Promise.all(samples.map(q => askHelp(q, st, ['yes', 'no', 'more', 'want', 'play', 'eat', 'drink', 'help', 'hurt', 'happy', 'sad', 'tired', 'good', 'bad']).then(a => ({ q, kind: a.kind, options: a.options }), e => ({ q, error: e.message }))))
-      .then(out => json(res, 200, { ok: out.every(o => !o.error), stage: st, model: VISION_MODEL, results: out }));
+    return Promise.all(samples.map(q => askHelp(q, st, ['yes', 'no', 'more', 'want', 'play', 'eat', 'drink', 'help', 'hurt', 'happy', 'sad', 'tired', 'good', 'bad']).then(a => ({ q, kind: a.kind, options: a.options, cost: a.cost }), e => ({ q, error: e.message }))))
+      .then(out => json(res, 200, { ok: out.every(o => !o.error), stage: st, model: VISION_MODEL, priceInPerMillion: AI_PRICE_IN, priceOutPerMillion: AI_PRICE_OUT, totalUsd: +out.reduce((a, o) => a + ((o.cost && o.cost.usd) || 0), 0).toFixed(6), results: out }));
   }
   if (p === '/api/ask') {
     if (req.method !== 'POST') return json(res, 405, { error: 'POST only' });
@@ -337,7 +344,7 @@ http.createServer((req, res) => {
     const ip2 = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
     if (!visionAllowed(ip2)) return json(res, 429, { error: 'too many photo suggestions this hour, try again later' });
     return readBody(req, 4 * 1024 * 1024).then(b => { const q = JSON.parse(b); return sceneWords(q.image, Number(q.w) || 0, Number(q.h) || 0); })
-      .then(words => json(res, 200, { words }), e => { console.error('scene words failed:', e.message); json(res, 502, { error: e.message }); });
+      .then(words => json(res, 200, { words, cost: words.cost }), e => { console.error('scene words failed:', e.message); json(res, 502, { error: e.message }); });
   }
   if (p === '/api/stt/token') {
     if (req.method !== 'POST') return json(res, 405, { error: 'POST only' });
@@ -360,6 +367,6 @@ http.createServer((req, res) => {
     });
     res.end(data);
   });
-}).listen(PORT, () => console.log('Chime In listening on ' + PORT));
+}).listen(PORT, () => console.log('My Turn listening on ' + PORT));
 
 if (process.env.TALKER_TEST) module.exports = { signPolly };

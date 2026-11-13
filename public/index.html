@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, interactive-widget=resizes-content">
 <meta name="theme-color" content="#16223a">
-<title>Chime In</title>
+<title>My Turn</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -1049,16 +1049,15 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v33) ---'+
+      dbgText = '\n--- Listening check (v35) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
-        '\nPaid listening on this tablet: '+usageText()+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
         '\nLast words back: '+(d.lastText||'none')+(d.echo?' ('+d.echo+' ignored as its own voice)':'')+
         '\nLast reply: '+(d.last||'none')+
         (d.closed?'\nLast close: '+d.closed:'');
     }
-    $('diag').textContent = 'Voice: '+diag.voice+'\nMicrophone: '+diag.mic+(diag.cloud?'\nSpeech service: '+diag.cloud:'')+(diag.kiosk?'\nChild lock: '+diag.kiosk:'')+(diag.vision?'\nPhoto word suggestions: '+diag.vision:'')+'\nPhotos: '+diag.store+(diag.error?'\nLast problem: '+diag.error:'')+dbgText;
+    $('diag').textContent = 'Voice: '+diag.voice+'\nMicrophone: '+diag.mic+(diag.cloud?'\nSpeech service: '+diag.cloud:'')+(diag.kiosk?'\nChild lock: '+diag.kiosk:'')+(diag.vision?'\nPhoto word suggestions: '+diag.vision:'')+'\nPhotos: '+diag.store+(diag.error?'\nLast problem: '+diag.error:'')+costText()+dbgText;
   }
   window.addEventListener('error', function(e){ diag.error = (e.message||'script error'); showDiag(); });
   window.addEventListener('unhandledrejection', function(e){ diag.error = String((e.reason&&(e.reason.code||e.reason.message))||e.reason||'promise'); showDiag(); });
@@ -1335,6 +1334,39 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
       var keys = Object.keys(u).sort(); while(keys.length > 70){ delete u[keys.shift()]; }
       localStorage.setItem('talker-usage', JSON.stringify(u));
     }catch(e){}
+  }
+  /* AI charges (question help, photo words): the server reports the real cost of each call and the tablet adds them up by day. */
+  function readAi(){ try{ return JSON.parse(localStorage.getItem('talker-ai-cost')||'{}') || {}; }catch(e){ return {}; } }
+  function addAi(kind, cost){
+    try{
+      var u = readAi(), k = dayKey(new Date()), d = u[k] || (u[k] = {});
+      var e = d[kind] || (d[kind] = {n:0, usd:0}); e.n++; e.usd += (cost && cost.usd) || 0;
+      var keys = Object.keys(u).sort(); while(keys.length > 70){ delete u[keys.shift()]; }
+      localStorage.setItem('talker-ai-cost', JSON.stringify(u));
+    }catch(err){}
+  }
+  function money(v){ return '$'+(v >= 0.01 || v === 0 ? v.toFixed(2) : (v >= 0.001 ? v.toFixed(4) : v.toFixed(5))); }
+  function aiSum(kind){
+    var u = readAi(), today = dayKey(new Date()), month = today.slice(0,7), t = (u[today]||{})[kind] || {n:0, usd:0}, mn = 0, mu = 0;
+    Object.keys(u).forEach(function(k){ if(k.slice(0,7)===month && u[k][kind]){ mn += u[k][kind].n; mu += u[k][kind].usd; } });
+    return {todayN:t.n, todayUsd:t.usd, monthN:mn, monthUsd:mu};
+  }
+  function listenMonthUsd(){
+    var u = readUsage(), month = dayKey(new Date()).slice(0,7), m = cloud.openedAt ? Date.now()-cloud.openedAt : 0;
+    Object.keys(u).forEach(function(k){ if(k.slice(0,7)===month) m += u[k]; });
+    return m/3600000*hourRate();
+  }
+  function costText(){
+    if(typeof cloud === 'undefined') return '';
+    var q = aiSum('ask'), ph = aiSum('photo'), voice = 0, paid = mode==='cloud';
+    try{ voice = (+localStorage.getItem('talker-voice-chars')||0) * 16 / 1e6; }catch(e){}
+    var listen = paid ? listenMonthUsd() : 0;
+    return '\n--- What this tablet has cost ---'+
+      '\nListening: '+(paid ? usageText() : 'not using the paid service')+
+      '\nAI question help: today '+q.todayN+' ('+money(q.todayUsd)+'), this month '+q.monthN+' ('+money(q.monthUsd)+')'+(q.monthN ? ', about '+money(q.monthUsd/q.monthN)+' each' : '')+
+      '\nAI photo words: today '+ph.todayN+' ('+money(ph.todayUsd)+'), this month '+ph.monthN+' ('+money(ph.monthUsd)+')'+
+      '\nChild voice: '+money(voice)+' in total'+
+      '\nThis month so far, all together: '+money(listen + q.monthUsd + ph.monthUsd)+' (child voice is a one-time cost and is not in this total)';
   }
   function hourRate(){
     var p = String(cloud.provider||'');
@@ -1841,6 +1873,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
         var d; try{ d = JSON.parse(body); }catch(e){ throw new Error('error '+r.status); }
         if(!r.ok) throw new Error(d.error||('error '+r.status)); return d; }); })
       .then(function(d){
+        if(d && d.cost) addAi('photo', d.cost);
         if(!ed) return;
         var have = {}, added = 0; ed.spots.forEach(function(x){ have[String(x.label).toLowerCase()] = 1; });
         (d.words||[]).forEach(function(w, i){ if(have[w.label]) return; ed.spots.push({id:'a'+Date.now()+i, label:w.label, x:w.x, y:w.y}); added++; });
@@ -2223,7 +2256,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     var slow = setTimeout(function(){ finish(null); }, 3500);
     var words = allWords().filter(function(w){ return w.page==='core' ? (w.s||1) <= state.stage : state.stage >= 3 && !w.lit; }).map(function(w){ return w.label; });
     fetch('api/ask', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({heard:clean(text, state.name), stage:state.stage, words:words})})
-      .then(function(r){ return r.ok ? r.json() : null; }).then(finish, function(){ finish(null); });
+      .then(function(r){ return r.ok ? r.json() : null; }).then(function(a){ if(a && a.cost) addAi('ask', a.cost); finish(a); }, function(){ finish(null); });
   }
   function boardWord(label){
     var l = String(label).toLowerCase(), hit = null;

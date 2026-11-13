@@ -1,6 +1,6 @@
 {
-  "name": "Chime In",
-  "short_name": "Chime In",
+  "name": "My Turn",
+  "short_name": "My Turn",
   "start_url": "/",
   "display": "fullscreen",
   "orientation": "landscape",
