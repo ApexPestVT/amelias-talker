@@ -126,6 +126,8 @@ body.seetalk .say{position:relative}
 body.typing .typing-note{display:flex}
 body.typing #tabs, body.typing #grid{display:none}
 .grid.fringe.wide6{grid-template-columns:repeat(6,1fr)}
+.grid.numpad .key.wordonly .lab{font-size:min(8vh,7vw)}
+.grid.numpad .key[data-id^="numbers:"]:nth-child(n+11) .lab{font-size:min(4.2vh,3.8vw)}
 .grid.sents{grid-template-columns:repeat(2,1fr);grid-template-rows:none;grid-auto-rows:minmax(96px,19%);align-content:start;overflow-y:auto;touch-action:pan-y}
 .sentwrap{position:relative;min-height:0}
 .sentwrap .key{width:100%;height:100%}
@@ -218,6 +220,7 @@ body.typing #tabs, body.typing #grid{display:none}
 .ask-opts .swatch{width:min(15vh,13vw);height:min(15vh,13vw);border-width:5px}
 .ask-opts .key.dim{opacity:.25}
 .ask-opts .key.picked{transform:scale(1.03);box-shadow:0 0 0 8px var(--ink)}
+.ask-foot{flex:none;display:flex;justify-content:center;gap:16px}
 .ask-skip{flex:none;align-self:center;min-height:52px;padding:0 28px;border-radius:26px;border:3px solid var(--line);background:var(--bar);font-size:18px;font-weight:600;color:var(--ink-soft)}
 @media (orientation:portrait){.ask-opts{flex-direction:column}}
 
@@ -301,7 +304,10 @@ body.typing #tabs, body.typing #grid{display:none}
 <div class="ask" id="ask" hidden>
   <div class="ask-q" id="askQ"></div>
   <div class="ask-opts" id="askOpts"></div>
-  <button class="ask-skip" id="askSkip" type="button">Something else</button>
+  <div class="ask-foot">
+    <button class="ask-skip" id="askMore" type="button" hidden>Bigger number</button>
+    <button class="ask-skip" id="askSkip" type="button">Something else</button>
+  </div>
 </div>
 
 <div class="sced" id="sced" hidden>
@@ -520,7 +526,7 @@ body.typing #tabs, body.typing #grid{display:none}
         <li><b>More words.</b> 20 pictures in the same places. Two taps make a bigger sentence: NO + PLAY.</li>
         <li><b>Word pages.</b> Tabs for People, Food, Feelings, Places and Things, plus a Questions page of whole questions to ask with one tap. You choose the questions under "Questions page" above.</li>
         <li><b>Building sentences.</b> Adds I, you, it and not in a new left column. "not" makes it a no. "it" stands for the thing. "you" says just what was tapped: YOU + PLAY says "You play."</li>
-        <li><b>My own sentences.</b> A typing line. Whatever was just said lands there, ready to fix and say again. The star saves it to the My own page. The X on a saved sentence deletes it (press twice).</li>
+        <li><b>My own sentences.</b> A Numbers page with 0 to 9, plus o'clock, dollars, years old, minutes and times. A typing line. Whatever was just said lands there, ready to fix and say again. The star saves it to the My own page. The X on a saved sentence deletes it (press twice).</li>
         <li><b>Teen and adult words.</b> Four pages of the words older kids and adults say most. No pictures. Here the talker says the words in the order tapped and only tidies small things, like adding "am" or a question mark.</li>
       </ol>
       <small>The 20 home words stay in the same places at every stage, so nothing already learned moves. Move up when your child is using most of what is there, not by age. Moving up early does no harm: extra words can be ignored until they are needed. Ask your speech therapist if you are unsure. This advice on when to move up is common practice, not a tested rule.</small>
@@ -529,7 +535,7 @@ body.typing #tabs, body.typing #grid{display:none}
       <ol class="coach">
         <li><b>It listens.</b> No button. When someone asks your child a yes or no question, a this-or-that question, or "what do you want to drink?", big answers pop up. Set this under "When a question is heard".</li>
         <li><b>It knows color questions.</b> "What color do you want?" brings up eight colors at every stage: red, orange, yellow, green, blue, purple, brown and black. If the person names the colors ("red or green?"), it offers those instead.</li>
-        <li><b>It knows number questions.</b> "How many do you want?", "How old are you?" and "Pick a number" bring up 1 to 10 at every stage.</li>
+        <li><b>It knows number questions.</b> "How many do you want?", "How old are you?" and "Pick a number" bring up 1 to 10 at every stage. At Stages 5 and 6 a "Bigger number" button opens the Numbers page, where digits tapped in a row make any number: 1 then 2 says "I am 12."</li>
         <li><b>It can ask an AI for help.</b> Off by default. Turn on "Use AI for harder questions" and questions the rules miss, like "how was school?", get answer buttons matched to the stage. Only the words heard are sent.</li>
         <li><b>It glows.</b> As people talk, the pictures for the words they say light up on the board. That shows where words live without anyone pointing.</li>
         <li><b>It shows the written word</b> for 3 seconds on every tap, so the spelling is seen with the sound.</li>
@@ -619,6 +625,10 @@ var MORE6_SRC = {
   ask:['what','how','when','where','why','who','he','she','they','him','her','here','there','now','then','today','tomorrow','good','really','very','okay','just','too','all'],
   chat:['yeah','oh','hey','well','right','please','sure','one','two','three','people','guy','thing','something','some','much','about','still','out','back','last','word','work','time']
 };
+/* Numbers page (Stage 5 and up): digits she can put together into any number, plus the words numbers usually go with. */
+var NUMPAGE = {id:'numbers', label:'Numbers', pic:'🔢', cat:'describe'};
+var NUM6 = ['0','1','2','3','4','5','6','7','8','9'].map(function(d){ return {id:'numbers:'+d, label:d, pic:'', page:'numbers', np:d, lit:1, digit:1}; })
+  .concat(["o'clock", 'dollars', 'years old', 'minutes', 'times'].map(function(l){ return {id:'numbers:'+l, label:l, pic:'', page:'numbers', np:l, lit:1}; }));
 var MORE6 = [];
 Object.keys(MORE6_SRC).forEach(function(pg){ MORE6_SRC[pg].forEach(function(l){ MORE6.push({id:pg+':'+l, label:l, pic:'', page:pg, np:l, lit:1}); }); });
 var QUESTIONS_DEFAULT = ['Do you want to play?', 'Can I play?', "What's your name?", 'What are you doing?', 'Can you help me?', 'What is that?', 'Where are we going?', 'Can I have a turn?'];
@@ -688,7 +698,7 @@ function tpl(id, i){
   if(w && w.base && w.base!==w.label) t = t.replace(new RegExp('\\b'+w.base+'\\b','i'), w.label);
   return t.charAt(0).toUpperCase()+t.slice(1);
 }
-registerWords(CORE.map(function(w){ w.page='core'; return w; })); registerWords(BUILD.map(function(w){ w.page='core'; w.build=1; return w; })); registerWords(FRINGE); registerWords(MORE6);
+registerWords(CORE.map(function(w){ w.page='core'; return w; })); registerWords(BUILD.map(function(w){ w.page='core'; w.build=1; return w; })); registerWords(FRINGE); registerWords(MORE6); registerWords(NUM6);
 
 var TPL = {
   want:  ['I want that.',          "I don't want that."],
@@ -820,13 +830,19 @@ var BE = {i:'am', you:'are', we:'are', they:'are', he:'is', she:'is', it:'is'};
 var AUX = {is:1, are:1, am:1, was:1, 'do':1, can:1, will:1, would:1, could:1, have:1};
 var QW = {what:1, how:1, when:1, where:1, why:1, who:1};
 function literal(taps){
-  var ws = taps.map(function(t){ return LOOKUP[t]; }).filter(Boolean);
+  var ws = [];
+  taps.map(function(t){ return LOOKUP[t]; }).filter(Boolean).forEach(function(w){          // digits tapped in a row make one number: 1, 2 -> 12
+    var last = ws[ws.length-1];
+    if(w.digit && last && last.digitRun) last.label += w.label;
+    else ws.push(w.digit ? {label:w.label, page:'numbers', id:'', digitRun:1} : w);
+  });
   var tok = ws.map(function(w){ return w.label; }), low = tok.map(function(t){ return String(t).toLowerCase(); });
   if(!tok.length) return '';
+  if(ws[0].id==='want' && tok.length > 1){ ws.unshift({label:'I', id:'i'}); tok.unshift('I'); low.unshift('i'); }      // "want 3" -> "I want 3."
   var subj = BE[low[0]] ? low[0] : null, hasAux = low.some(function(t){ return AUX[t]; });
   if(subj && !hasAux && tok.length > 1){
     var ni = low[1]==='not' ? 2 : 1, nx = ws[ni];
-    if(nx && (nx.page==='feelings' || nx.id==='done')) tok.splice(1, 0, BE[subj]);           // "you happy" -> "You are happy."
+    if(nx && (nx.page==='feelings' || nx.id==='done' || nx.digitRun)) tok.splice(1, 0, BE[subj]);           // "you happy" -> "You are happy."
     else if(low[1]==='not' && nx) tok[1] = (subj==='he'||subj==='she'||subj==='it') ? "doesn't" : "don't";
   }
   var out = tok.join(' ');
@@ -1045,7 +1061,7 @@ function isDrink(w){
   var re = /^(milk|juice|water|soda|pop|tea|lemonade|smoothie|shake|milkshake|cocoa|hot chocolate|formula|bottle|drink|cider|punch|coffee)$|\b(milk|juice|water|tea|soda|smoothie|shake)$/;
   return re.test(l) || re.test(b);
 }
-if(typeof module!=='undefined') module.exports = {detectNumberQuestion:detectNumberQuestion, numberSentence:numberSentence, NUMBERS:NUMBERS, detectColorQuestion:detectColorQuestion, colorSentence:colorSentence, COLORS:COLORS, setOlder:setOlder, BUILD:BUILD, literal:literal, MORE6:MORE6, QUESTIONS_DEFAULT:QUESTIONS_DEFAULT, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
+if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestion:detectNumberQuestion, numberSentence:numberSentence, NUMBERS:NUMBERS, detectColorQuestion:detectColorQuestion, colorSentence:colorSentence, COLORS:COLORS, setOlder:setOlder, BUILD:BUILD, literal:literal, MORE6:MORE6, QUESTIONS_DEFAULT:QUESTIONS_DEFAULT, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
 </script>
 
 <script>
@@ -1057,7 +1073,7 @@ if(typeof module!=='undefined') module.exports = {detectNumberQuestion:detectNum
     {n:2, name:'2. More words',  note:'20 pictures'},
     {n:3, name:'3. Word pages',  note:'Adds people, food, feelings, places, things'},
     {n:4, name:'4. Building sentences', note:'Adds I, you, it, not in a new left column'},
-    {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving your own'},
+    {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, saving your own, and a Numbers page'},
     {n:6, name:'6. Teen and adult words', note:'Adds 96 of the most used everyday words on four pages. Sentences are said word for word'}
   ];
   var state = { name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
@@ -1131,7 +1147,7 @@ if(typeof module!=='undefined') module.exports = {detectNumberQuestion:detectNum
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v39) ---'+
+      dbgText = '\n--- Listening check (v40) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -1640,7 +1656,7 @@ if(typeof module!=='undefined') module.exports = {detectNumberQuestion:detectNum
   }
 
   /* ---------- words on screen ---------- */
-  function allWords(){ return CORE.concat(BUILD, FRINGE, MORE6, custom); }
+  function allWords(){ return CORE.concat(BUILD, FRINGE, MORE6, NUM6, custom); }
   function word(id){ return LOOKUP[id]; }
   function picNode(w, cls){
     var n;
@@ -1728,10 +1744,11 @@ if(typeof module!=='undefined') module.exports = {detectNumberQuestion:detectNum
     g.classList.toggle('photos', state.page==='photos');
     g.classList.toggle('six', state.stage >= 4 && state.page==='core');
     var sentPage = state.page==='questions' || state.page==='mine';
-    if((state.page==='questions' && state.stage < 3) || (state.page==='mine' && state.stage < 5) || (LOOKUP[state.page+':the'] || MORE6_SRC[state.page]) && state.stage < 6) state.page = 'core', sentPage = false;
+    if((state.page==='questions' && state.stage < 3) || ((state.page==='mine' || state.page==='numbers') && state.stage < 5) || (LOOKUP[state.page+':the'] || MORE6_SRC[state.page]) && state.stage < 6) state.page = 'core', sentPage = false;
     g.classList.toggle('sents', sentPage);
     g.classList.toggle('wide6', !!MORE6_SRC[state.page]);
     g.classList.toggle('fringe', state.page!=='core' && state.page!=='photos' && !sentPage);
+    g.classList.toggle('numpad', state.page==='numbers');
     if(sentPage){
       var list = state.page==='questions' ? state.questions : state.mine;
       list.forEach(function(q){
@@ -1760,9 +1777,9 @@ if(typeof module!=='undefined') module.exports = {detectNumberQuestion:detectNum
         g.appendChild(b);
       });
     } else {
-      var pg = PAGES.concat(PAGES6).filter(function(p){ return p.id===state.page; })[0];
+      var pg = PAGES.concat(PAGES6, [NUMPAGE]).filter(function(p){ return p.id===state.page; })[0];
       var only = (openOnly && openOnly.page===state.page && Date.now() < openOnly.until) ? openOnly.ids : null;   // a drink question shows just the drinks
-      FRINGE.concat(MORE6, custom).filter(function(w){ return w.page===state.page && (!only || only[w.id]); }).forEach(function(w){ g.appendChild(keyFor(w, pg.cat)); });
+      FRINGE.concat(MORE6, NUM6, custom).filter(function(w){ return w.page===state.page && (!only || only[w.id]); }).forEach(function(w){ g.appendChild(keyFor(w, pg.cat)); });
     }
   }
   /* A whole ready-made sentence on one key: Questions page and My sentences. */
@@ -1789,7 +1806,7 @@ if(typeof module!=='undefined') module.exports = {detectNumberQuestion:detectNum
   function renderTabs(){
     var t = $('tabs'); t.hidden = state.stage < 3 && !scenes.length; t.textContent = '';
     if(t.hidden) return;
-    var list = (state.stage >= 3 ? PAGES.concat([{id:'questions', label:'Questions', pic:'❔'}]) : [PAGES[0]]).concat(state.stage >= 5 ? [{id:'mine', label:'My own', pic:'⭐'}] : [], state.stage >= 6 ? PAGES6 : [], scenes.length ? [{id:'photos', label:'Photos', pic:'\uD83D\uDCF7'}] : []);
+    var list = (state.stage >= 3 ? PAGES.concat([{id:'questions', label:'Questions', pic:'❔'}]) : [PAGES[0]]).concat(state.stage >= 5 ? [{id:'mine', label:'My own', pic:'⭐'}, NUMPAGE] : [], state.stage >= 6 ? PAGES6 : [], scenes.length ? [{id:'photos', label:'Photos', pic:'\uD83D\uDCF7'}] : []);
     t.classList.toggle('many', list.length > 9);
     list.forEach(function(p){
       var b = document.createElement('button');
@@ -2037,6 +2054,12 @@ if(typeof module!=='undefined') module.exports = {detectNumberQuestion:detectNum
       ['Against clipped "telegraphic" models (Fey 2008, summary)', 'https://www.researchgate.net/publication/251534991_The_mis-use_of_telegraphic_input_in_child_language_intervention', 'No proven benefit to dropping the little words when modeling. Why the talker speaks full sentences.'],
       ['Construction grammar approaches for learners who use talkers (2026)', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC13724842', 'Cautions that children can miss learning to build language if whole phrases are always entered for them.']
     ]],
+    ['Numbers', [
+      ['Early numeracy for children with severe disabilities and complex communication needs (Wright and others 2020)', 'https://eric.ed.gov/?id=EJ1264157', 'Four children who could not rely on speech improved early math skills with a structured numeracy program. The authors say research in this area is scarce.'],
+      ['Early numeracy using voice-output devices (research summary, Texas Education Agency)', 'https://spedsupport.tea.texas.gov/resource-library/complex-access-needs-research-summaries/mathematics', 'Three students with severe multiple disabilities answered number questions through voice-output devices and learned early numeracy skills.'],
+      ['Using math and science lessons to teach vocabulary to students who use talkers (ASHA 2012)', 'https://pubs.asha.org/doi/10.1044/aac21.3.99', 'Argues that class math content is a good place to teach words and sentence building, if the talker has the words.'],
+      ['Numeracy for learners with disabilities (Avaz, practice article)', 'https://www.avazapp.com/blog/numeracy-for-learners-with-disabilities-strategies-for-teaching-maths/', 'Practice advice, not a study: a talker needs words for numbers, measurement, time and money. Basis for the Numbers page.']
+    ]],
     ['Words for teens and adults (Stage 6)', [
       ['500 most used words of five adults who use talkers (Beukelman, Yorkston, Poblete, Naranjo 1984), reprinted in this essay', 'https://ttac.odu.edu/ATN/Core/CoreVocabularyEssay_Cannon.pdf', 'The adult half of the Stage 6 words comes from the top 150 of this list.'],
       ['100 frequently used core words (PRC-Saltillo AAC Language Lab)', 'https://aaclanguagelab.com/materials/100highfrequencycorewords21.pdf', 'A one-page list by word type, used as a cross-check.'],
@@ -2198,7 +2221,7 @@ if(typeof module!=='undefined') module.exports = {detectNumberQuestion:detectNum
     if(Date.now() < tapBlockUntil) return;        // a stray second tap right after a pop-up answer
     el.classList.add('hit'); setTimeout(function(){ el.classList.remove('hit'); }, 160);
     if(state.fresh){ state.taps=[]; state.fresh=false; }
-    if(state.taps[state.taps.length-1]!==id){ state.taps.push(id); if(state.taps.length>(state.stage>=6?12:(state.stage>=4?6:4))) state.taps.shift(); }
+    if(state.taps[state.taps.length-1]!==id || word(id).digit){ state.taps.push(id); if(state.taps.length>(state.stage>=6?12:(state.stage>=4?6:4))) state.taps.shift(); }
     var w = word(id);
     renderBar(state.taps.map(function(t){return word(t).label;}).join(' + '), false);
     if(state.modeling){                           // a grown-up is showing her: say and show the word, nothing more
@@ -2227,6 +2250,10 @@ if(typeof module!=='undefined') module.exports = {detectNumberQuestion:detectNum
     plogMessage(state.taps);
     if(!state.sentences || !state.taps.length){ askLater(200); return; }
     var out = compose(state.taps, currentHeard(), state.name);
+    if(numFrame && Date.now() < numFrame.until && state.taps.every(function(t){ return LOOKUP[t] && LOOKUP[t].digit; })){
+      out = {sentence: numberSentence(numFrame.frame, state.taps.map(function(t){ return LOOKUP[t].label; }).join('')), usedHeard:false};   // "how old are you?" then 1, 2 -> "I am 12."
+    }
+    numFrame = null;
     if(!out.sentence){ askLater(200); return; }
     if(!out.usedHeard) askLater(1800);            // she did not answer it with her own taps, so offer the big answers
     renderBar(out.sentence, false);
@@ -2302,7 +2329,8 @@ if(typeof module!=='undefined') module.exports = {detectNumberQuestion:detectNum
 
   /* ---------- question pop-up ---------- */
   var askT = null, pendingQ = null;
-  function hideAsk(){ clearTimeout(askT); $('ask').hidden = true; $('askOpts').textContent = ''; $('askSkip').style.visibility = ''; }
+  var numFrame = null;
+  function hideAsk(){ clearTimeout(askT); $('ask').hidden = true; $('askOpts').textContent = ''; $('askSkip').style.visibility = ''; $('askMore').hidden = true; }
   /* She often taps twice. The first tap is her answer: the pop-up stays up showing it for a moment and
      swallows extra taps, then the board ignores taps briefly so a late one cannot change what she said. */
   var askDone = false, tapBlockUntil = 0, ANSWER_HOLD = 1600, BOARD_HOLD = 900;
@@ -2390,8 +2418,8 @@ if(typeof module!=='undefined') module.exports = {detectNumberQuestion:detectNum
     var box = $('askOpts'); box.textContent = ''; box.classList.remove('eight'); box.classList.add('many', 'ten');
     $('askQ').textContent = clean(text, state.name)+'?';
     NUMBERS.forEach(function(nm){ box.appendChild(askKey(nm, nm.label, 'describe', numberSentence(frame, nm.label), [])); });
-    askKind = 'choice'; plogAdd('asked', 'choice');
-    askDone = false; $('askSkip').style.visibility = '';
+    askKind = 'choice'; plogAdd('asked', 'choice'); askFrame = frame;
+    askDone = false; $('askSkip').style.visibility = ''; $('askMore').hidden = state.stage < 5;       // older stages can go past ten
     $('ask').hidden = false;
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
   }
@@ -2495,6 +2523,14 @@ if(typeof module!=='undefined') module.exports = {detectNumberQuestion:detectNum
     $('ask').hidden = false;
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
   }
+  var askFrame = 'plain';
+  onPress($('askMore'), function(){
+    if(askDone) return;
+    numFrame = {frame:askFrame, until:Date.now()+45000};
+    tapBlockUntil = Date.now()+BOARD_HOLD; hideAsk();
+    clearTimeout(state.timer); state.taps = []; state.fresh = true;
+    state.page = 'numbers'; openOnly = null; renderTabs(); renderGrid(); renderBar('', false);
+  }, {noRepeatGuard:true});
   onPress($('askSkip'), function(){ if(askDone) return; plogAdd('skipped'); tapBlockUntil = Date.now()+BOARD_HOLD; hideAsk(); }, {noRepeatGuard:true});
 
   /* ---------- grown-up panel (press and hold the lock) ---------- */
