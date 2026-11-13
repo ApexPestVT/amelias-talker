@@ -772,7 +772,17 @@ function detectOpenQuestion(text, name){
   if(/\bwhat\b.*\b(play|toy|read|watch|wear)\b/.test(t)) return 'things';
   return null;
 }
-if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
+/* "What do you want to drink?" should offer drinks only, and "to eat?" food only. */
+function openKind(text, name){
+  var t = clean(text, name), d = /\b(drink|drinking|thirsty|sip)\b/.test(t), e = /\b(eat|eating|snack|lunch|dinner|breakfast|hungry)\b/.test(t);
+  return d && !e ? 'drink' : (e && !d ? 'eat' : null);
+}
+function isDrink(w){
+  var l = String((w && (w.label||w.base))||'').toLowerCase(), b = String((w && w.base)||'').toLowerCase();
+  var re = /^(milk|juice|water|soda|pop|tea|lemonade|smoothie|shake|milkshake|cocoa|hot chocolate|formula|bottle|drink|cider|punch|coffee)$|\b(milk|juice|water|tea|soda|smoothie|shake)$/;
+  return re.test(l) || re.test(b);
+}
+if(typeof module!=='undefined') module.exports = {openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
 </script>
 
 <script>
@@ -848,7 +858,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v24) ---'+
+      dbgText = '\n--- Listening check (v25) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nPaid listening on this tablet: '+usageText()+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -863,6 +873,8 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   window.addEventListener('unhandledrejection', function(e){ diag.error = String((e.reason&&(e.reason.code||e.reason.message))||e.reason||'promise'); showDiag(); });
 
   /* ---------- voice ---------- */
+  var cv = { on:false, voices:[], clips:{}, bufs:{}, ctx:null, src:null, busy:false, done:0, total:0, stop:'', skipped:0 };
+  try{ var cvSaved = JSON.parse(localStorage.getItem('talker-cv')||'null'); if(Array.isArray(cvSaved) && cvSaved.length){ cv.on = true; cv.voices = cvSaved; } }catch(e){}
   var synth = ('speechSynthesis' in window) ? window.speechSynthesis : null;
   var voice = null, tts = null;
   function pickVoice(){
@@ -872,7 +884,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
             vs.filter(function(v){return /^en[-_]US/i.test(v.lang);})[0] || vs.filter(function(v){return /^en/i.test(v.lang);})[0] || null;
     renderVoices();
     diag.voice = vs.length ? 'this device'+(voice?' ('+voice.name+')':'') : (tts?'Claude voice':'waiting for a first tap');
-    showDiag();
+    cvMsg();
   }
   function renderVoices(){
     var sel = document.getElementById('voiceSel'); if(!sel) return;
@@ -880,18 +892,116 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     var en = vs.filter(function(v){return /^en/i.test(v.lang);}); if(!en.length) en = vs;
     sel.textContent = '';
     var o = document.createElement('option'); o.value=''; o.textContent = en.length ? 'Tablet default' : 'No voices found yet'; sel.appendChild(o);
+    if(cv.on) cv.voices.forEach(function(v){ var x=document.createElement('option'); x.value='polly:'+v.id; x.textContent=v.label+', child voice'; sel.appendChild(x); });
     en.forEach(function(v){ var x=document.createElement('option'); x.value=v.name; x.textContent=v.name+' ('+v.lang+')'; sel.appendChild(x); });
-    sel.value = state.voiceName && en.some(function(v){return v.name===state.voiceName;}) ? state.voiceName : '';
+    sel.value = cvId() ? state.voiceName : (state.voiceName && en.some(function(v){return v.name===state.voiceName;}) ? state.voiceName : '');
   }
   if(synth){ pickVoice(); try{ synth.addEventListener('voiceschanged', pickVoice); }catch(e){} }
   else { diag.voice = 'none found on this device yet'; }
 
   function doneSpeaking(){ state.speaking=false; state.spokeEnd=Date.now(); $('say').classList.remove('speaking'); }
+  /* ---------- child voices from the server (Amazon Polly). Every clip is saved on the tablet. ---------- */
+  function cvId(){ var m = /^polly:(\w+)$/.exec(state.voiceName||''); return (m && cv.on && cv.voices.some(function(v){ return v.id===m[1]; })) ? m[1] : ''; }
+  function cvLabel(){ var id = cvId(), v = cv.voices.filter(function(x){ return x.id===id; })[0]; return v ? v.label : ''; }
+  function cvKey(v, text){ return 'tts:'+v+':'+text; }
+  function cvCtx(){ if(!cv.ctx){ var AC = window.AudioContext||window.webkitAudioContext; if(AC){ try{ cv.ctx = new AC(); }catch(e){} } } return cv.ctx; }
+  function cvUnlock(){ if(!cvId()) return; var c = cvCtx(); if(c && c.state!=='running'){ try{ c.resume(); }catch(e){} } }
+  ['pointerdown','pointerup','touchend','click','keydown'].forEach(function(ev){ document.addEventListener(ev, cvUnlock, true); });
+  function cvPaid(n){ try{ if(n>0) localStorage.setItem('talker-voice-chars', String((+localStorage.getItem('talker-voice-chars')||0)+n)); }catch(e){} }
+  function cvFetch(v, text){
+    var ctl = ('AbortController' in window) ? new AbortController() : null, t = setTimeout(function(){ if(ctl) ctl.abort(); }, 12000);
+    return fetch('api/voice/say', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text:text, voice:v}), signal:ctl?ctl.signal:undefined}).then(function(r){
+      if(!r.ok) return r.json().then(function(j){ return j.error; }, function(){ return ''; }).then(function(why){ var e = new Error(why || ('voice service '+r.status)); e.status = r.status; throw e; });
+      cvPaid(+r.headers.get('X-Paid-Characters')||0);
+      return r.arrayBuffer();
+    }).then(function(ab){
+      clearTimeout(t); var k = cvKey(v, text); cv.clips[k] = ab; idbSet(k, ab).catch(function(){}); return ab;
+    }, function(e){ clearTimeout(t); throw e; });
+  }
+  function cvDecode(k){
+    if(cv.bufs[k]) return Promise.resolve(cv.bufs[k]);
+    return new Promise(function(res, rej){
+      var c = cvCtx(); if(!c || !cv.clips[k]) return rej(new Error('no sound'));
+      try{ c.decodeAudioData(cv.clips[k].slice(0), function(b){ cv.bufs[k] = b; res(b); }, function(){ rej(new Error('sound could not be read')); }); }catch(e){ rej(e); }
+    });
+  }
+  function cvStop(){ if(cv.src){ var x = cv.src; cv.src = null; x.onended = null; try{ x.stop(); }catch(e){} } }
+  function cvPlay(buf, fin){
+    var c = cvCtx(), n = c.createBufferSource(); n.buffer = buf; n.connect(c.destination);
+    n.onended = function(){ if(cv.src===n){ cv.src = null; fin(); } };
+    cv.src = n; n.start();
+  }
+  function speakCloud(text, n, fin, fallback){
+    var v = cvId(), k = cvKey(v, text), c = cvCtx(), gave = false;
+    if(!c){ fallback(); return; }
+    cvStop(); if(synth){ try{ synth.cancel(); }catch(e){} }
+    var give = function(fn){ if(gave) return; gave = true; clearTimeout(late); if(n===speakN) fn(); };
+    var late = setTimeout(function(){ give(fallback); }, cv.clips[k] ? 1500 : 4000);   // never leave her waiting in silence
+    (cv.clips[k] ? Promise.resolve() : cvFetch(v, text)).then(function(){ return cvDecode(k); }).then(function(buf){
+      if(c.state==='running') return buf;
+      return Promise.race([c.resume(), new Promise(function(r){ setTimeout(r, 400); })]).then(function(){ if(c.state!=='running') throw new Error('sound is not unlocked yet'); return buf; });
+    }).then(function(buf){ give(function(){ cvPlay(buf, fin); }); },
+            function(e){ if(!gave){ diag.error = 'child voice: '+(e.message||e)+' (used the tablet voice)'; showDiag(); } give(fallback); });
+  }
+  /* Everything she would normally say: each word, and the short sentence each word makes by itself or with yes / no / more. */
+  function cvList(){
+    var out = {}, add = function(t){ t = String(t||'').trim(); if(t) out[t] = 1; };
+    allWords().forEach(function(w){
+      add(w.label);
+      [[w.id], ['no', w.id], ['yes', w.id], ['more', w.id]].forEach(function(tp){ try{ var o = compose(tp, '', state.name); if(o && o.sentence) add(o.sentence); }catch(e){} });
+    });
+    scenes.forEach(function(sc){ add(sc.name); (sc.spots||[]).forEach(function(sp){ add(sp.label); }); });
+    add('Hi! This is my voice.');
+    /* then every two-picture sentence: a home word with a page word ("eat" + "apple"), and the "no" form of each */
+    var home = CORE.filter(function(w){ return w.id!=='yes' && w.id!=='no' && w.id!=='more'; });
+    allWords().filter(function(w){ return w.page!=='core'; }).forEach(function(f){
+      home.forEach(function(h){ [[h.id, f.id], ['no', h.id, f.id]].forEach(function(tp){ try{ var o = compose(tp, '', state.name); if(o && o.sentence) add(o.sentence); }catch(e){} }); });
+    });
+    return Object.keys(out);
+  }
+  function cvWarm(){
+    var v = cvId(); if(!v){ cvMsg(); return; }
+    if(cv.busy) return;
+    var all = cvList(), need = all.filter(function(t){ return !cv.clips[cvKey(v, t)]; }), i = 0;
+    cv.total = all.length; cv.done = all.length - need.length; cv.stop = ''; cv.skipped = 0;
+    if(!need.length){ cvMsg(); return; }
+    cv.busy = true; cvMsg();
+    var next = function(){
+      if(cv.stop || i >= need.length || cvId()!==v) return Promise.resolve();
+      var t = need[i++];
+      return cvFetch(v, t).then(function(){ cv.done++; cvMsg(); }, function(e){ if(e.status===400) cv.skipped++; else cv.stop = (e.name==='AbortError') ? 'the internet was too slow' : String(e.message||e); }).then(next);
+    };
+    Promise.all([next(), next(), next(), next()]).then(function(){ cv.busy = false; cvMsg(); if(cvId() && cvId()!==v) cvWarm(); });
+  }
+  function cvMsg(){
+    var el = document.getElementById('voiceMsg'), id = cvId(), spent = 0;
+    try{ spent = (+localStorage.getItem('talker-voice-chars')||0) * 16 / 1e6; }catch(e){}
+    if(id){
+      var saved = Object.keys(cv.clips).filter(function(k){ return k.indexOf('tts:'+id+':')===0; }).length;
+      diag.voice = cvLabel()+', child voice. '+saved+' words and sentences saved on this tablet'+(cv.busy?' (saving '+cv.done+' of '+cv.total+')':'')+(cv.stop?'. Saving stopped: '+cv.stop:'')+'. About $'+spent.toFixed(2)+' of voice bought from this tablet so far';
+    }
+    if(el){
+      el.textContent = !id ? (cv.on ? 'Girl and boy voices are at the top of the list. The others come from this tablet.' : "Voices come from this tablet. Add more in the tablet's own settings.")
+        : cv.busy ? 'Saving her words on this tablet: '+cv.done+' of '+cv.total+'. Keep this page open.'
+        : cv.stop ? 'Saved '+cv.done+' of '+cv.total+'. Stopped: '+cv.stop+'. It tries again each time the app opens.'
+        : cv.total ? 'All '+cv.done+' words and sentences are saved on this tablet in this voice: every picture word, and every sentence one or two pictures can make. They play right away, even with no internet. Answers to a question it hears, and typed words, need internet the first time. The speed slider does not change this voice.'
+        : 'Checking saved words...';
+    }
+    showDiag();
+  }
+
+  var speakN = 0, speakGuard = null;
   function speak(text){
     if(!text) return;
+    var n = ++speakN;
     state.lastSaid = text; state.speaking = true; $('say').classList.add('speaking');
-    var guard = setTimeout(doneSpeaking, 8000);
-    var fin = function(){ clearTimeout(guard); doneSpeaking(); };
+    clearTimeout(speakGuard);
+    var fin = function(){ if(n!==speakN) return; clearTimeout(speakGuard); doneSpeaking(); };
+    speakGuard = setTimeout(fin, 8000);
+    if(cvId()){ speakCloud(text, n, fin, function(){ speakDevice(text, fin); }); return; }
+    cvStop(); speakDevice(text, fin);
+  }
+  function speakDevice(text, fin){
     if(synth){
       try{
         synth.cancel();
@@ -1864,10 +1974,17 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   }
   function openPageFor(text){
     var page = detectOpenQuestion(text, state.name); if(!page) return;
-    var words = offered(page);
+    var words = offered(page), kind = page==='food' ? openKind(text, state.name) : null;
+    if(kind){                                    // drinks for a drink question, food for a food question
+      var fits = function(w){ return isDrink(w) === (kind==='drink'); };
+      var some = words.filter(fits);
+      if(!some.length) some = custom.concat(FRINGE).filter(function(w){ return w.page===page; }).filter(fits);
+      if(some.length) words = some;
+    }
     if(!words.length) return;
     if(state.stage >= 3){
       state.page = page; renderTabs(); renderGrid();
+      if(kind) words.forEach(function(w){ var k = $('grid').querySelector('.key[aria-label="'+String(w.label).replace(/"/g,'')+'"]'); if(k) glowOne(k); });
       plogAdd('asked', 'open'); openAskUntil = Date.now()+25000;
       glowOne($('tabs').querySelector('[data-page="'+page+'"]'));
       clearTimeout(pageT);
@@ -1928,7 +2045,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('wordsOn').checked = state.words; $('modelOn').checked = state.modelBtn; $('logOn').checked = state.log !== false; renderReport(); clearArmed = false; $('reportClear').textContent = 'Clear the log'; $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
     hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderResearch(); renderVoices(); showDiag(); $('panel').classList.add('open');
   }
-  function closePanel(){ $('panel').classList.remove('open'); }
+  function closePanel(){ $('panel').classList.remove('open'); cvWarm(); }
   function holdStart(e){ e.preventDefault(); lock.classList.add('holding'); hold = setTimeout(function(){ holdEnd(); openPanel(); }, 1500); }
   function holdEnd(){ clearTimeout(hold); lock.classList.remove('holding'); }
   lock.addEventListener('pointerdown', holdStart);
@@ -1958,7 +2075,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   $('kioskOn').addEventListener('change', function(){ state.kiosk = this.checked; save(); applyKiosk(); });
   $('askSel').addEventListener('change', function(){ state.ask = this.value; save(); });
   $('typeOn').addEventListener('change', function(){ state.typing = this.checked; save(); renderAll(); });
-  $('voiceSel').addEventListener('change', function(){ state.voiceName = this.value; save(); pickVoice(); });
+  $('voiceSel').addEventListener('change', function(){ state.voiceName = this.value; save(); pickVoice(); cvUnlock(); cvWarm(); });
   $('voiceTry').addEventListener('click', function(){ speak('Hi! This is my voice.'); });
   $('rateIn').addEventListener('input', function(){ state.rate = +this.value; save(); });
   $('testBtn').addEventListener('click', function(){ var v=$('testIn').value || $('testIn').placeholder; closePanel(); setHeard(v); });
@@ -2023,12 +2140,13 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   renderAll(); setEar(); applyKiosk();
   idbLoad().then(function(all){
     Object.keys(all).forEach(function(k){ if(k.indexOf('pic:')===0) pics[k.slice(4)] = all[k]; });
+    Object.keys(all).forEach(function(k){ if(k.indexOf('tts:')===0 && !cv.clips[k]) cv.clips[k] = all[k]; }); cv.loaded = true;
     if(Array.isArray(all.custom)){ custom = all.custom; registerWords(custom); }
     if(Array.isArray(all.scenes)){ scenes = all.scenes.filter(function(sc){ return all['sceneimg:'+sc.id]; }); scenes.forEach(function(sc){ sceneImg[sc.id] = all['sceneimg:'+sc.id]; }); }
     if(all.labels && typeof all.labels==='object'){ labels = all.labels; Object.keys(labels).forEach(function(id){ if(LOOKUP[id]) LOOKUP[id].label = labels[id]; }); }
     diag.store = 'kept on this device ('+Object.keys(pics).length+' photos, '+custom.length+' added words)';
-    renderAll(); showDiag();
-  }, function(){ diag.store = 'not available in this view. Photos last until the page closes.'; showDiag(); });
+    renderAll(); showDiag(); cvWarm();
+  }, function(){ cv.loaded = true; diag.store = 'not available in this view. Photos last until the page closes.'; showDiag(); cvWarm(); });
 
   if(hosted) wireHosted();
   else {
@@ -2037,6 +2155,11 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
       if(!SR){ diag.mic = 'listening is not set up yet for this tablet. Taps and voice still work.'; showDiag(); }
       setEar(); srStart();
     };
+    fetch('api/voice/status').then(function(r){ return r.json(); }).then(function(v){
+      cv.on = !!(v && v.enabled && Array.isArray(v.voices) && v.voices.length); cv.voices = cv.on ? v.voices : [];
+      try{ if(cv.on) localStorage.setItem('talker-cv', JSON.stringify(cv.voices)); else localStorage.removeItem('talker-cv'); }catch(e){}
+      renderVoices(); cvMsg(); if(cv.loaded) cvWarm();
+    }, function(){});
     fetch('api/vision/status').then(function(r){ return r.json(); }).then(function(v){ visionOn = !!(v && v.enabled); }, function(){});
     fetch('api/stt/status').then(function(r){ return r.json(); }).then(function(st){
       if(st && st.enabled){ mode = 'cloud'; cloud.provider = st.provider||'speech service'; setEar(); cloudStart(); }

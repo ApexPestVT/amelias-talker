@@ -32,3 +32,13 @@ It only connects while it hears a voice and hangs up after 20 quiet seconds.
 Photo scenes work with no extra setup: add words to a photo by hand.
 To have the app suggest words from a photo, add `ANTHROPIC_API_KEY` in Railway. Optional: `VISION_MODEL` (default `claude-haiku-5-5`).
 The photo is sent to Anthropic only when a grown-up presses "Suggest words".
+
+## Child voices (optional)
+
+Girl and boy voices come from Amazon Polly. Add these in Railway > Variables:
+
+- `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (an IAM user allowed only `polly:SynthesizeSpeech`)
+- `AWS_REGION` (optional, default `us-east-1`)
+
+Then pick Girl (Ivy), Boy (Kevin) or Boy (Justin) in Settings > Voice. The tablet saves every picture word and every
+one- or two-picture sentence the first time, so they play instantly and offline. Check the keys at `/api/voice/selftest`.

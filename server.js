@@ -146,6 +146,59 @@ async function sceneWords(image, w, h, model) {
 }
 let lastVision = null;
 
+// ---- Child voices (Amazon Polly). Keys stay here. Tablets save each clip, so a word is paid for once. ----
+const crypto = require('crypto');
+const AWS_ID = process.env.AWS_ACCESS_KEY_ID, AWS_SECRET = process.env.AWS_SECRET_ACCESS_KEY;
+const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
+const POLLY_HOST = 'polly.' + AWS_REGION + '.amazonaws.com';
+const POLLY_URL = process.env.POLLY_ENDPOINT || ('https://' + POLLY_HOST);      // override is for local tests only
+const VOICES = [{ id: 'Ivy', label: 'Girl (Ivy)' }, { id: 'Kevin', label: 'Boy (Kevin)' }, { id: 'Justin', label: 'Boy (Justin)' }];
+const hmac = (k, d) => crypto.createHmac('sha256', k).update(d, 'utf8').digest();
+const sha = d => crypto.createHash('sha256').update(d, 'utf8').digest('hex');
+// AWS Signature Version 4 for one JSON POST.
+function signPolly(body, now, id, secret, region, host) {
+  const amz = now.toISOString().replace(/[:-]|\.\d{3}/g, ''), day = amz.slice(0, 8);
+  const scope = day + '/' + region + '/polly/aws4_request';
+  const canon = ['POST', '/v1/speech', '', 'content-type:application/json', 'host:' + host, 'x-amz-date:' + amz, '', 'content-type;host;x-amz-date', sha(body)].join('\n');
+  const toSign = ['AWS4-HMAC-SHA256', amz, scope, sha(canon)].join('\n');
+  const key = hmac(hmac(hmac(hmac('AWS4' + secret, day), region), 'polly'), 'aws4_request');
+  return { 'content-type': 'application/json', 'x-amz-date': amz,
+    authorization: 'AWS4-HMAC-SHA256 Credential=' + id + '/' + scope + ', SignedHeaders=content-type;host;x-amz-date, Signature=' + hmac(key, toSign).toString('hex') };
+}
+const clips = new Map();          // "Voice|text" -> mp3, shared by every tablet until the server restarts
+let clipBytes = 0, lastVoice = null;
+const voiceUse = new Map();       // ip -> [[time, characters]]
+let voiceDay = { day: '', chars: 0 };
+const VOICE_IP_HOUR = 90000, VOICE_ALL_DAY = 600000;   // characters. 600,000 is about $10 a day at the very worst
+function voiceBudget(ip, n) {
+  const now = Date.now(), today = new Date().toISOString().slice(0, 10);
+  if (voiceDay.day !== today) voiceDay = { day: today, chars: 0 };
+  const mine = (voiceUse.get(ip) || []).filter(e => now - e[0] < 3600e3);
+  if (mine.reduce((a, e) => a + e[1], 0) + n > VOICE_IP_HOUR || voiceDay.chars + n > VOICE_ALL_DAY) return false;
+  mine.push([now, n]); voiceUse.set(ip, mine); voiceDay.chars += n; return true;
+}
+async function pollySay(text, voice) {
+  const body = JSON.stringify({ Engine: 'neural', OutputFormat: 'mp3', Text: text, TextType: 'text', VoiceId: voice });
+  const r = await fetch(POLLY_URL + '/v1/speech', { method: 'POST', headers: signPolly(body, new Date(), AWS_ID, AWS_SECRET, AWS_REGION, POLLY_HOST), body });
+  if (!r.ok) {
+    const t = await r.text().catch(() => '');
+    let why = t.slice(0, 160); try { const j = JSON.parse(t); why = (r.headers.get('x-amzn-errortype') || '').split(':')[0] + ' ' + (j.message || j.Message || ''); } catch (e) {}
+    throw new Error('voice service ' + r.status + ' ' + why.trim());
+  }
+  const buf = Buffer.from(await r.arrayBuffer());
+  if (buf.length < 100) throw new Error('voice service sent no sound');
+  return buf;
+}
+function cleanSay(t) { return String(t || '').replace(/[^\p{L}\p{N} .,!?'’-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 160); }
+async function voiceClip(text, voice, ip) {
+  const k = voice + '|' + text;
+  if (clips.has(k)) return { buf: clips.get(k), paid: 0 };
+  if (!voiceBudget(ip, text.length)) { const e = new Error('voice limit reached for now, try again in an hour'); e.code = 429; throw e; }
+  const buf = await pollySay(text, voice);
+  if (clipBytes < 60 * 1024 * 1024) { clips.set(k, buf); clipBytes += buf.length; }
+  return { buf, paid: text.length };
+}
+
 http.createServer((req, res) => {
   let p = decodeURIComponent((req.url || '/').split('?')[0]);
   if (p === '/api/stt/status') return json(res, 200, { enabled: !!STT_KEY, provider: STT_PROVIDER === 'deepgram' ? 'deepgram' : 'assemblyai ' + STT_MODEL });
@@ -158,6 +211,30 @@ http.createServer((req, res) => {
     selftests.push(now);
     const tm = /model=sonnet/.test(req.url || '') ? 'claude-sonnet-5-5' : VISION_MODEL;
     return sceneWords(SELFTEST_IMG, 256, 192, tm).then(words => json(res, 200, { ok: true, model: tm, expected: 'ball near x31 y52, box near x74 y52', words }), e => json(res, 200, { ok: false, model: tm, error: e.message }));
+  }
+  if (p === '/api/voice/status') return json(res, 200, { enabled: !!(AWS_ID && AWS_SECRET), region: AWS_REGION, voices: VOICES });
+  if (p === '/api/voice/last') return json(res, 200, lastVoice || { note: 'no child-voice request has run since the server last restarted' });
+  if (p === '/api/voice/selftest') {           // says one short word so a key or region problem can be read from outside
+    if (!(AWS_ID && AWS_SECRET)) return json(res, 200, { ok: false, error: 'no AWS keys set' });
+    const now = Date.now(); selftests = selftests.filter(t => now - t < 3600e3);
+    if (selftests.length >= 24) return json(res, 429, { ok: false, error: 'self-test limit reached, try again in an hour' });
+    selftests.push(now);
+    return Promise.all(VOICES.map(v => pollySay('hi', v.id).then(b => v.id + ': ok, ' + b.length + ' bytes of sound', e => v.id + ': FAILED, ' + e.message)))
+      .then(out => json(res, 200, { ok: out.every(o => / ok,/.test(o)), region: AWS_REGION, results: out }));
+  }
+  if (p === '/api/voice/say') {
+    if (req.method !== 'POST') return json(res, 405, { error: 'POST only' });
+    if (!(AWS_ID && AWS_SECRET)) return json(res, 503, { error: 'no voice keys set' });
+    if (!sameSite(req)) return json(res, 403, { error: 'wrong site' });
+    const ip3 = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    return readBody(req, 4096).then(b => {
+      const q = JSON.parse(b), text = cleanSay(q.text), voice = String(q.voice || '');
+      if (!text || !VOICES.some(v => v.id === voice)) { const e = new Error('nothing to say or unknown voice'); e.code = 400; throw e; }
+      return voiceClip(text, voice, ip3);
+    }).then(c => {
+      lastVoice = { at: new Date().toISOString(), ok: true, bytes: c.buf.length, paidCharacters: c.paid };
+      res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store', 'X-Paid-Characters': String(c.paid) }); res.end(c.buf);
+    }, e => { lastVoice = { at: new Date().toISOString(), ok: false, error: e.message }; console.error('voice failed:', e.message); json(res, e.code || 502, { error: e.message }); });
   }
   if (p === '/api/scene-words') {
     if (req.method !== 'POST') return json(res, 405, { error: 'POST only' });
@@ -190,3 +267,5 @@ http.createServer((req, res) => {
     res.end(data);
   });
 }).listen(PORT, () => console.log('Amelia\'s Talker listening on ' + PORT));
+
+if (process.env.TALKER_TEST) module.exports = { signPolly };
