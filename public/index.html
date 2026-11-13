@@ -1164,7 +1164,7 @@ var API = NATIVE ? 'https://amelias-talker-production.up.railway.app/' : '';
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v49) ---'+
+      dbgText = '\n--- Listening check (v50) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1438,9 +1438,13 @@ var API = NATIVE ? 'https://amelias-talker-production.up.railway.app/' : '';
 
   /* Tablet app only: the tablet's own speech recognition. Free, no listening service. It hears one sentence at a
      time and stops, so it is started again each time. A watchdog restarts it if it goes quiet without saying so. */
-  var ns = {on:false, t:null, last:'', subs:false, starts:0, errs:0, lastErr:'', beat:0, engine:''};
-  function nsNote(){ diag.mic = (listening ? 'listening on this tablet' : 'on this tablet, between sentences')+' ('+(ns.engine ? 'engine: '+ns.engine+', ' : '')+'started '+ns.starts+' times, '+ns.errs+' errors'+(ns.lastErr ? ', last: '+ns.lastErr : '')+')'; showDiag(); }
+  var ns = {on:false, t:null, last:'', subs:false, starts:0, errs:0, lastErr:'', beat:0, engine:'', heard:0, echo:0, dog:0, quiet:0, codes:{}, endAt:0, gapMax:0, gapSum:0, gapN:0, since:Date.now()};
+  function nsNote(){ diag.mic = (listening ? 'listening on this tablet' : 'on this tablet, between sentences')+' ('+(ns.engine ? 'engine: '+ns.engine+', ' : '')+'started '+ns.starts+' times, '+ns.errs+' errors'+(ns.lastErr ? ', last: '+ns.lastErr : '')+')'+
+      '\nOn-tablet listening, last '+Math.round((Date.now()-ns.since)/60000)+' min: '+ns.heard+' sentences heard, '+ns.echo+' ignored as the talker\'s own voice, '+ns.quiet+' quiet time-outs, '+ns.dog+' watchdog restarts'+
+      '\nDeaf gaps between sessions: '+ns.gapN+' gaps, average '+(ns.gapN ? Math.round(ns.gapSum/ns.gapN) : 0)+' ms, longest '+ns.gapMax+' ms'+
+      (Object.keys(ns.codes).length ? '\nStop codes: '+Object.keys(ns.codes).map(function(k){ return k+' x'+ns.codes[k]; }).join(', ') : ''); showDiag(); }
   function nsEnded(err){
+    if(!ns.endAt) ns.endAt = Date.now();
     if(ns.last){ var t = ns.last; ns.last = ''; setHeard(t); }
     listening = false; setEar(); clearTimeout(ns.t);
     if(mode==='native' && ns.on && state.listen && !blocked && !document.hidden) ns.t = setTimeout(nsGo, err ? Math.min(1200*(1+Math.min(ns.errs, 6)), 9000) : 300);
@@ -1462,17 +1466,18 @@ var API = NATIVE ? 'https://amelias-talker-production.up.railway.app/' : '';
       ns.subs = true;
       NS.addListener('partialResults', function(d){ var t = d && d.matches && d.matches[0]; ns.beat = Date.now(); if(!t || isEcho(t)) return; ns.last = t; showHeard(t, true); });
       if(NS_OWN){
-        NS.addListener('final', function(d){ ns.beat = Date.now(); var t = d && d.text; ns.last = ''; if(t && !isEcho(t)) setHeard(t); });
+        NS.addListener('final', function(d){ ns.beat = Date.now(); var t = d && d.text; ns.last = ''; if(!t) return; if(isEcho(t)){ ns.echo++; nsNote(); return; } ns.heard++; setHeard(t); nsNote(); });
         NS.addListener('beat', function(){ ns.beat = Date.now(); });
       }
       NS.addListener('listeningState', function(d){ ns.beat = Date.now(); if(d && d.engine) ns.engine = d.engine;
         if(NS_OWN && d && d.status==='stopped'){              // 6 and 7 only mean nobody spoke
           var bad = d.error && d.error!==6 && d.error!==7;
+          ns.codes[d.error||'ended'] = (ns.codes[d.error||'ended']||0)+1; if(d.error===6 || d.error===7) ns.quiet++;
           if(bad){ ns.errs++; ns.lastErr = 'code '+d.error+(d.error===12 || d.error===13 ? ' (speech pack missing, the tablet was asked to download it)' : ''); }
           nsEnded(!!bad); return;
         }
-        if(d && d.status==='stopped'){ clearTimeout(ns.t); ns.t = setTimeout(function(){ nsEnded(false); }, 700); }   /* the final words arrive just after "stopped" */ else if(d && d.status==='started'){ listening = true; setEar(); } });
-      setInterval(function(){ if(mode==='native' && ns.on && state.listen && !document.hidden && Date.now()-ns.beat > 6500){ try{ NS.stop(); }catch(e){} nsEnded(true); } }, 3000);
+        if(d && d.status==='stopped'){ clearTimeout(ns.t); ns.t = setTimeout(function(){ nsEnded(false); }, 700); }   /* the final words arrive just after "stopped" */ else if(d && d.status==='started'){ if(ns.endAt){ var g = Date.now()-ns.endAt; ns.endAt = 0; ns.gapN++; ns.gapSum += g; if(g > ns.gapMax) ns.gapMax = g; } listening = true; setEar(); nsNote(); } });
+      setInterval(function(){ if(mode==='native' && ns.on && state.listen && !document.hidden && Date.now()-ns.beat > 6500){ ns.dog++; try{ NS.stop(); }catch(e){} nsEnded(true); } }, 3000);
     }
     var ask = (!NS_OWN && NS.requestPermissions) ? NS.requestPermissions() : Promise.resolve({speechRecognition:'granted'});   // our own listener asks by itself
     Promise.resolve(ask).then(function(perm){
