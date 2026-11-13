@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, interactive-widget=resizes-content">
 <meta name="theme-color" content="#16223a">
 <title>Amelia's Talker</title>
 <link rel="manifest" href="manifest.webmanifest">
@@ -96,12 +96,20 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
 
 /* page tabs (stage 3 and up) */
 .tabs{flex:none;display:flex;gap:8px;overflow-x:auto;touch-action:pan-x}
-.tab{flex:1;min-width:84px;min-height:48px;border-radius:14px;border:3px solid var(--line);background:var(--bar);font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;padding:4px 8px}
+.tab{flex:1 0 auto;white-space:nowrap;min-width:84px;min-height:48px;border-radius:14px;border:3px solid var(--line);background:var(--bar);font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;padding:4px 8px}
 .tab.sel{background:var(--ink);color:#fff;border-color:var(--ink)}
+.tabs.many{gap:6px}
+.tabs.many .tab{min-width:0;padding:4px 6px;font-size:15px}
+.tabs.many .tab span[aria-hidden]{display:none}
 
 /* picture grid: positions never change (motor planning) */
 .grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(4,1fr);gap:10px}
 .grid.six{grid-template-columns:repeat(6,1fr)}
+.grid.sents{grid-template-columns:repeat(2,1fr);grid-template-rows:none;grid-auto-rows:minmax(17%,1fr);overflow-y:auto;touch-action:pan-y}
+.key.sent .lab{font-size:min(3.4vh,3vw);padding:0 12px}
+.key.wordonly .pic{display:none}
+.key.wordonly .lab{font-size:min(5vh,4.4vw)}
+.empty-note{grid-column:1/-1;align-self:center;text-align:center;font-size:20px;color:var(--muted,#5b6478);padding:20px}
 .grid.fringe{grid-template-rows:none;grid-auto-rows:minmax(23%,1fr);overflow-y:auto;touch-action:pan-y}
 .key{
   border-radius:22px;border:4px solid;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
@@ -235,6 +243,7 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
 <form class="type" id="typeBar" hidden>
   <input type="text" id="typeIn" placeholder="Type anything" autocomplete="off" autocapitalize="sentences">
   <button type="submit" id="typeBtn">Say it</button>
+  <button type="button" id="typeSave" hidden>⭐ Save</button>
 </form>
 
 <div class="tabs" id="tabs" hidden></div>
@@ -319,6 +328,11 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
     </div>
     <label class="check"><input type="checkbox" id="sentOn"> Build a full sentence after her tap</label>
     <label class="check"><input type="checkbox" id="typeOn"> Show a typing line</label>
+    <div class="row">
+      <label for="qList">Questions page (Stage 3 and up)</label>
+      <textarea id="qList" rows="6" style="width:100%;font-size:16px;padding:8px;border-radius:10px;border:2px solid var(--line)"></textarea>
+      <small>One question per line. Keep it to 5 to 10 she would really ask. She taps one and it is spoken whole.</small>
+    </div>
     <div class="row">
       <label for="voiceSel">Voice</label>
       <div class="inline">
@@ -462,6 +476,20 @@ var BUILD = [
   {id:'it',  label:'it',  pic:'📦', cat:'thing',  s:4},
   {id:'not', label:'not', pic:'🚫', cat:'stop',   s:4}
 ];
+/* Stage 6: the words adults who use talkers say most (Beukelman, Yorkston, Poblete & Naranjo 1984), minus the ones already on the board. */
+var PAGES6 = [
+  {id:'small', label:'Little words', pic:'🔗', cat:'describe'},
+  {id:'doing', label:'Doing',        pic:'⚙️', cat:'action'},
+  {id:'ask',   label:'Ask & when',   pic:'🕒', cat:'social'}
+];
+var MORE6_SRC = {
+  small:['the','a','and','to','in','of','for','with','at','but','if','or','so','because','this','that','my','me','your','we'],
+  doing:['is','are','was','have','do','can','will','would','could','get','put','take','make','know','think','need','see','tell','say','work'],
+  ask:['what','how','when','where','why','who','he','she','they','her','here','there','now','today','tomorrow','time','good','really','very','okay']
+};
+var MORE6 = [];
+Object.keys(MORE6_SRC).forEach(function(pg){ MORE6_SRC[pg].forEach(function(l){ MORE6.push({id:pg+':'+l, label:l, pic:'', page:pg, np:l, lit:1}); }); });
+var QUESTIONS_DEFAULT = ['Do you want to play?', 'Can I play?', "What's your name?", 'What are you doing?', 'Can you help me?', 'What is that?', 'Where are we going?', 'Can I have a turn?'];
 var PAGES = [
   {id:'core',     label:'Words',    pic:'💬'},
   {id:'people',   label:'People',   pic:'👪', cat:'social'},
@@ -508,7 +536,7 @@ function tpl(id, i){
   if(w && w.base && w.base!==w.label) t = t.replace(new RegExp('\\b'+w.base+'\\b','i'), w.label);
   return t.charAt(0).toUpperCase()+t.slice(1);
 }
-registerWords(CORE.map(function(w){ w.page='core'; return w; })); registerWords(BUILD.map(function(w){ w.page='core'; w.build=1; return w; })); registerWords(FRINGE);
+registerWords(CORE.map(function(w){ w.page='core'; return w; })); registerWords(BUILD.map(function(w){ w.page='core'; w.build=1; return w; })); registerWords(FRINGE); registerWords(MORE6);
 
 var TPL = {
   want:  ['I want that.',          "I don't want that."],
@@ -635,22 +663,31 @@ var IT = {
   done:['I am all done with it.', 'I am not done with it.'], stop:['Stop it, please.', 'Stop it, please.'], hurt:['It hurts.', 'It does not hurt.'],
   up:['Put it up, please.', "Don't put it up."], down:['Put it down, please.', "Don't put it down."]
 };
-/* "you" turns her sentence toward the other person: a question or a request. */
-function youify(s){
-  var m;
-  if((m = /^I don't (.*)$/.exec(s))) return "You don't "+m[1];
-  if((m = /^I am not (.*)$/.exec(s))) return 'You are not '+m[1];
-  if((m = /^I want ([^.]*)\.$/.exec(s))) return 'Do you want '+m[1]+'?';
-  if((m = /^I like ([^.]*)\.$/.exec(s))) return 'Do you like '+m[1]+'?';
-  if((m = /^I am ([^.]*)\.$/.exec(s))) return 'Are you '+m[1]+'?';
-  if((m = /^I need help([^.,]*)(, please)?\.$/.exec(s))) return 'Can you help me'+m[1]+'?';
-  if((m = /^I need to ([^.]*)\.$/.exec(s))) return 'Do you need to '+m[1]+'?';
-  if((m = /^(Turn|Put) ([^.,]*), please\.$/.exec(s))) return 'Can you '+m[1].toLowerCase()+' '+m[2]+'?';
-  return s;
+/* Says exactly what she built, in her order, with three small fixes: "am / are" before a feeling, "don't" for "not", and a "?" on questions. */
+var BE = {i:'am', you:'are', we:'are', they:'are', he:'is', she:'is', it:'is'};
+var AUX = {is:1, are:1, am:1, was:1, 'do':1, can:1, will:1, would:1, could:1, have:1};
+var QW = {what:1, how:1, when:1, where:1, why:1, who:1};
+function literal(taps){
+  var ws = taps.map(function(t){ return LOOKUP[t]; }).filter(Boolean);
+  var tok = ws.map(function(w){ return w.label; }), low = tok.map(function(t){ return String(t).toLowerCase(); });
+  if(!tok.length) return '';
+  var subj = BE[low[0]] ? low[0] : null, hasAux = low.some(function(t){ return AUX[t]; });
+  if(subj && !hasAux && tok.length > 1){
+    var ni = low[1]==='not' ? 2 : 1, nx = ws[ni];
+    if(nx && (nx.page==='feelings' || nx.id==='done')) tok.splice(1, 0, BE[subj]);           // "you happy" -> "You are happy."
+    else if(low[1]==='not' && nx) tok[1] = (subj==='he'||subj==='she'||subj==='it') ? "doesn't" : "don't";
+  }
+  var out = tok.join(' ');
+  out = out.charAt(0).toUpperCase()+out.slice(1);
+  return out + ((QW[low[0]] || (AUX[low[0]] && low[0]!=='have')) ? '?' : '.');
 }
 /* Building words (stage 4): I, you, it, not. */
 function composeBuild(taps, heard, name){
-  var hasYou = taps.indexOf('you')>=0, hasIt = taps.indexOf('it')>=0, hasNot = taps.indexOf('not')>=0, saidNo = taps.indexOf('no')>=0;
+  if(taps.indexOf('you')>=0){                                         // "you" says just what she tapped; ready-made questions live on the Questions page
+    var others = taps.filter(function(t){ return t!=='you'; });
+    return {sentence: others.length ? literal(taps) : '', usedHeard:false};
+  }
+  var hasIt = taps.indexOf('it')>=0, hasNot = taps.indexOf('not')>=0, saidNo = taps.indexOf('no')>=0;
   var rest = taps.filter(function(t){ return !(LOOKUP[t] && LOOKUP[t].build); });
   if(!rest.length) return {sentence:'', usedHeard:false};            // only building words so far: nothing to add
   if(hasNot && !saidNo) rest = ['no'].concat(rest);
@@ -661,10 +698,10 @@ function composeBuild(taps, heard, name){
   if(!out) out = compose(rest, heard, name);
   var sen = out.sentence;
   if(hasNot && !saidNo) sen = capFirst(sen.replace(/^No, /, ''));    // she built the "not" herself, so no extra "No,"
-  if(hasYou) sen = youify(sen);
   return {sentence:sen, usedHeard:out.usedHeard};
 }
 function compose(taps, heard, name){
+  if(taps.some(function(t){ return LOOKUP[t] && LOOKUP[t].lit; })) return {sentence: taps.length>1 ? literal(taps) : '', usedHeard:false};   // stage 6 words: her own sentence, word for word
   if(taps.some(function(t){ return LOOKUP[t] && LOOKUP[t].build; })) return composeBuild(taps, heard, name);
   var hasYes = taps.indexOf('yes')>=0, hasNo = taps.indexOf('no')>=0, hasMore = taps.indexOf('more')>=0;
   var content = taps.filter(function(t){return t!=='yes'&&t!=='no'&&t!=='more';});
@@ -746,7 +783,7 @@ function nameHeard(text, name){
 function knownWord(tok){
   var hit = null, t1 = tok.replace(/s$/,'');
   Object.keys(LOOKUP).forEach(function(id){
-    var w = LOOKUP[id]; if(w.page==='core' && !CORE_OK[id]) return;
+    var w = LOOKUP[id]; if(w.lit || (w.page==='core' && !CORE_OK[id])) return;
     var l = String(w.label).toLowerCase();
     if(l===tok || l===t1 || l.replace(/s$/,'')===t1) hit = hit || w;
   });
@@ -827,7 +864,7 @@ function isDrink(w){
   var re = /^(milk|juice|water|soda|pop|tea|lemonade|smoothie|shake|milkshake|cocoa|hot chocolate|formula|bottle|drink|cider|punch|coffee)$|\b(milk|juice|water|tea|soda|smoothie|shake)$/;
   return re.test(l) || re.test(b);
 }
-if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
+if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, MORE6:MORE6, QUESTIONS_DEFAULT:QUESTIONS_DEFAULT, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
 </script>
 
 <script>
@@ -838,9 +875,11 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
     {n:1, name:'1. First words', note:'10 pictures'},
     {n:2, name:'2. More words',  note:'20 pictures'},
     {n:3, name:'3. Word pages',  note:'Adds people, food, feelings, places, things'},
-    {n:4, name:'4. Building sentences', note:'Adds I, you, it, not in a new left column'}
+    {n:4, name:'4. Building sentences', note:'Adds I, you, it, not in a new left column'},
+    {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving her own'},
+    {n:6, name:'6. Teen and adult words', note:'Adds 60 of the most used everyday words. Sentences are said word for word'}
   ];
-  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
@@ -854,7 +893,9 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
       if(typeof saved.listen==='boolean') state.listen=saved.listen;
       if(saved.rate) state.rate=+saved.rate;
       if(typeof saved.voiceName==='string') state.voiceName=saved.voiceName;
-      if(saved.stage>=1) state.stage=Math.min(4, +saved.stage);
+      if(saved.stage>=1) state.stage=Math.min(6, +saved.stage);
+      if(Array.isArray(saved.questions)) state.questions = saved.questions.filter(function(q){ return typeof q==='string' && q.trim(); }).slice(0, 12);
+      if(Array.isArray(saved.mine)) state.mine = saved.mine.filter(function(q){ return typeof q==='string' && q.trim(); }).slice(0, 40);
       if(typeof saved.typing==='boolean') state.typing=saved.typing;
       if(typeof saved.kiosk==='boolean') state.kiosk=saved.kiosk;
       if(typeof saved.glow==='boolean') state.glow=saved.glow;
@@ -868,7 +909,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -904,7 +945,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v26) ---'+
+      dbgText = '\n--- Listening check (v27) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nPaid listening on this tablet: '+usageText()+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -997,7 +1038,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
       [[w.id], ['no', w.id], ['yes', w.id], ['more', w.id]].forEach(function(tp){ try{ var o = compose(tp, '', state.name); if(o && o.sentence) add(o.sentence); }catch(e){} });
     });
     scenes.forEach(function(sc){ add(sc.name); (sc.spots||[]).forEach(function(sp){ add(sp.label); }); });
-    add('Hi! This is my voice.');
+    add('Hi! This is my voice.'); state.questions.forEach(add); state.mine.forEach(add);
     /* then every two-picture sentence: a home word with a page word ("eat" + "apple"), and the "no" form of each */
     var home = CORE.filter(function(w){ return w.id!=='yes' && w.id!=='no' && w.id!=='more'; });   // building words are left out here: too many mixes to save ahead
     allWords().filter(function(w){ return w.page!=='core'; }).forEach(function(f){
@@ -1381,7 +1422,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
   }
 
   /* ---------- words on screen ---------- */
-  function allWords(){ return CORE.concat(BUILD, FRINGE, custom); }
+  function allWords(){ return CORE.concat(BUILD, FRINGE, MORE6, custom); }
   function word(id){ return LOOKUP[id]; }
   function picNode(w, cls){
     var n;
@@ -1438,7 +1479,8 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
     b.appendChild(picNode(w, 'pic'));
     var l = document.createElement('span'); l.className='lab'; l.textContent=w.label; b.appendChild(l);
     b.setAttribute('data-id', w.id);
-    onPress(b, function(){ tap(w.id, b); });
+    if(w.lit && !pics[w.id]) b.classList.add('wordonly');
+    onPress(b, function(){ tap(w.id, b, !!w.lit); });
     return b;
   }
   function renderGrid(){
@@ -1447,7 +1489,16 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
     if(state.stage < 3 && state.page!=='photos') state.page = 'core';
     g.classList.toggle('photos', state.page==='photos');
     g.classList.toggle('six', state.stage >= 4 && state.page==='core');
-    g.classList.toggle('fringe', state.page!=='core' && state.page!=='photos');
+    var sentPage = state.page==='questions' || state.page==='mine';
+    if((state.page==='questions' && state.stage < 3) || (state.page==='mine' && state.stage < 5) || (LOOKUP[state.page+':the'] || MORE6_SRC[state.page]) && state.stage < 6) state.page = 'core', sentPage = false;
+    g.classList.toggle('sents', sentPage);
+    g.classList.toggle('fringe', state.page!=='core' && state.page!=='photos' && !sentPage);
+    if(sentPage){
+      var list = state.page==='questions' ? state.questions : state.mine;
+      list.forEach(function(q){ g.appendChild(sentKey(q)); });
+      if(!list.length){ var en = document.createElement('div'); en.className = 'empty-note'; en.textContent = state.page==='mine' ? 'Nothing saved yet. Type or build a sentence, then press the star to keep it here.' : 'No questions yet. A grown-up can add some behind the lock.'; g.appendChild(en); }
+      return;
+    }
     if(state.page==='photos'){ renderPhotos(g); return; }
     if(state.page==='core'){
       CORE.forEach(function(w, i){
@@ -1457,15 +1508,37 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
         g.appendChild(b);
       });
     } else {
-      var pg = PAGES.filter(function(p){ return p.id===state.page; })[0];
+      var pg = PAGES.concat(PAGES6).filter(function(p){ return p.id===state.page; })[0];
       var only = (openOnly && openOnly.page===state.page && Date.now() < openOnly.until) ? openOnly.ids : null;   // a drink question shows just the drinks
-      FRINGE.concat(custom).filter(function(w){ return w.page===state.page && (!only || only[w.id]); }).forEach(function(w){ g.appendChild(keyFor(w, pg.cat)); });
+      FRINGE.concat(MORE6, custom).filter(function(w){ return w.page===state.page && (!only || only[w.id]); }).forEach(function(w){ g.appendChild(keyFor(w, pg.cat)); });
     }
+  }
+  /* A whole ready-made sentence on one key: Questions page and My sentences. */
+  function sentKey(text){
+    var b = document.createElement('button');
+    b.type='button'; b.className='key sent social'; b.setAttribute('aria-label', text);
+    var l = document.createElement('span'); l.className='lab'; l.textContent = text; b.appendChild(l);
+    onPress(b, function(){
+      if(Date.now() < tapBlockUntil) return;
+      b.classList.add('hit'); setTimeout(function(){ b.classList.remove('hit'); }, 160);
+      clearTimeout(state.timer); state.taps = []; state.fresh = true;
+      renderBar(text, false); speak(text); plogAdd('typed'); fillType(text);
+    });
+    return b;
+  }
+  /* Stage 5 and up: whatever was just said also lands in the typing line, so she can fix it, say it again, or star it. */
+  function fillType(text){ if(state.stage >= 5 && state.typing){ $('typeIn').value = text; } starState(); }
+  function starText(){ return ($('typeIn').value.trim() || state.lastSaid || '').trim(); }
+  function starState(){
+    var b = $('typeSave'); b.hidden = !(state.stage >= 5 && state.typing);
+    var t = starText(), has = state.mine.indexOf(t) >= 0;
+    b.textContent = has ? '✕ Unsave' : '⭐ Save'; b.disabled = !t;
   }
   function renderTabs(){
     var t = $('tabs'); t.hidden = state.stage < 3 && !scenes.length; t.textContent = '';
     if(t.hidden) return;
-    var list = (state.stage >= 3 ? PAGES : [PAGES[0]]).concat(scenes.length ? [{id:'photos', label:'Photos', pic:'\uD83D\uDCF7'}] : []);
+    var list = (state.stage >= 3 ? PAGES.concat([{id:'questions', label:'Questions', pic:'❔'}]) : [PAGES[0]]).concat(state.stage >= 5 ? [{id:'mine', label:'My sentences', pic:'⭐'}] : [], state.stage >= 6 ? PAGES6 : [], scenes.length ? [{id:'photos', label:'Photos', pic:'\uD83D\uDCF7'}] : []);
+    t.classList.toggle('many', list.length > 9);
     list.forEach(function(p){
       var b = document.createElement('button');
       b.type='button'; b.className='tab'+(p.id===state.page?' sel':''); b.setAttribute('data-page', p.id);
@@ -1703,6 +1776,20 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
       ['AAC Generative Language Intervention with young children with Down syndrome (2025)', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC12303605', 'Model sentences only a little longer than what the child uses now.'],
       ['Applying a Developmental Model to Preliterate Aided Language Learning (2024)', 'https://pubs.asha.org/doi/10.1044/2023_AJSLP-23-00098', 'Use typical language development as the map for what to add next.']
     ]],
+    ['Asking questions, and saying what she built', [
+      ['Teaching partner-focused questions (Light, Binger and others, Penn State)', 'https://pure.psu.edu/en/publications/teaching-partner-focused-questions-to-individuals-who-use-augment/', 'People who use talkers learned to ask about their partner when 5 to 10 whole questions were stored for them. Basis for the Questions page.'],
+      ['Teaching children to build yes/no questions (Kent-Walsh, Binger, Buchanan 2015)', 'https://pubs.asha.org/doi/abs/10.1044/2015_AJSLP-14-0066', 'Three children aged 4 to 6 learned to build questions themselves by word order. Why "you" now says exactly what she tapped.'],
+      ['Plain summary of the yes/no question study (NWACS)', 'https://stafford-casey.squarespace.com/blog/2019/7/aacademics-july-2019', 'Explains why asking questions matters: a talker cannot raise its voice at the end.'],
+      ['Children, young people and adults who use talkers (book chapter)', 'https://link.springer.com/10.1007/978-3-030-74985-9_25', 'They tend to answer more than they start, and use few kinds of message.'],
+      ['Against clipped "telegraphic" models (Fey 2008, summary)', 'https://www.researchgate.net/publication/251534991_The_mis-use_of_telegraphic_input_in_child_language_intervention', 'No proven benefit to dropping the little words when modeling. Why the talker speaks full sentences.'],
+      ['Construction grammar approaches for learners who use talkers (2026)', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC13724842', 'Cautions that children can miss learning to build language if whole phrases are always entered for them.']
+    ]],
+    ['Words for teens and adults (Stage 6)', [
+      ['500 most used words of five adults who use talkers (Beukelman, Yorkston, Poblete, Naranjo 1984), reprinted in this essay', 'https://ttac.odu.edu/ATN/Core/CoreVocabularyEssay_Cannon.pdf', 'The Stage 6 pages are taken from the top of this list, minus words already on the board.'],
+      ['100 frequently used core words (PRC-Saltillo AAC Language Lab)', 'https://aaclanguagelab.com/materials/100highfrequencycorewords21.pdf', 'A one-page list by word type, used as a cross-check.'],
+      ['Core vocabulary of school-aged children, grades 2 to 8 (Boenisch and Soto 2015)', 'https://informahealthcare.com/doi/abs/10.3109/07434618.2014.1001521', 'A source list for school-age users. Full list is behind a paywall and was not read.'],
+      ['Vocabulary selection: applying core vocabulary (handout)', 'https://ksha.org/docs/autism_intervention_handout_3.pdf', 'Summarises several studies: a few hundred words make up most of what people say at every age.']
+    ]],
     ['Listening and question pop-ups', [
       ['Context-aware AAC with just-in-time response options (Holyfield and colleagues)', 'https://par.nsf.gov/biblio/10574893-preliminary-investigation-context-aware-augmentative-alternative-communication-automated-just-time-cloze-phrase-response-options-social-participation-from-children-autism-spectrum', 'The closest study to this talker: answers offered from what a partner just said. Three children, prototype, early evidence.'],
       ['Context-aware AAC for academic participation (preschoolers)', 'https://synapsesocial.com/papers/6975b2c8feba4585c2d6e4e8', 'Second small study: faster, more accurate answers with context-aware choices.']
@@ -1742,7 +1829,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
 
   function renderAll(){
     $('modelBtn').hidden = !state.modelBtn;
-    $('typeBar').hidden = !state.typing;
+    $('typeBar').hidden = !state.typing; starState();
     $('heard').classList.toggle('big', state.typing);
     renderTabs(); renderGrid();
   }
@@ -1857,7 +1944,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
     if(Date.now() < tapBlockUntil) return;        // a stray second tap right after a pop-up answer
     el.classList.add('hit'); setTimeout(function(){ el.classList.remove('hit'); }, 160);
     if(state.fresh){ state.taps=[]; state.fresh=false; }
-    if(state.taps[state.taps.length-1]!==id){ state.taps.push(id); if(state.taps.length>(state.stage>=4?6:4)) state.taps.shift(); }
+    if(state.taps[state.taps.length-1]!==id){ state.taps.push(id); if(state.taps.length>(state.stage>=6?12:(state.stage>=4?6:4))) state.taps.shift(); }
     var w = word(id);
     renderBar(state.taps.map(function(t){return word(t).label;}).join(' + '), false);
     if(state.modeling){                           // a grown-up is showing her: say and show the word, nothing more
@@ -1890,14 +1977,21 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
     if(!out.usedHeard) askLater(1800);            // she did not answer it with her own taps, so offer the big answers
     renderBar(out.sentence, false);
     var single = state.taps.length===1 && norm(out.sentence)===norm(word(state.taps[0]).label);
-    if(!single) speak(out.sentence);              // then the modeled sentence
+    if(!single){ speak(out.sentence); fillType(out.sentence); }   // then the modeled sentence
     if(out.usedHeard){ state.heard=''; setTimeout(function(){ showHeard('', false); }, 2500); }
   }
   $('typeBar').addEventListener('submit', function(e){
     e.preventDefault();
     var v = $('typeIn').value.trim(); if(!v) return;
     clearTimeout(state.timer); state.taps=[]; state.fresh=true;
-    renderBar(v, false); speak(v); $('typeIn').value=''; plogAdd('typed');
+    renderBar(v, false); speak(v); $('typeIn').value=''; plogAdd('typed'); starState();
+  });
+  $('typeIn').addEventListener('input', starState);
+  $('typeSave').addEventListener('click', function(){
+    var t = starText(); if(!t) return;
+    var i = state.mine.indexOf(t);
+    if(i >= 0) state.mine.splice(i, 1); else { state.mine.unshift(t); if(state.mine.length > 40) state.mine.pop(); }
+    save(); starState(); if(state.page==='mine') renderGrid();
   });
 
   /* ---------- child lock: as much as a web page is allowed to do ---------- */
@@ -2060,7 +2154,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
       var b = document.createElement('button');
       b.type='button'; b.className='stage'+(st.n===state.stage?' sel':''); b.textContent = st.name;
       var n = document.createElement('span'); n.textContent = st.note; b.appendChild(n);
-      b.addEventListener('click', function(){ state.stage = st.n; save(); renderStages(); renderAll(); });
+      b.addEventListener('click', function(){ state.stage = st.n; if(st.n >= 5){ state.typing = true; $('typeOn').checked = true; } save(); renderStages(); renderAll(); });
       s.appendChild(b);
     });
   }
@@ -2092,6 +2186,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
   }
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
+    $('qList').value = state.questions.join('\n');
     $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('wordsOn').checked = state.words; $('modelOn').checked = state.modelBtn; $('logOn').checked = state.log !== false; renderReport(); clearArmed = false; $('reportClear').textContent = 'Clear the log'; $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
     hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderResearch(); renderVoices(); showDiag(); $('panel').classList.add('open');
   }
@@ -2125,6 +2220,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, op
   $('kioskOn').addEventListener('change', function(){ state.kiosk = this.checked; save(); applyKiosk(); });
   $('askSel').addEventListener('change', function(){ state.ask = this.value; save(); });
   $('typeOn').addEventListener('change', function(){ state.typing = this.checked; save(); renderAll(); });
+  $('qList').addEventListener('change', function(){ state.questions = this.value.split('\n').map(function(q){ return q.trim().slice(0, 80); }).filter(Boolean).slice(0, 12); this.value = state.questions.join('\n'); save(); if(state.page==='questions') renderGrid(); });
   $('voiceSel').addEventListener('change', function(){ state.voiceName = this.value; save(); pickVoice(); cvUnlock(); cvWarm(); });
   $('voiceTry').addEventListener('click', function(){ speak('Hi! This is my voice.'); });
   $('rateIn').addEventListener('input', function(){ state.rate = +this.value; save(); });
