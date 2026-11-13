@@ -227,6 +227,9 @@ async function askHelp(heard, stage, words) {
     sentence: String((o && o.sentence) || '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 90),
     emoji: askEmoji(o && o.emoji)
   })).filter(o => o.label && o.sentence && !seen.has(o.label) && seen.add(o.label));
+  // The asked-about word is not an answer ("restaurant" to "favorite restaurant"), unless the speaker offered it as a choice ("X or Y").
+  const asked = ' ' + text.toLowerCase().replace(/[^a-z0-9' ]/g, ' ').replace(/\s+/g, ' ') + ' ';
+  if (kind === 'choices' && !/ or /.test(asked)) options = options.filter(o => !asked.includes(' ' + o.label + ' ') && !asked.includes(' ' + o.label + 's '));
   if (kind === 'yesno') {
     const y = options.find(o => o.label === 'yes'), n = options.find(o => o.label === 'no');
     if (y && n) options = [y, n]; else kind = 'none';
