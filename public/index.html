@@ -1156,7 +1156,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v43) ---'+
+      dbgText = '\n--- Listening check (v44) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2387,6 +2387,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
   }
   function looksAsked(t){
     t = t.replace(/^((so|hey|okay|ok|and|well|um|uh|oh|now|then|honey|sweetie|buddy)\s+)+/, '');   // people rarely start cleanly
+    t = t.replace(/^(what|how|who|where|when|why)s\b/, '$1 is');     // "what's" arrives here as "whats"
     return /^(what|how|which|who|where|when|why|is|are|was|do|does|did|can|could|will|would|should|have|has|wanna|want|you want|you wanna|shall)\b/.test(t) || / or /.test(' '+t+' ') || /\b(right|okay|ok|huh)$/.test(t);
   }
   function smartWanted(text, q){
