@@ -1165,7 +1165,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v51) ---'+
+      dbgText = '\n--- Listening check (v52) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1410,6 +1410,28 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     glowAlong(state.heard, true);
     maybeAsk(state.heard);
   }
+  /* Speed: the listener only says "finished" after a stretch of silence. When the words so far already make a question
+     the built-in rules understand, and they have stopped changing for a moment, the answers go up right away. */
+  var early = {t:null, text:'', norm:'', at:0, n:0};
+  function partialHeard(t){
+    showHeard(t, true);
+    clearTimeout(early.t);
+    early.t = setTimeout(function(){
+      var c = clean(t, state.name);
+      if(c.split(' ').length < 3 || /\b(or|to|the|a|an|your|you|want|and|is|of|with|some|do|does|what|which|like|go|for|in|on|at)$/.test(c)) return;   // probably still talking
+      var q = detectQuestion(t, state.name);
+      if(!(q || detectColorQuestion(t, state.name) || detectNumberQuestion(t, state.name) || detectOpenQuestion(t, state.name))) return;   // leave the rest for the finished sentence (and the AI)
+      if(isEcho(t)) return;
+      early.norm = norm(t); early.at = Date.now(); early.n++;
+      setHeard(t);
+    }, 700);
+  }
+  function finalHeard(t){
+    clearTimeout(early.t);
+    if(early.norm && norm(t)===early.norm && Date.now()-early.at < 8000){ early.norm = ''; state.heardAt = Date.now(); return; }   // already acted on these exact words
+    early.norm = '';
+    setHeard(t);
+  }
   function currentHeard(){
     if(state.heard && Date.now()-state.heardAt < HEARD_TTL) return state.heard;
     if(state.heard){ state.heard=''; showHeard('', false); }
@@ -1428,7 +1450,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
         for(var i=e.resultIndex; i<e.results.length; i++){
           var r = e.results[i], t = r[0] && r[0].transcript;
           if(!t || isEcho(t)) continue;
-          if(r.isFinal) setHeard(t); else showHeard(t, true);
+          if(r.isFinal) finalHeard(t); else partialHeard(t);
         }
       };
       rec.onerror = function(e){
@@ -1458,12 +1480,12 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
      time and stops, so it is started again each time. A watchdog restarts it if it goes quiet without saying so. */
   var ns = {on:false, t:null, last:'', subs:false, starts:0, errs:0, lastErr:'', beat:0, engine:'', heard:0, echo:0, dog:0, quiet:0, codes:{}, endAt:0, gapMax:0, gapSum:0, gapN:0, since:Date.now()};
   function nsNote(){ diag.mic = (listening ? 'listening on this tablet' : 'on this tablet, between sentences')+' ('+(ns.engine ? 'engine: '+ns.engine+', ' : '')+'started '+ns.starts+' times, '+ns.errs+' errors'+(ns.lastErr ? ', last: '+ns.lastErr : '')+')'+
-      '\nOn-tablet listening, last '+Math.round((Date.now()-ns.since)/60000)+' min: '+ns.heard+' sentences heard, '+ns.echo+' ignored as the talker\'s own voice, '+ns.quiet+' quiet time-outs, '+ns.dog+' watchdog restarts'+
+      '\nOn-tablet listening, last '+Math.round((Date.now()-ns.since)/60000)+' min: '+ns.heard+' sentences heard, '+ns.echo+' ignored as the talker\'s own voice, '+ns.quiet+' quiet time-outs, '+ns.dog+' watchdog restarts, '+early.n+' answered early'+
       '\nDeaf gaps between sessions: '+ns.gapN+' gaps, average '+(ns.gapN ? Math.round(ns.gapSum/ns.gapN) : 0)+' ms, longest '+ns.gapMax+' ms'+
       (Object.keys(ns.codes).length ? '\nStop codes: '+Object.keys(ns.codes).map(function(k){ return k+' x'+ns.codes[k]; }).join(', ') : ''); showDiag(); }
   function nsEnded(err){
     if(!ns.endAt) ns.endAt = Date.now();
-    if(ns.last){ var t = ns.last; ns.last = ''; setHeard(t); }
+    if(ns.last){ var t = ns.last; ns.last = ''; finalHeard(t); }
     listening = false; setEar(); clearTimeout(ns.t);
     if(mode==='native' && ns.on && state.listen && !blocked && !document.hidden) ns.t = setTimeout(nsGo, err ? Math.min(1200*(1+Math.min(ns.errs, 6)), 9000) : 300);
     else ns.on = false;
@@ -1482,9 +1504,9 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     ns.on = true;
     if(!ns.subs){
       ns.subs = true;
-      NS.addListener('partialResults', function(d){ var t = d && d.matches && d.matches[0]; ns.beat = Date.now(); if(!t || isEcho(t)) return; ns.last = t; showHeard(t, true); });
+      NS.addListener('partialResults', function(d){ var t = d && d.matches && d.matches[0]; ns.beat = Date.now(); if(!t || isEcho(t)) return; ns.last = t; partialHeard(t); });
       if(NS_OWN){
-        NS.addListener('final', function(d){ ns.beat = Date.now(); var t = d && d.text; ns.last = ''; if(!t) return; if(isEcho(t)){ ns.echo++; nsNote(); return; } ns.heard++; setHeard(t); nsNote(); });
+        NS.addListener('final', function(d){ ns.beat = Date.now(); var t = d && d.text; ns.last = ''; if(!t) return; if(isEcho(t)){ ns.echo++; nsNote(); return; } ns.heard++; finalHeard(t); nsNote(); });
         NS.addListener('beat', function(){ ns.beat = Date.now(); });
       }
       NS.addListener('listeningState', function(d){ ns.beat = Date.now(); if(d && d.engine) ns.engine = d.engine;
@@ -1650,7 +1672,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
         cloud.dbg.lastText = text;
         if(isEcho(text)){ cloud.dbg.echo++; return; }
         cloud.lastVoice = Date.now();
-        if(fin) setHeard(text); else showHeard(text, true);
+        if(fin) finalHeard(text); else partialHeard(text);
       };
       ws.onerror = function(){ fails++; };
       ws.onclose = function(ev){
@@ -2439,7 +2461,8 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   /* ---------- question pop-up ---------- */
   var askT = null, pendingQ = null;
   var numFrame = null;
-  function hideAsk(){ clearTimeout(askT); $('ask').hidden = true; $('askOpts').textContent = ''; $('askSkip').style.visibility = ''; $('askMore').hidden = true; }
+  var askLater = null;
+  function hideAsk(){ askLater = null; $('askSkip').textContent = 'Something else'; clearTimeout(askT); $('ask').hidden = true; $('askOpts').textContent = ''; $('askSkip').style.visibility = ''; $('askMore').hidden = true; }
   /* She often taps twice. The first tap is her answer: the pop-up stays up showing it for a moment and
      swallows extra taps, then the board ignores taps briefly so a late one cannot change what she said. */
   var askDone = false, tapBlockUntil = 0, ANSWER_HOLD = 1600, BOARD_HOLD = 900;
@@ -2571,7 +2594,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
   }
   /* "What do you want to eat?" -> the Food words. At Stage 3 her board flips to that page.
-     Before Stage 3 she has no pages yet, so up to six of those words pop up as big choices. */
+     Up to six of those words pop up as big choices at every stage; from Stage 3 "More choices" opens the whole page. */
   var pageT = null, openOnly = null;
   /* The words offered for an open question: the grown-up's picks in their order, else her added words, then the built-in ones. */
   function offered(page){
@@ -2624,16 +2647,15 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(some.length) words = some;
     }
     if(!words.length) return;
-    if(state.stage >= 3){
+    var showPage = function(){
       openOnly = null;
       if(kind){ openOnly = {page:page, until:Date.now()+25000, ids:{}}; custom.concat(FRINGE).filter(function(w){ return w.page===page && fits(w); }).forEach(function(w){ openOnly.ids[w.id] = 1; }); }
       state.page = page; renderTabs(); renderGrid();
-      plogAdd('asked', 'open'); openAskUntil = Date.now()+25000;
+      openAskUntil = Date.now()+25000;                 // the question was already counted when the pop-up went up
       glowOne($('tabs').querySelector('[data-page="'+page+'"]'));
       clearTimeout(pageT);
       pageT = setTimeout(function(){ if(state.page===page && (state.fresh || !state.taps.length)){ state.page='core'; renderTabs(); renderGrid(); } }, 25000);
-      return;
-    }
+    };
     var box = $('askOpts'); box.textContent = ''; box.classList.remove('eight', 'ten'); box.classList.add('many');
     $('askQ').textContent = clean(text, state.name)+'?';
     var pg = PAGES.filter(function(x){ return x.id===page; })[0];
@@ -2643,6 +2665,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     askDone = false; $('askSkip').style.visibility = '';
     $('ask').hidden = false;
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
+    if(state.stage >= 3){ askLater = showPage; $('askSkip').textContent = 'More choices'; }   // with word pages: six quick answers, and the whole page one tap away
   }
   function likeSentence(w){                       // "I like this apple." -> "I like apples."
     var out = compose(['like', w.id], '', state.name).sentence || '';
@@ -2659,7 +2682,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     clearTimeout(state.timer); state.taps = []; state.fresh = true;
     state.page = 'numbers'; openOnly = null; renderTabs(); renderGrid(); renderBar('', false);
   }, {noRepeatGuard:true});
-  onPress($('askSkip'), function(){ if(askDone) return; plogAdd('skipped'); tapBlockUntil = Date.now()+BOARD_HOLD; hideAsk(); }, {noRepeatGuard:true});
+  onPress($('askSkip'), function(){ if(askDone) return; var later = askLater; if(!later) plogAdd('skipped'); tapBlockUntil = Date.now()+BOARD_HOLD; hideAsk(); if(later) later(); }, {noRepeatGuard:true});
 
   /* ---------- grown-up panel (press and hold the lock) ---------- */
   var hold = null, lock = $('lockBtn');
