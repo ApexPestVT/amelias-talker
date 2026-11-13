@@ -110,6 +110,32 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .key.thing{background:var(--thing);border-color:var(--thing-edge)}
 .key.stop{background:var(--stop);border-color:var(--stop-edge)}
 
+/* photo scenes: a real photo she can touch */
+.grid.photos{display:flex;flex-direction:column;gap:10px}
+.gal{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:minmax(40%,1fr);gap:10px;overflow-y:auto;touch-action:pan-y}
+.gal .key img.pic{height:74%;max-width:94%;aspect-ratio:auto;object-fit:cover}
+.scene-back{flex:none;align-self:flex-start;min-height:48px;padding:0 20px;border-radius:14px;border:3px solid var(--line);background:var(--bar);font-size:17px;font-weight:700}
+.scene-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+.scene{position:relative;flex:none}
+.scene img{width:100%;height:100%;display:block;border-radius:18px;pointer-events:none;-webkit-user-drag:none}
+.spot{position:absolute;transform:translate(-50%,-50%);width:17%;min-width:64px;aspect-ratio:1;border-radius:50%;padding:0;
+  border:4px solid rgba(255,255,255,.95);background:rgba(255,207,51,.16);box-shadow:0 0 0 3px rgba(22,34,58,.6);transition:background .3s}
+.spot.say{background:rgba(255,207,51,.5)}
+.spot .tag{position:absolute;left:50%;top:100%;transform:translateX(-50%);margin-top:4px;background:var(--ink);color:#fff;font-weight:700;
+  padding:4px 14px;border-radius:12px;font-size:min(4.4vh,4.4vw);white-space:nowrap;opacity:0;transition:opacity .35s;pointer-events:none}
+.spot.say .tag,.sced .spot .tag{opacity:1}
+/* scene editor (grown-ups) */
+.sced{position:fixed;inset:0;z-index:20;background:var(--paper);display:flex;flex-direction:column;gap:10px;padding:12px 16px;user-select:text;-webkit-user-select:text}
+.sced .bar{flex:none;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sced .bar input[type=text]{flex:1;min-width:120px;font-size:17px;padding:10px 12px;border:2px solid var(--line);border-radius:12px;background:var(--bar)}
+.sced .scene{cursor:crosshair;touch-action:none}
+.sced .spot{cursor:grab;touch-action:none}
+.sced .spot.sel{box-shadow:0 0 0 4px var(--describe-edge);background:rgba(47,103,196,.3)}
+.sced .spot .tag{font-size:14px;padding:2px 8px}
+.sced small{color:var(--ink-soft);font-size:13px;line-height:1.4}
+.scenes-list{display:flex;flex-direction:column;gap:6px}
+.scenes-list div{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:15px;background:var(--paper);border-radius:10px;padding:6px 10px}
+
 /* question pop-up: big answers over the grid */
 .ask{position:fixed;inset:0;z-index:5;background:var(--paper);display:flex;flex-direction:column;gap:12px;padding:16px max(16px, calc(var(--edge, 5vmin) + 8px)) max(16px, calc(var(--edge, 5vmin) + 8px))}
 .ask-q{flex:none;font-size:clamp(18px,3.4vh,30px);font-weight:600;color:var(--ink-soft);text-align:center;text-wrap:balance}
@@ -186,6 +212,23 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
   <div class="ask-q" id="askQ"></div>
   <div class="ask-opts" id="askOpts"></div>
   <button class="ask-skip" id="askSkip" type="button">Something else</button>
+</div>
+
+<div class="sced" id="sced" hidden>
+  <div class="bar">
+    <input type="text" id="scName" placeholder="Name this photo (kitchen, swing, grandma's)" maxlength="30" autocomplete="off" aria-label="Photo name">
+    <button class="btn" id="scSuggest" type="button">Suggest words</button>
+    <button class="btn primary" id="scSave" type="button">Save</button>
+    <button class="btn" id="scCancel" type="button">Cancel</button>
+  </div>
+  <div class="scene-wrap" id="scWrap"><div class="scene" id="scStage"></div></div>
+  <div class="bar">
+    <input type="text" id="scWord" placeholder="Tap the photo, then type the word" maxlength="24" autocomplete="off" aria-label="Word for this spot">
+    <button class="btn" id="scWordSave" type="button">Set word</button>
+    <button class="btn" id="scSpotDel" type="button">Remove spot</button>
+    <button class="btn" id="scDelete" type="button">Delete photo</button>
+  </div>
+  <small id="scMsg">Tap anything in the photo she would want to talk about, then type its word. Drag a circle to move it.</small>
 </div>
 
 <div class="panel" id="panel">
@@ -273,6 +316,17 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
       </div>
       <input type="file" id="picFile" accept="image/*" hidden>
       <small id="picMsg">Photos and word changes stay on this tablet.</small>
+    </div>
+
+    <h3>Photo scenes</h3>
+    <div class="row">
+      <small>A real photo from her life with spots she can touch. Each spot says its word.</small>
+      <div class="inline">
+        <button class="btn" id="scNew" type="button">New photo scene</button>
+      </div>
+      <input type="file" id="scFile" accept="image/*" hidden>
+      <div class="scenes-list" id="scList"></div>
+      <small id="scHint"></small>
     </div>
 
     <h3>Choices she is offered</h3>
@@ -667,7 +721,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   ];
   var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, repeat:0.8, hold:0, edge:0.05, favs:{}, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
-  var pics = {}, custom = [], labels = {};
+  var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', store:'checking', error:'' };
 
   /* ---------- settings (small) and pictures (IndexedDB), both on this device only ---------- */
@@ -726,7 +780,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v15) ---'+
+      dbgText = '\n--- Listening check (v16) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -1113,8 +1167,9 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
       if(state.hold > 0 && held < state.hold*1000) return;         // too quick: a brush
       var under = document.elementFromPoint(e.clientX, e.clientY); // finger slid to another picture before lifting
       if(under && !b.contains(under)) return;
-      if(!(opts && opts.noRepeatGuard) && state.repeat > 0 && now - lastTapAt < state.repeat*1000) return;   // extra tap
-      lastTapAt = now;
+      var guarded = !(opts && opts.noRepeatGuard);                 // page tabs and Back do not start the extra-tap timer
+      if(guarded && state.repeat > 0 && now - lastTapAt < state.repeat*1000) return;   // extra tap
+      if(guarded) lastTapAt = now;
       fn();
     });
     b.addEventListener('click', function(e){                       // keyboard and switch access only; touches are handled above
@@ -1135,8 +1190,11 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   }
   function renderGrid(){
     var g = $('grid'); g.textContent = '';
-    if(state.stage < 3) state.page = 'core';
-    g.classList.toggle('fringe', state.page!=='core');
+    if(state.page==='photos' && !scenes.length) state.page = 'core';
+    if(state.stage < 3 && state.page!=='photos') state.page = 'core';
+    g.classList.toggle('photos', state.page==='photos');
+    g.classList.toggle('fringe', state.page!=='core' && state.page!=='photos');
+    if(state.page==='photos'){ renderPhotos(g); return; }
     if(state.page==='core'){
       CORE.forEach(function(w){
         var b = keyFor(w);
@@ -1149,21 +1207,193 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     }
   }
   function renderTabs(){
-    var t = $('tabs'); t.hidden = state.stage < 3; t.textContent = '';
+    var t = $('tabs'); t.hidden = state.stage < 3 && !scenes.length; t.textContent = '';
     if(t.hidden) return;
-    PAGES.forEach(function(p){
+    var list = (state.stage >= 3 ? PAGES : [PAGES[0]]).concat(scenes.length ? [{id:'photos', label:'Photos', pic:'\uD83D\uDCF7'}] : []);
+    list.forEach(function(p){
       var b = document.createElement('button');
       b.type='button'; b.className='tab'+(p.id===state.page?' sel':''); b.setAttribute('data-page', p.id);
       var i = document.createElement('span'); i.textContent = p.pic; i.setAttribute('aria-hidden','true');
       var l = document.createElement('span'); l.textContent = p.label;
       b.appendChild(i); b.appendChild(l);
       onPress(b, function(){
-        state.page = p.id; renderTabs(); renderGrid();
+        state.page = p.id; if(p.id==='photos' && scenes.length!==1) openScene = null; renderTabs(); renderGrid();
         if(!state.fresh && state.taps.length){ clearTimeout(state.timer); state.timer = setTimeout(finish, PAGE_WAIT); }
       }, {noRepeatGuard:true});
       t.appendChild(b);
     });
   }
+  /* ---------- photo scenes (what she sees) ---------- */
+  function fitScene(box, wrap, sc){
+    var W = wrap.clientWidth, H = wrap.clientHeight, r = (sc.w||4)/(sc.h||3);
+    if(!W || !H) return;
+    var w = Math.min(W, H*r); box.style.width = Math.floor(w)+'px'; box.style.height = Math.floor(w/r)+'px';
+  }
+  function spotSay(sc, sp, el){
+    if(Date.now() < tapBlockUntil) return;
+    el.classList.add('say'); setTimeout(function(){ el.classList.remove('say'); }, 3000);   // the written word shows for 3 seconds
+    var kw = knownWord(String(sp.label).toLowerCase());
+    if(kw && kw.page!=='core'){ tap(kw.id, el, true); return; }                             // a word she already has: build the sentence too
+    clearTimeout(state.timer); state.taps = []; state.fresh = true;
+    renderBar(sp.label, false); speak(sp.label);
+  }
+  function renderPhotos(g){
+    var sc = openScene ? scenes.filter(function(x){ return x.id===openScene; })[0] : (scenes.length===1 ? scenes[0] : null);
+    if(!sc){                                                            // gallery of her photos
+      var gal = document.createElement('div'); gal.className = 'gal';
+      scenes.forEach(function(x){
+        var b = document.createElement('button'); b.type='button'; b.className='key thing'; b.setAttribute('aria-label', x.name||'photo');
+        var im = document.createElement('img'); im.className='pic'; im.src = sceneImg[x.id]; im.alt=''; b.appendChild(im);
+        var l = document.createElement('span'); l.className='lab'; l.textContent = x.name||'photo'; b.appendChild(l);
+        onPress(b, function(){ openScene = x.id; renderGrid(); if(x.name) speak(x.name); });
+        gal.appendChild(b);
+      });
+      g.appendChild(gal); return;
+    }
+    if(scenes.length > 1){
+      var back = document.createElement('button'); back.type='button'; back.className='scene-back'; back.textContent = '← Photos';
+      onPress(back, function(){ openScene = null; renderGrid(); }, {noRepeatGuard:true});
+      g.appendChild(back);
+    }
+    var wrap = document.createElement('div'); wrap.className = 'scene-wrap';
+    var box = document.createElement('div'); box.className = 'scene';
+    var im2 = document.createElement('img'); im2.src = sceneImg[sc.id]; im2.alt = sc.name||''; box.appendChild(im2);
+    sc.spots.forEach(function(sp){
+      var b = document.createElement('button'); b.type='button'; b.className='spot'; b.setAttribute('aria-label', sp.label);
+      b.style.left = sp.x+'%'; b.style.top = sp.y+'%';
+      var tg = document.createElement('span'); tg.className='tag'; tg.textContent = sp.label; b.appendChild(tg);
+      onPress(b, function(){ spotSay(sc, sp, b); });
+      box.appendChild(b);
+    });
+    wrap.appendChild(box); g.appendChild(wrap);
+    fitScene(box, wrap, sc);
+    setTimeout(function(){ fitScene(box, wrap, sc); }, 60);
+  }
+  window.addEventListener('resize', function(){ if(state.page==='photos') renderGrid(); if(ed) drawEd(); });
+
+  /* ---------- photo scene editor (grown-ups) ---------- */
+  var ed = null, delArmed = false;
+  function saveScenes(){
+    return idbSet('scenes', scenes).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
+  }
+  function renderSceneList(){
+    var box = $('scList'); box.textContent = '';
+    scenes.forEach(function(sc){
+      var d = document.createElement('div'), n = document.createElement('span'), b = document.createElement('button');
+      n.textContent = (sc.name||'photo')+' ('+sc.spots.length+' words)'; b.type='button'; b.className='btn'; b.textContent='Edit';
+      b.addEventListener('click', function(){ openEditor({id:sc.id, name:sc.name, w:sc.w, h:sc.h, spots:JSON.parse(JSON.stringify(sc.spots)), img:sceneImg[sc.id], isNew:false}); });
+      d.appendChild(n); d.appendChild(b); box.appendChild(d);
+    });
+    $('scHint').textContent = visionOn ? 'Word suggestions are on. Pressing Suggest words sends that one photo to Anthropic\'s AI to find words. This app does not keep a copy there.'
+                                       : 'Word suggestions are off. Add ANTHROPIC_API_KEY in Railway to turn them on. You can still add words by hand.';
+  }
+  function openEditor(e){
+    ed = e; ed.sel = null; delArmed = false;
+    $('scName').value = ed.name||''; $('scWord').value = '';
+    $('scSuggest').hidden = !visionOn; $('scDelete').hidden = !!ed.isNew; $('scDelete').textContent = 'Delete photo';
+    $('scMsg').textContent = 'Tap anything in the photo she would want to talk about, then type its word. Drag a circle to move it.';
+    $('sced').hidden = false; drawEd(); setTimeout(drawEd, 60);
+  }
+  function closeEditor(){ ed = null; $('sced').hidden = true; $('scStage').textContent = ''; }
+  function drawEd(){
+    if(!ed) return;
+    var box = $('scStage'); box.textContent = '';
+    var im = document.createElement('img'); im.src = ed.img; im.alt = ''; box.appendChild(im);
+    ed.spots.forEach(function(sp){
+      var b = document.createElement('button'); b.type='button'; b.className='spot'+(ed.sel===sp?' sel':'');
+      b.style.left = sp.x+'%'; b.style.top = sp.y+'%';
+      var tg = document.createElement('span'); tg.className='tag'; tg.textContent = sp.label || '?'; b.appendChild(tg);
+      b.addEventListener('pointerdown', function(ev){
+        ev.stopPropagation(); ed.sel = sp; $('scWord').value = sp.label||'';
+        var r = box.getBoundingClientRect(), moved = false;
+        try{ b.setPointerCapture(ev.pointerId); }catch(e){}
+        var mv = function(m){
+          moved = true;
+          sp.x = Math.max(4, Math.min(96, Math.round((m.clientX-r.left)/r.width*100)));
+          sp.y = Math.max(4, Math.min(96, Math.round((m.clientY-r.top)/r.height*100)));
+          b.style.left = sp.x+'%'; b.style.top = sp.y+'%';
+        };
+        var up = function(){ b.removeEventListener('pointermove', mv); b.removeEventListener('pointerup', up); b.removeEventListener('pointercancel', up); drawEd(); if(!moved) $('scWord').focus(); };
+        b.addEventListener('pointermove', mv); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+      });
+      box.appendChild(b);
+    });
+    fitScene(box, $('scWrap'), ed);
+  }
+  $('scStage').addEventListener('pointerdown', function(ev){
+    if(!ed) return;
+    var r = this.getBoundingClientRect();
+    var sp = {id:'s'+Date.now(), label:'', x:Math.round((ev.clientX-r.left)/r.width*100), y:Math.round((ev.clientY-r.top)/r.height*100)};
+    ed.spots.push(sp); ed.sel = sp; $('scWord').value = ''; drawEd();
+    $('scMsg').textContent = 'Now type the word for that spot and press Set word.';
+    setTimeout(function(){ $('scWord').focus(); }, 50);
+  });
+  function setWord(){
+    if(!ed || !ed.sel) { $('scMsg').textContent = 'Tap the photo first to place a spot.'; return; }
+    var v = $('scWord').value.trim().replace(/\s+/g,' '); if(!v) return;
+    ed.sel.label = v; ed.sel = null; $('scWord').value = ''; drawEd();
+    $('scMsg').textContent = '"'+v+'" set. Tap the photo to add another, or Save.';
+  }
+  $('scWordSave').addEventListener('click', setWord);
+  $('scWord').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); setWord(); } });
+  $('scSpotDel').addEventListener('click', function(){
+    if(!ed || !ed.sel) return;
+    ed.spots = ed.spots.filter(function(x){ return x!==ed.sel; }); ed.sel = null; $('scWord').value = ''; drawEd();
+  });
+  $('scCancel').addEventListener('click', closeEditor);
+  $('scSave').addEventListener('click', function(){
+    if(!ed) return;
+    var spots = ed.spots.filter(function(x){ return x.label; });
+    if(!spots.length){ $('scMsg').textContent = 'Add at least one word before saving.'; return; }
+    var rec = {id:ed.id, name:$('scName').value.trim(), w:ed.w, h:ed.h, spots:spots};
+    var at = -1; scenes.forEach(function(x, i){ if(x.id===rec.id) at = i; });
+    if(at>=0) scenes[at] = rec; else scenes.push(rec);
+    sceneImg[rec.id] = ed.img;
+    idbSet('sceneimg:'+rec.id, ed.img).then(saveScenes, storeFail);
+    closeEditor(); renderSceneList(); renderAll();
+  });
+  $('scDelete').addEventListener('click', function(){
+    if(!ed) return;
+    if(!delArmed){ delArmed = true; this.textContent = 'Tap again to delete'; return; }
+    var id = ed.id; scenes = scenes.filter(function(x){ return x.id!==id; }); delete sceneImg[id];
+    if(openScene===id) openScene = null;
+    idbDel('sceneimg:'+id).catch(function(){}); saveScenes();
+    closeEditor(); renderSceneList(); renderAll();
+  });
+  $('scSuggest').addEventListener('click', function(){
+    if(!ed) return;
+    var btn = this; btn.disabled = true; $('scMsg').textContent = 'Looking at the photo. This takes a few seconds.';
+    fetch('api/scene-words', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({image:ed.img})})
+      .then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||('error '+r.status)); return d; }); })
+      .then(function(d){
+        if(!ed) return;
+        var have = {}, added = 0; ed.spots.forEach(function(x){ have[String(x.label).toLowerCase()] = 1; });
+        (d.words||[]).forEach(function(w, i){ if(have[w.label]) return; ed.spots.push({id:'a'+Date.now()+i, label:w.label, x:w.x, y:w.y}); added++; });
+        drawEd();
+        $('scMsg').textContent = added ? 'Added '+added+' words. Check each one: drag to move it, tap it to rename or remove it.' : 'No new words found. Add them by hand.';
+      })
+      .catch(function(err){ $('scMsg').textContent = 'Suggestions did not work ('+((err&&err.message)||'no internet')+'). You can still add words by hand.'; })
+      .then(function(){ btn.disabled = false; });
+  });
+  $('scNew').addEventListener('click', function(){ $('scFile').value=''; $('scFile').click(); });
+  $('scFile').addEventListener('change', function(){
+    var f = this.files && this.files[0]; if(!f) return;
+    var url = URL.createObjectURL(f), img = new Image();
+    img.onload = function(){
+      try{
+        var M = 1280, k = Math.min(1, M/Math.max(img.naturalWidth, img.naturalHeight));
+        var c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth*k); c.height = Math.round(img.naturalHeight*k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        var data = c.toDataURL('image/jpeg', 0.82);
+        URL.revokeObjectURL(url);
+        closePanel();
+        openEditor({id:'sc'+Date.now(), name:'', w:c.width, h:c.height, spots:[], img:data, isNew:true});
+      }catch(e){ $('scHint').textContent = 'That photo could not be used. Try another one.'; }
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); $('scHint').textContent = 'That file is not a photo this tablet can open.'; };
+    img.src = url;
+  });
+
   function renderAll(){
     $('typeBar').hidden = !state.typing;
     $('heard').classList.toggle('big', state.typing);
@@ -1175,7 +1405,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     state.taps.forEach(function(id){ var w = word(id); if(w) c.appendChild(picNode(w)); });
     var t = $('sayText'); t.textContent = text; t.classList.toggle('hint', !!hint);
   }
-  function tap(id, el){
+  function tap(id, el, stay){
     if(Date.now() < tapBlockUntil) return;        // a stray second tap right after a pop-up answer
     el.classList.add('hit'); setTimeout(function(){ el.classList.remove('hit'); }, 160);
     if(state.fresh){ state.taps=[]; state.fresh=false; }
@@ -1185,7 +1415,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     speak(w.label);                               // her own word, right away
     clearTimeout(state.timer);
     state.timer = setTimeout(finish, Math.max(COMPOSE_WAIT, state.repeat*1000 + 1500));
-    if(w.page!=='core' && state.page!=='core'){   // back to the home words after a page word
+    if(!stay && w.page!=='core' && state.page!=='core'){   // back to the home words after a page word
       setTimeout(function(){ state.page='core'; renderTabs(); renderGrid(); }, 350);
     }
   }
@@ -1389,7 +1619,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
     $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
-    hideAsk(); renderStages(); renderPicList(); renderFavs(); renderVoices(); showDiag(); $('panel').classList.add('open');
+    hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderVoices(); showDiag(); $('panel').classList.add('open');
   }
   function closePanel(){ $('panel').classList.remove('open'); }
   function holdStart(e){ e.preventDefault(); lock.classList.add('holding'); hold = setTimeout(function(){ holdEnd(); openPanel(); }, 1500); }
@@ -1474,6 +1704,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   idbLoad().then(function(all){
     Object.keys(all).forEach(function(k){ if(k.indexOf('pic:')===0) pics[k.slice(4)] = all[k]; });
     if(Array.isArray(all.custom)){ custom = all.custom; registerWords(custom); }
+    if(Array.isArray(all.scenes)){ scenes = all.scenes.filter(function(sc){ return all['sceneimg:'+sc.id]; }); scenes.forEach(function(sc){ sceneImg[sc.id] = all['sceneimg:'+sc.id]; }); }
     if(all.labels && typeof all.labels==='object'){ labels = all.labels; Object.keys(labels).forEach(function(id){ if(LOOKUP[id]) LOOKUP[id].label = labels[id]; }); }
     diag.store = 'kept on this device ('+Object.keys(pics).length+' photos, '+custom.length+' added words)';
     renderAll(); showDiag();
@@ -1486,6 +1717,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
       if(!SR){ diag.mic = 'listening is not set up yet for this tablet. Taps and voice still work.'; showDiag(); }
       setEar(); srStart();
     };
+    fetch('api/vision/status').then(function(r){ return r.json(); }).then(function(v){ visionOn = !!(v && v.enabled); }, function(){});
     fetch('api/stt/status').then(function(r){ return r.json(); }).then(function(st){
       if(st && st.enabled){ mode = 'cloud'; cloud.provider = st.provider||'speech service'; setEar(); cloudStart(); }
       else browserListen();

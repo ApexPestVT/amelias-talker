@@ -50,9 +50,67 @@ async function sttToken() {
     url: 'wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&speech_model=' + STT_MODEL + '&token=' + encodeURIComponent(d.token) };
 }
 
+// ---- Photo scenes: ask Claude which things in a photo a young child would want to talk about ----
+const VISION_KEY = process.env.ANTHROPIC_API_KEY;
+const VISION_MODEL = process.env.VISION_MODEL || 'claude-haiku-5-5';
+const SCENE_PROMPT = [
+  'This photo will become a talking picture for a young child who cannot speak. She touches a spot and her tablet says the word.',
+  'Pick up to 8 things in the photo she would most want to talk about: people, animals, food, drinks, toys, favourite objects, places to go.',
+  'Rules:',
+  '- One simple everyday word each, lowercase, the word a parent would say to a toddler ("dog", "swing", "cup").',
+  '- Never name or identify a person. For people use a role word only: "girl", "boy", "baby", "woman", "man".',
+  '- No brand names. Skip tiny background clutter. No duplicates.',
+  '- x and y are the centre of the thing as a percent of the photo width and height (0 to 100, origin top left).',
+  'Reply with JSON only, no other text: {"words":[{"label":"dog","x":42,"y":61}]}'
+].join('\n');
+function readBody(req, max) {
+  return new Promise((resolve, reject) => {
+    let n = 0; const parts = [];
+    req.on('data', c => { n += c.length; if (n > max) { reject(new Error('photo too large')); req.destroy(); } else parts.push(c); });
+    req.on('end', () => resolve(Buffer.concat(parts).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+async function sceneWords(image) {
+  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(image || ''));
+  if (!m) throw new Error('not a photo');
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': VISION_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: VISION_MODEL, max_tokens: 600,
+      messages: [{ role: 'user', content: [
+        { type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } },
+        { type: 'text', text: SCENE_PROMPT }
+      ] }]
+    })
+  });
+  if (!r.ok) { const t = await r.text().catch(() => ''); throw new Error('AI service ' + r.status + ' ' + t.slice(0, 140)); }
+  const d = await r.json();
+  const text = (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+  const a = text.indexOf('{'), z = text.lastIndexOf('}');
+  if (a < 0 || z <= a) throw new Error('AI gave no word list');
+  const out = JSON.parse(text.slice(a, z + 1));
+  const seen = new Set();
+  const clamp = v => Math.max(5, Math.min(95, Math.round(Number(v))));
+  return (Array.isArray(out.words) ? out.words : []).map(w => ({
+    label: String(w.label || '').toLowerCase().replace(/[^a-z0-9' -]/g, '').trim().slice(0, 24), x: clamp(w.x), y: clamp(w.y)
+  })).filter(w => w.label && Number.isFinite(w.x) && Number.isFinite(w.y) && !seen.has(w.label) && seen.add(w.label)).slice(0, 8);
+}
+
 http.createServer((req, res) => {
   let p = decodeURIComponent((req.url || '/').split('?')[0]);
   if (p === '/api/stt/status') return json(res, 200, { enabled: !!STT_KEY, provider: STT_PROVIDER === 'deepgram' ? 'deepgram' : 'assemblyai ' + STT_MODEL });
+  if (p === '/api/vision/status') return json(res, 200, { enabled: !!VISION_KEY });
+  if (p === '/api/scene-words') {
+    if (req.method !== 'POST') return json(res, 405, { error: 'POST only' });
+    if (!VISION_KEY) return json(res, 503, { error: 'no AI key set' });
+    if (!sameSite(req)) return json(res, 403, { error: 'wrong site' });
+    const ip2 = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    if (!allowed(ip2)) return json(res, 429, { error: 'too many requests' });
+    return readBody(req, 4 * 1024 * 1024).then(b => sceneWords(JSON.parse(b).image))
+      .then(words => json(res, 200, { words }), e => { console.error('scene words failed:', e.message); json(res, 502, { error: e.message }); });
+  }
   if (p === '/api/stt/token') {
     if (req.method !== 'POST') return json(res, 405, { error: 'POST only' });
     if (!STT_KEY) return json(res, 503, { error: 'no speech key set' });
