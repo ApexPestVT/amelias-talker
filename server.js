@@ -27,8 +27,11 @@ function allowed(ip) {
   if (mine.length >= PER_IP_PER_HOUR || total >= ALL_PER_HOUR) return false;
   mine.push(now); hits.set(ip, mine); return true;
 }
+// The tablet app (iPad and Android wrapper) serves its pages from these addresses and calls this server from there.
+const APP_ORIGINS = ['https://localhost', 'capacitor://localhost'];
 function sameSite(req) {
   const origin = req.headers.origin;
+  if (origin && APP_ORIGINS.includes(origin)) return true;
   if (origin) { try { return new URL(origin).host === req.headers.host; } catch (e) { return false; } }
   return req.headers['sec-fetch-site'] === 'same-origin';
 }
@@ -295,6 +298,11 @@ async function voiceClip(text, voice, ip) {
 }
 
 http.createServer((req, res) => {
+  if (req.headers.origin && APP_ORIGINS.includes(req.headers.origin) && String(req.url).startsWith('/api/')) {   // let the tablet app call the API
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin); res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
+  }
   let p = decodeURIComponent((req.url || '/').split('?')[0]);
   if (p === '/api/stt/status') return json(res, 200, { enabled: !!STT_KEY, provider: STT_PROVIDER === 'deepgram' ? 'deepgram' : 'assemblyai ' + STT_MODEL });
   if (p === '/api/vision/status') return json(res, 200, { enabled: !!VISION_KEY });

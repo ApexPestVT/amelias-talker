@@ -1,0 +1,12 @@
+{
+  "name": "my-turn-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tablet app wrapper for My Turn (Android now, iPad later). The pages in ../public are copied in at build time.",
+  "dependencies": {
+    "@capacitor/android": "8.6.2",
+    "@capacitor/cli": "8.6.2",
+    "@capacitor/core": "8.6.2",
+    "@capacitor-community/speech-recognition": "7.0.1"
+  }
+}

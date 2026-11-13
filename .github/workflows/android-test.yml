@@ -1,0 +1,48 @@
+name: Android test build
+on:
+  push:
+    branches: [main]
+    paths: ['public/**', 'mobile/**', '.github/workflows/android-test.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: android-test
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Install the wrapper
+        working-directory: mobile
+        run: npm install --no-audit --no-fund
+      - name: Copy the app pages in
+        working-directory: mobile
+        run: rm -rf www && cp -r ../public www
+      - name: Create the Android project
+        working-directory: mobile
+        run: |
+          npx cap add android
+          python3 patch-android.py
+          npx cap sync android
+      - name: Build
+        working-directory: mobile/android
+        run: ./gradlew assembleDebug --no-daemon
+      - name: Publish the test build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk MyTurn-test.apk
+          VER=$(grep -o 'Listening check (v[0-9]*)' public/index.html | grep -o 'v[0-9]*')
+          gh release view android-test >/dev/null 2>&1 || gh release create android-test --title "Android test build" --notes "Test build of My Turn for Android tablets. Not a store release." --prerelease
+          gh release edit android-test --notes "Test build of My Turn for Android tablets (app pages $VER, built $(date -u '+%Y-%m-%d %H:%M') UTC). Not a store release."
+          gh release upload android-test MyTurn-test.apk --clobber

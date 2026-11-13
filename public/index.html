@@ -353,6 +353,10 @@ body.typing #tabs, body.typing #grid{display:none}
         <option value="off">Do not pop up answers</option>
       </select>
     </div>
+    <div id="deviceRow" hidden>
+      <label class="check"><input type="checkbox" id="deviceOn"> Listen on this tablet itself (free)</label>
+      <small>On: the tablet's own speech recognition is used and there is no listening charge. Off: the paid listening service is used. Try both and keep the one that hears better.</small>
+    </div>
     <label class="check"><input type="checkbox" id="namesOn"> Help it hear names correctly</label>
     <small id="namesMsg"></small>
     <label class="check"><input type="checkbox" id="smartOn"> Use AI for harder questions</label>
@@ -1073,6 +1077,9 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
 </script>
 
 <script>
+/* Inside the tablet app (iPad or Android wrapper) the pages are stored in the app, so the server has to be named in full. */
+var NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+var API = NATIVE ? 'https://amelias-talker-production.up.railway.app/' : '';
 (function(){
   var $ = function(id){ return document.getElementById(id); };
   var HEARD_TTL = 30000, COMPOSE_WAIT = 1400, PAGE_WAIT = 6000;
@@ -1084,7 +1091,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
     {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving your own'},
     {n:6, name:'6. Teen and adult words', note:'Adds 96 of the most used everyday words on four pages. Sentences are said word for word'}
   ];
-  var state = { names:true, name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { onDevice:true, names:true, name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
@@ -1114,13 +1121,14 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
       if(typeof saved.log==='boolean') state.log=saved.log;
       if(typeof saved.repeat==='number') state.repeat=saved.repeat;
       if(typeof saved.names==='boolean') state.names=saved.names;
+      if(typeof saved.onDevice==='boolean') state.onDevice=saved.onDevice;
       if(typeof saved.hold==='number') state.hold=saved.hold;
       if(typeof saved.edge==='number') state.edge=saved.edge;
       if(saved.favs && typeof saved.favs==='object') state.favs=saved.favs;
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,names:state.names,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,names:state.names,onDevice:state.onDevice,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -1156,7 +1164,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v47) ---'+
+      dbgText = '\n--- Listening check (v48) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1208,7 +1216,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
   function cvPaid(n){ try{ if(n>0) localStorage.setItem('talker-voice-chars', String((+localStorage.getItem('talker-voice-chars')||0)+n)); }catch(e){} }
   function cvFetch(v, text){
     var ctl = ('AbortController' in window) ? new AbortController() : null, t = setTimeout(function(){ if(ctl) ctl.abort(); }, 12000);
-    return fetch('api/voice/say', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text:text, voice:v}), signal:ctl?ctl.signal:undefined}).then(function(r){
+    return fetch(API+'api/voice/say', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text:text, voice:v}), signal:ctl?ctl.signal:undefined}).then(function(r){
       if(!r.ok) return r.json().then(function(j){ return j.error; }, function(){ return ''; }).then(function(why){ var e = new Error(why || ('voice service '+r.status)); e.status = r.status; throw e; });
       cvPaid(+r.headers.get('X-Paid-Characters')||0);
       return r.arrayBuffer();
@@ -1322,14 +1330,15 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
   }
 
   /* ---------- hearing ---------- */
-  var listening = false, blocked = false;
-  var hosted = !!(window.claude && typeof window.claude.use==='function');   // preview inside Claude
+  var listening = false, blocked = false, pickListening = function(){};
+  var hosted = !!(window.claude && typeof window.claude.use==='function');
+  var NS = NATIVE && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition || null;   // the tablet's own speech recognition (app only)   // preview inside Claude
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   var rec = null, restartT = null, fails = 0, dict = null;
   var mode = hosted ? 'hosted' : 'browser';      // 'cloud' once the server says a speech key is set
 
   function setEar(){
-    var b = $('earBtn'), can = mode==='hosted' ? !!dict : (mode==='cloud' ? true : !!SR);
+    var b = $('earBtn'), can = mode==='hosted' ? !!dict : (mode==='cloud' ? true : (mode==='native' ? !!NS : !!SR));
     b.classList.toggle('on', listening);
     b.classList.toggle('off-air', !can || !state.listen);
     $('earTxt').textContent = listening ? 'Listening' : (!can ? 'No microphone here' : (!state.listen ? 'Listening is off' : (blocked ? 'Tap to allow mic' : (mode==='hosted' ? 'Tap to listen' : (mode==='cloud' ? 'Tap to start listening' : 'Starting')))));
@@ -1423,8 +1432,44 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
   }
   document.addEventListener('visibilitychange', function(){
     if(mode==='hosted') return;
-    if(document.hidden){ srStop(); cloudStop(); } else if(mode==='cloud') cloudStart(); else srStart();
+    if(document.hidden){ srStop(); cloudStop(); nsStop(); } else if(mode==='native') nsStart(); else if(mode==='cloud') cloudStart(); else srStart();
   });
+
+  /* Tablet app only: the tablet's own speech recognition. Free, no listening service. It hears one sentence at a
+     time and stops, so it is started again each time. A watchdog restarts it if it goes quiet without saying so. */
+  var ns = {on:false, t:null, last:'', subs:false, starts:0, errs:0, lastErr:'', beat:0};
+  function nsNote(){ diag.mic = (listening ? 'listening on this tablet' : 'on this tablet, between sentences')+' (started '+ns.starts+' times, '+ns.errs+' errors'+(ns.lastErr ? ', last: '+ns.lastErr : '')+')'; showDiag(); }
+  function nsEnded(err){
+    if(ns.last){ var t = ns.last; ns.last = ''; setHeard(t); }
+    listening = false; setEar(); clearTimeout(ns.t);
+    if(mode==='native' && ns.on && state.listen && !blocked && !document.hidden) ns.t = setTimeout(nsGo, err ? Math.min(1200*(1+Math.min(ns.errs, 6)), 9000) : 300);
+    else ns.on = false;
+    nsNote();
+  }
+  function nsGo(){
+    if(mode!=='native' || !ns.on) return;
+    if(state.speaking){ ns.t = setTimeout(nsGo, 400); return; }          // do not listen to its own voice
+    ns.last = ''; ns.starts++; ns.beat = Date.now();
+    var p; try{ p = NS.start({language:'en-US', partialResults:true, popup:false, maxResults:1}); }catch(e){ p = Promise.reject(e); }
+    Promise.resolve(p).then(function(){ listening = true; ns.beat = Date.now(); setEar(); nsNote(); },
+      function(e){ ns.errs++; ns.lastErr = String((e && e.message) || e).slice(0, 60); nsEnded(true); });
+  }
+  function nsStart(){
+    if(mode!=='native' || !NS || ns.on || !state.listen || blocked || document.hidden) return;
+    ns.on = true;
+    if(!ns.subs){
+      ns.subs = true;
+      NS.addListener('partialResults', function(d){ var t = d && d.matches && d.matches[0]; ns.beat = Date.now(); if(!t || isEcho(t)) return; ns.last = t; showHeard(t, true); });
+      NS.addListener('listeningState', function(d){ ns.beat = Date.now(); if(d && d.status==='stopped'){ clearTimeout(ns.t); ns.t = setTimeout(function(){ nsEnded(false); }, 700); }   /* the final words arrive just after "stopped" */ else if(d && d.status==='started'){ listening = true; setEar(); } });
+      setInterval(function(){ if(mode==='native' && ns.on && state.listen && !document.hidden && Date.now()-ns.beat > 6500){ try{ NS.stop(); }catch(e){} nsEnded(true); } }, 3000);
+    }
+    var ask = NS.requestPermissions ? NS.requestPermissions() : Promise.resolve({speechRecognition:'granted'});
+    Promise.resolve(ask).then(function(perm){
+      if(perm && perm.speechRecognition && perm.speechRecognition!=='granted'){ blocked = true; ns.on = false; diag.mic = 'microphone is blocked. Allow the microphone for My Turn in the tablet settings.'; setEar(); showDiag(); return; }
+      nsGo();
+    }, function(){ nsGo(); });
+  }
+  function nsStop(){ clearTimeout(ns.t); ns.on = false; if(NS){ try{ NS.stop(); }catch(e){} } listening = false; setEar(); }
 
   /* Cloud listening (iPad and Android): the tablet's mic audio goes to a speech service.
      To keep cost down it only connects while it hears a voice, and hangs up after 20 quiet seconds. */
@@ -1539,7 +1584,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
   }
   function cloudConnect(){
     cloud.opening = true; cloudNote('connecting');
-    fetch('api/stt/token', {method:'POST'}).then(function(r){
+    fetch(API+'api/stt/token', {method:'POST'}).then(function(r){
       return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||('error '+r.status)); return d; });
     }).then(function(t){
       if(!cloud.on){ cloud.opening=false; return; }
@@ -1666,6 +1711,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
   }
   $('earBtn').addEventListener('click', function(){
     if(listening || !state.listen) return;          // a child's tap can start listening, never stop it
+    if(mode==='native'){ blocked = false; ns.errs = 0; nsStart(); return; }
     if(mode==='cloud'){ blocked = false; fails = 0; cloud.backoff = 0; if(cloud.ctx && cloud.ctx.state==='suspended') cloud.ctx.resume().catch(function(){}); else cloudStart(); return; }
     if(hosted){
       if(!dict) return;
@@ -1678,6 +1724,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
   });
   function applyListen(){
     if(hosted){ if(!state.listen && dict && listening) dict.stop().catch(function(){}); }
+    else if(mode==='native'){ if(state.listen) nsStart(); else nsStop(); }
     else if(mode==='cloud'){ if(state.listen) cloudStart(); else cloudStop(); }
     else if(state.listen) srStart(); else srStop();
     setEar();
@@ -1917,7 +1964,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
     ed = e; ed.sel = null; delArmed = false;
     $('scName').value = ed.name||''; $('scWord').value = '';
     $('scSuggest').hidden = !visionOn; $('scDelete').hidden = !!ed.isNew;
-    if(!hosted) fetch('api/vision/status').then(function(r){ return r.json(); }).then(function(v){ visionOn = !!(v && v.enabled); $('scSuggest').hidden = !visionOn; }, function(){}); $('scDelete').textContent = 'Delete photo';
+    if(!hosted) fetch(API+'api/vision/status').then(function(r){ return r.json(); }).then(function(v){ visionOn = !!(v && v.enabled); $('scSuggest').hidden = !visionOn; }, function(){}); $('scDelete').textContent = 'Delete photo';
     $('scMsg').textContent = 'Tap anything in the photo your child would want to talk about, then type its word. Drag a circle to move it.';
     $('scToast').hidden = true;
     $('sced').hidden = false; drawEd(); setTimeout(drawEd, 60);
@@ -2014,7 +2061,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
     scToast('Looking at the photo. This takes a few seconds.', '', 0);
     var ctl = window.AbortController ? new AbortController() : null;
     var giveUp = setTimeout(function(){ if(ctl) ctl.abort(); }, 45000);
-    fetch('api/scene-words', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({image:ed.img, w:ed.w, h:ed.h}), signal: ctl ? ctl.signal : undefined})
+    fetch(API+'api/scene-words', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({image:ed.img, w:ed.w, h:ed.h}), signal: ctl ? ctl.signal : undefined})
       .then(function(r){ return r.text().then(function(body){
         var d; try{ d = JSON.parse(body); }catch(e){ throw new Error('error '+r.status); }
         if(!r.ok) throw new Error(d.error||('error '+r.status)); return d; }); })
@@ -2413,7 +2460,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
     };
     var slow = setTimeout(function(){ finish(null); }, 3500);
     var words = allWords().filter(function(w){ return w.page==='core' ? (w.s||1) <= state.stage : state.stage >= 3 && !w.lit; }).map(function(w){ return w.label; });
-    fetch('api/ask', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({heard:clean(text, state.name), stage:state.stage, words:words})})
+    fetch(API+'api/ask', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({heard:clean(text, state.name), stage:state.stage, words:words})})
       .then(function(r){ return r.ok ? r.json() : null; }).then(function(a){ if(a && a.cost) addAi('ask', a.cost); finish(a); }, function(){ finish(null); });
   }
   function boardWord(label){
@@ -2620,7 +2667,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
   }
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
-    $('qList').value = state.questions.join('\n'); $('olderOn').checked = state.older; $('smartOn').checked = state.smart; smartNote(); $('namesOn').checked = state.names; namesNote();
+    $('qList').value = state.questions.join('\n'); $('olderOn').checked = state.older; $('smartOn').checked = state.smart; smartNote(); $('namesOn').checked = state.names; namesNote(); $('deviceRow').hidden = !NS; $('deviceOn').checked = state.onDevice;
     $('hcOn').checked = state.hc; $('seeTalkOn').checked = state.seeTalk; $('buzzOn').checked = state.buzz; $('sizeSel').value = state.size; $('gapSel').value = state.gap;
     $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('wordsOn').checked = state.words; $('modelOn').checked = state.modelBtn; $('logOn').checked = state.log !== false; renderReport(); clearArmed = false; $('reportClear').textContent = 'Clear the log'; $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
     hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderResearch(); renderVoices(); showDiag(); $('panel').classList.add('open');
@@ -2668,6 +2715,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
   $('gapSel').addEventListener('change', function(){ state.gap = this.value; save(); applyLook(); });
   $('buzzOn').addEventListener('change', function(){ state.buzz = this.checked; save(); buzz(); });
   if(!navigator.vibrate){ $('buzzOn').disabled = true; $('buzzMsg').textContent = 'This tablet or browser does not allow vibration from a web page (iPads never do).'; }
+  $('deviceOn').addEventListener('change', function(){ state.onDevice = this.checked; save(); pickListening(); });
   $('namesOn').addEventListener('change', function(){ state.names = this.checked; cloud.namesRefused = false; save(); namesNote(); });
   $('smartOn').addEventListener('change', function(){ state.smart = this.checked; save(); smartNote(); });
   $('olderOn').addEventListener('change', function(){ state.older = this.checked; setOlder(state.older, labels); save(); renderPicList(); renderFavs(); renderAll(); });
@@ -2753,18 +2801,23 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
       if(!SR){ diag.mic = 'listening is not set up yet for this tablet. Taps and voice still work.'; showDiag(); }
       setEar(); srStart();
     };
-    fetch('api/voice/status').then(function(r){ return r.json(); }).then(function(v){
+    fetch(API+'api/voice/status').then(function(r){ return r.json(); }).then(function(v){
       cv.on = !!(v && v.enabled && Array.isArray(v.voices) && v.voices.length); cv.voices = cv.on ? v.voices : [];
       try{ if(cv.on) localStorage.setItem('talker-cv', JSON.stringify(cv.voices)); else localStorage.removeItem('talker-cv'); }catch(e){}
       renderVoices(); cvMsg(); if(cv.loaded) cvWarm();
     }, function(){});
-    fetch('api/ask/status').then(function(r){ return r.json(); }).then(function(v){ askAiOn = !!(v && v.enabled); smartNote(); }, function(){});
-    fetch('api/vision/status').then(function(r){ return r.json(); }).then(function(v){ visionOn = !!(v && v.enabled); }, function(){});
-    fetch('api/stt/status').then(function(r){ return r.json(); }).then(function(st){
+    fetch(API+'api/ask/status').then(function(r){ return r.json(); }).then(function(v){ askAiOn = !!(v && v.enabled); smartNote(); }, function(){});
+    fetch(API+'api/vision/status').then(function(r){ return r.json(); }).then(function(v){ visionOn = !!(v && v.enabled); }, function(){});
+    var cloudOrBrowser = function(){ fetch(API+'api/stt/status').then(function(r){ return r.json(); }).then(function(st){
       if(st && st.enabled){ mode = 'cloud'; cloud.provider = st.provider||'speech service'; setEar(); cloudStart(); }
       else browserListen();
-    }, browserListen);
-    if('serviceWorker' in navigator){ try{ navigator.serviceWorker.register('sw.js').catch(function(){}); }catch(e){} }
+    }, browserListen); };
+    pickListening = function(){                       // app: the tablet's own listening unless the grown-up chose the service
+      srStop(); cloudStop(); nsStop();
+      if(NS && state.onDevice){ mode = 'native'; setEar(); nsStart(); } else cloudOrBrowser();
+    };
+    pickListening();
+    if(!NATIVE && 'serviceWorker' in navigator){ try{ navigator.serviceWorker.register('sw.js').catch(function(){}); }catch(e){} }
   }
 })();
 </script>
