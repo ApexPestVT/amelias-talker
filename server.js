@@ -61,7 +61,7 @@ const SCENE_PROMPT = [
   '- Never name or identify a person. For people use a role word only: "girl", "boy", "baby", "woman", "man".',
   '- No brand names. Skip tiny background clutter. No duplicates.',
   '- Positions are percentages, never pixels: x_percent is 0 at the left edge and 100 at the right edge; y_percent is 0 at the top and 100 at the bottom.',
-  'Work in two steps. Step 1: write one short line per thing you picked, saying where it sits (for example "dog: left side, a bit below the middle").',
+  'Work in two steps. Step 1: write one short line per thing you picked, saying where it sits (for example "dog: left side, a bit below the middle"). Keep each line under 12 words.',
   'Step 2: call place_words with the list, for example {"words":[{"label":"dog","x_percent":25,"y_percent":61}]}. You must call place_words.'
 ].join('\n');
 let selftests = [];
@@ -87,7 +87,7 @@ async function sceneWords(image, w, h, model) {
     method: 'POST',
     headers: { 'x-api-key': VISION_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: model || VISION_MODEL, max_tokens: 1024,
+      model: model || VISION_MODEL, max_tokens: 2000,
       // Make the model answer through a form, so the word list always comes back in a shape the app can read.
       tools: [{
         name: 'place_words',
@@ -110,30 +110,47 @@ async function sceneWords(image, w, h, model) {
   if (!r.ok) { const t = await r.text().catch(() => ''); throw new Error('AI service ' + r.status + ' ' + t.slice(0, 140)); }
   const d = await r.json();
   const blocks = d.content || [];
-  const form = blocks.find(b => b.type === 'tool_use' && b.input);
+  const forms = blocks.filter(b => b.type === 'tool_use' && b.input);
   const text = blocks.filter(b => b.type === 'text').map(b => b.text).join('');
-  let out = form ? form.input : null;
-  if (!out) {                                   // older reply style: look for a JSON list in the text
+  // Gather every item from every form call, whatever the list is called and however it was wrapped.
+  const items = [];
+  const take = v => {
+    if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { return; } }
+    if (Array.isArray(v)) v.forEach(o => { if (o && typeof o === 'object') items.push(o); });
+    else if (v && typeof v === 'object') { if (v.label || v.word || v.name) items.push(v); else Object.keys(v).forEach(k => take(v[k])); }
+  };
+  forms.forEach(f => take(f.input));
+  if (!items.length) {                           // older reply style: look for a JSON list in the text
     const a = text.indexOf('{'), z = text.lastIndexOf('}');
-    if (a >= 0 && z > a) { try { out = JSON.parse(text.slice(a, z + 1)); } catch (e) { out = null; } }
+    if (a >= 0 && z > a) { try { take(JSON.parse(text.slice(a, z + 1))); } catch (e) {} }
   }
-  if (!out) throw new Error('AI gave no word list (stop: ' + (d.stop_reason || '?') + '; blocks: ' + (blocks.map(b => b.type).join(',') || 'none') + '; said: ' + (text.slice(0, 160) || 'nothing') + ')');
-  if (typeof out.words === 'string') { try { out.words = JSON.parse(out.words); } catch (e) {} }
-  const seen = new Set();
-  const clamp = v => Math.max(5, Math.min(95, Math.round(Number(v))));
-  const list = (Array.isArray(out.words) ? out.words : []).map(o => ({ label: o.label, x: Number(o.x_percent !== undefined ? o.x_percent : o.x), y: Number(o.y_percent !== undefined ? o.y_percent : o.y) }));
+  const num = v => parseFloat(String(v === undefined || v === null ? '' : v).replace(/[^0-9.+-]/g, ''));   // "85%" -> 85
+  const pick = (o, names) => { for (const n of names) if (o[n] !== undefined) return o[n]; return (o.position && o.position[names[names.length - 1]]); };
+  const list = items.map(o => ({ label: o.label || o.word || o.name, x: num(pick(o, ['x_percent', 'xPercent', 'x'])), y: num(pick(o, ['y_percent', 'yPercent', 'y'])) }));
   // Safety net: if any position is over 100 the model answered in pixels, so convert using the photo size.
   const pixels = w && h && list.some(o => o.x > 100 || o.y > 100);
-  return list.map(o => ({
+  const clamp = v => Math.max(5, Math.min(95, Math.round(v)));
+  const seen = new Set();
+  const words = list.map(o => ({
     label: String(o.label || '').toLowerCase().replace(/[^a-z0-9' -]/g, '').trim().slice(0, 24),
     x: clamp(pixels ? o.x / w * 100 : o.x), y: clamp(pixels ? o.y / h * 100 : o.y)
-  })).filter(w => w.label && Number.isFinite(w.x) && Number.isFinite(w.y) && !seen.has(w.label) && seen.add(w.label)).slice(0, 8);
+  })).filter(o => o.label && Number.isFinite(o.x) && Number.isFinite(o.y) && !seen.has(o.label) && seen.add(o.label)).slice(0, 8);
+  // Keep a short record of the last reply (never the photo) so a bad result can be diagnosed.
+  lastVision = {
+    at: new Date().toISOString(), model: model || VISION_MODEL, photo: (w || '?') + 'x' + (h || '?'), stop: d.stop_reason || '?',
+    blocks: blocks.map(b => b.type).join(',') || 'none', itemsSeen: items.length, wordsKept: words.length, treatedAsPixels: !!pixels,
+    said: text.slice(0, 400), form: JSON.stringify(forms.map(f => f.input)).slice(0, 900)
+  };
+  if (!words.length) throw new Error('AI answered without usable words (stop: ' + lastVision.stop + '; blocks: ' + lastVision.blocks + '; items: ' + items.length + ')');
+  return words;
 }
+let lastVision = null;
 
 http.createServer((req, res) => {
   let p = decodeURIComponent((req.url || '/').split('?')[0]);
   if (p === '/api/stt/status') return json(res, 200, { enabled: !!STT_KEY, provider: STT_PROVIDER === 'deepgram' ? 'deepgram' : 'assemblyai ' + STT_MODEL });
   if (p === '/api/vision/status') return json(res, 200, { enabled: !!VISION_KEY });
+  if (p === '/api/vision/last') return json(res, 200, lastVision || { note: 'no photo suggestion has run since the server last restarted' });
   if (p === '/api/vision/selftest') {          // sends a tiny built-in drawing (no user photo) so a failure can be read from outside
     if (!VISION_KEY) return json(res, 200, { ok: false, error: 'no AI key set' });
     const now = Date.now(); selftests = selftests.filter(t => now - t < 3600e3);
