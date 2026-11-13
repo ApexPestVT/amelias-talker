@@ -203,6 +203,17 @@ body.typing #tabs, body.typing #grid{display:none}
 .sheet{touch-action:pan-y;background:var(--bar);border-radius:20px;max-width:620px;width:100%;max-height:100%;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:18px;user-select:text;-webkit-user-select:text}
 .sheet h2{margin:0;font-size:22px}
 .sheet h3{margin:0;font-size:16px;border-top:2px solid var(--line);padding-top:14px}
+.sec{border:2px solid var(--line);border-radius:14px;padding:0 14px}
+.sec[open]{padding-bottom:14px}
+.sec summary{list-style:none;cursor:pointer;display:flex;flex-direction:column;gap:2px;padding:14px 28px 14px 0;position:relative;min-height:48px;justify-content:center}
+.sec summary::-webkit-details-marker{display:none}
+.sec summary b{font-size:18px}
+.sec summary span{font-size:14px;color:#5b6478}
+.sec summary::after{content:'+';position:absolute;right:2px;top:50%;transform:translateY(-50%);font-size:26px;font-weight:700;color:#5b6478}
+.sec[open] summary::after{content:'–'}
+.sec[open] > *:not(summary){margin-top:14px}
+.sec > .check{display:flex}
+#closeBtn{position:sticky;bottom:0;flex:none;box-shadow:0 0 0 20px var(--bar)}
 .row{display:flex;flex-direction:column;gap:6px}
 .row label,.row .lbl{font-size:14px;font-weight:600}
 .row small,.sheet small{color:var(--ink-soft);font-size:13px;line-height:1.4}
@@ -289,19 +300,108 @@ body.typing #tabs, body.typing #grid{display:none}
 <div class="panel" id="panel">
   <div class="sheet">
     <h2>Grown-ups</h2>
-
+    <details class="sec" open>
+      <summary><b>1. Her stage</b><span>Which board she sees, and her name</span></summary>
     <div class="row">
       <span class="lbl">Stage</span>
       <div class="stages" id="stages"></div>
       <small>Move up when she is ready. Words she already knows never change place.</small>
     </div>
-
     <div class="row">
       <label for="nameIn">Child's name</label>
       <input type="text" id="nameIn" autocomplete="off">
     </div>
+    </details>
+    <details class="sec">
+      <summary><b>2. Listening and questions</b><span>What happens when people talk to her</span></summary>
+    <label class="check"><input type="checkbox" id="listenOn"> Listen to people talking to her</label>
+    <div class="row">
+      <label for="askSel">When a question is heard</label>
+      <select id="askSel">
+        <option value="any">Pop up big answers for any question</option>
+        <option value="name">Only when her name is said</option>
+        <option value="off">Do not pop up answers</option>
+      </select>
+    </div>
+    <div class="row">
+      <label for="favPage">When someone asks an open question, offer these</label>
+      <select id="favPage"></select>
+      <div class="favs" id="favList"></div>
+      <small id="favMsg">Tap up to six. They pop up in the order you pick them. Add her own words below and they show up here too.</small>
+    </div>
+    <div class="row">
+      <label for="qList">Questions page (Stage 3 and up)</label>
+      <textarea id="qList" rows="6" style="width:100%;font-size:16px;padding:8px;border-radius:10px;border:2px solid var(--line)"></textarea>
+      <small>One question per line. Keep it to 5 to 10 she would really ask. She taps one and it is spoken whole.</small>
+    </div>
+    </details>
+    <details class="sec">
+      <summary><b>3. Talking and voice</b><span>Sentences, voice, typing, grown-up wording</span></summary>
+    <label class="check"><input type="checkbox" id="sentOn"> Build a full sentence after her tap</label>
+    <label class="check"><input type="checkbox" id="olderOn"> Teen and adult wording (bathroom instead of potty, phone instead of teddy)</label>
+    <label class="check"><input type="checkbox" id="typeOn"> Show a typing line</label>
+    <div class="row">
+      <label for="voiceSel">Voice</label>
+      <div class="inline">
+        <select id="voiceSel"></select>
+        <button class="btn" id="voiceTry" type="button">Hear it</button>
+      </div>
+      <small id="voiceMsg">Voices come from this tablet. Add more in the tablet's own settings.</small>
+    </div>
+    <div class="row">
+      <label for="rateIn">Voice speed</label>
+      <input type="range" id="rateIn" min="0.6" max="1.2" step="0.05">
+    </div>
+    </details>
+    <details class="sec">
+      <summary><b>4. Words and pictures</b><span>Change a word, add her own, photo scenes</span></summary>
+    <h3>Change a word</h3>
+    <div class="row">
+      <label for="picWord">Pick the word</label>
+      <select id="picWord"></select>
+      <label for="wordName">Word shown and spoken</label>
+      <div class="inline">
+        <input type="text" id="wordName" autocomplete="off" maxlength="24">
+        <button class="btn" id="nameSave" type="button">Save word</button>
+        <button class="btn" id="nameReset" type="button">Original word</button>
+      </div>
+      <span class="lbl">Picture</span>
+      <div class="inline">
+        <button class="btn" id="picBtn" type="button">Choose photo</button>
+        <button class="btn" id="picReset" type="button">Use the drawing</button>
+      </div>
+      <input type="file" id="picFile" accept="image/*" hidden>
+      <small id="picMsg">Photos and word changes stay on this tablet.</small>
+    </div>
+    <h3>Add a word</h3>
+    <div class="row">
+      <div class="inline">
+        <input type="text" id="newWord" placeholder="New word" autocomplete="off" maxlength="24" aria-label="New word">
+        <select id="newPage" aria-label="Page for the new word"></select>
+        <button class="btn" id="addWord" type="button">Add</button>
+      </div>
+      <small>New words appear on their page at Stage 3 and up. Add a photo above.</small>
+      <div class="mine" id="mine"></div>
+    </div>
+    <h3>Photo scenes</h3>
+    <div class="row">
+      <small>A real photo from her life with spots she can touch. Each spot says its word.</small>
+      <div class="inline">
+        <button class="btn" id="scNew" type="button">New photo scene</button>
+      </div>
+      <input type="file" id="scFile" accept="image/*" hidden>
+      <div class="scenes-list" id="scList"></div>
+      <small id="scHint"></small>
+    </div>
+    </details>
+    <details class="sec">
+      <summary><b>5. Teaching helpers</b><span>Written words, glow, Show her button</span></summary>
     <label class="check"><input type="checkbox" id="wordsOn"> Show the written word big for 3 seconds when she taps (early reading)</label>
     <label class="check"><input type="checkbox" id="glowOn"> Light up her pictures as people talk to her</label>
+    <label class="check"><input type="checkbox" id="modelOn"> Show the Show her button on her screen</label>
+    </details>
+    <details class="sec">
+      <summary><b>6. Touch and child lock</b><span>Double taps, resting hands, keeping her in the talker</span></summary>
     <div class="row">
       <label for="repeatSel">Ignore extra taps (for double-tapping)</label>
       <select id="repeatSel">
@@ -331,86 +431,12 @@ body.typing #tabs, body.typing #grid{display:none}
       </select>
     </div>
     <label class="check"><input type="checkbox" id="kioskOn"> Child lock: fill the screen, keep it on, block swipes and the back button</label>
-    <label class="check"><input type="checkbox" id="listenOn"> Listen to people talking to her</label>
-    <div class="row">
-      <label for="askSel">When a question is heard</label>
-      <select id="askSel">
-        <option value="any">Pop up big answers for any question</option>
-        <option value="name">Only when her name is said</option>
-        <option value="off">Do not pop up answers</option>
-      </select>
+    <div class="inline">
+      <button class="btn" id="fullBtn" type="button">Full screen</button>
     </div>
-    <label class="check"><input type="checkbox" id="sentOn"> Build a full sentence after her tap</label>
-    <label class="check"><input type="checkbox" id="typeOn"> Show a typing line</label>
-    <label class="check"><input type="checkbox" id="olderOn"> Teen and adult wording (bathroom instead of potty, phone instead of teddy)</label>
-    <div class="row">
-      <label for="qList">Questions page (Stage 3 and up)</label>
-      <textarea id="qList" rows="6" style="width:100%;font-size:16px;padding:8px;border-radius:10px;border:2px solid var(--line)"></textarea>
-      <small>One question per line. Keep it to 5 to 10 she would really ask. She taps one and it is spoken whole.</small>
-    </div>
-    <div class="row">
-      <label for="voiceSel">Voice</label>
-      <div class="inline">
-        <select id="voiceSel"></select>
-        <button class="btn" id="voiceTry" type="button">Hear it</button>
-      </div>
-      <small id="voiceMsg">Voices come from this tablet. Add more in the tablet's own settings.</small>
-    </div>
-    <div class="row">
-      <label for="rateIn">Voice speed</label>
-      <input type="range" id="rateIn" min="0.6" max="1.2" step="0.05">
-    </div>
-
-    <h3>Change a word</h3>
-    <div class="row">
-      <label for="picWord">Pick the word</label>
-      <select id="picWord"></select>
-      <label for="wordName">Word shown and spoken</label>
-      <div class="inline">
-        <input type="text" id="wordName" autocomplete="off" maxlength="24">
-        <button class="btn" id="nameSave" type="button">Save word</button>
-        <button class="btn" id="nameReset" type="button">Original word</button>
-      </div>
-      <span class="lbl">Picture</span>
-      <div class="inline">
-        <button class="btn" id="picBtn" type="button">Choose photo</button>
-        <button class="btn" id="picReset" type="button">Use the drawing</button>
-      </div>
-      <input type="file" id="picFile" accept="image/*" hidden>
-      <small id="picMsg">Photos and word changes stay on this tablet.</small>
-    </div>
-
-    <h3>Photo scenes</h3>
-    <div class="row">
-      <small>A real photo from her life with spots she can touch. Each spot says its word.</small>
-      <div class="inline">
-        <button class="btn" id="scNew" type="button">New photo scene</button>
-      </div>
-      <input type="file" id="scFile" accept="image/*" hidden>
-      <div class="scenes-list" id="scList"></div>
-      <small id="scHint"></small>
-    </div>
-
-    <h3>Choices she is offered</h3>
-    <div class="row">
-      <label for="favPage">When someone asks an open question, offer these</label>
-      <select id="favPage"></select>
-      <div class="favs" id="favList"></div>
-      <small id="favMsg">Tap up to six. They pop up in the order you pick them. Add her own words below and they show up here too.</small>
-    </div>
-
-    <h3>Add a word</h3>
-    <div class="row">
-      <div class="inline">
-        <input type="text" id="newWord" placeholder="New word" autocomplete="off" maxlength="24" aria-label="New word">
-        <select id="newPage" aria-label="Page for the new word"></select>
-        <button class="btn" id="addWord" type="button">Add</button>
-      </div>
-      <small>New words appear on their page at Stage 3 and up. Add a photo above.</small>
-      <div class="mine" id="mine"></div>
-    </div>
-
-    <h3>Her progress</h3>
+    </details>
+    <details class="sec">
+      <summary><b>7. Her progress</b><span>Counts and a report for her therapist</span></summary>
     <div class="row">
       <label class="check"><input type="checkbox" id="logOn"> Keep a progress log on this tablet</label>
       <pre class="report" id="reportBox"></pre>
@@ -420,8 +446,9 @@ body.typing #tabs, body.typing #grid{display:none}
       </div>
       <small id="reportMsg">Counts only: which words, how many, how many questions answered. Nothing she hears is saved, and nothing leaves this tablet unless you copy it.</small>
     </div>
-
-    <h3>How to teach and use this</h3>
+    </details>
+    <details class="sec">
+      <summary><b>8. How to teach and use this</b><span>Daily steps, the six stages, every feature</span></summary>
     <div class="row">
       <b>Every day, at every stage</b>
       <ol class="coach">
@@ -434,7 +461,6 @@ body.typing #tabs, body.typing #grid{display:none}
         <li><b>Do not quiz.</b> Skip "show me eat." Use it in real moments: meals, play, bath, the car.</li>
         <li><b>Keep it in reach, always.</b> Signs, pointing and sounds still count too.</li>
       </ol>
-      <label class="check"><input type="checkbox" id="modelOn"> Show the Show her button on her screen</label>
 
       <b>The six stages</b>
       <ol class="coach">
@@ -467,13 +493,16 @@ body.typing #tabs, body.typing #grid{display:none}
       </ol>
       <small>The teaching steps come from the modeling and partner-training studies listed below. The Questions page, the meaning of "you" and the Stage 6 words each have their own studies in the list.</small>
     </div>
-
-    <h3>The research behind this</h3>
+    </details>
+    <details class="sec">
+      <summary><b>9. The research behind this</b><span>Every study the talker is built on</span></summary>
     <div class="row">
       <small>Why the talker works the way it does. Most studies in this field are small, so treat these as good bets, not guarantees. Share this list with her speech therapist.</small>
       <div class="research" id="research"></div>
     </div>
-
+    </details>
+    <details class="sec">
+      <summary><b>10. Check and fix</b><span>Test a sentence, see what is working</span></summary>
     <h3>Test</h3>
     <div class="row">
       <label for="testIn">Pretend someone said this</label>
@@ -482,11 +511,9 @@ body.typing #tabs, body.typing #grid{display:none}
         <button class="btn" id="testBtn" type="button">Hear it</button>
       </div>
     </div>
-    <div class="inline">
-      <button class="btn" id="fullBtn" type="button">Full screen</button>
-    </div>
     <div class="diag" id="diag"></div>
     <small>Nothing heard is saved. The last thing heard is forgotten after 30 seconds.</small>
+    </details>
     <button class="btn primary" id="closeBtn" type="button">Lock and close</button>
   </div>
 </div>
@@ -1015,7 +1042,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v30) ---'+
+      dbgText = '\n--- Listening check (v31) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nPaid listening on this tablet: '+usageText()+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
