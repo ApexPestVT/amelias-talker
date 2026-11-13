@@ -58,6 +58,17 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .heard b{color:var(--ink);font-weight:600}
 .heard.partial{font-style:italic}
 .heard.big{font-size:19px;white-space:normal;max-height:48px}
+.model{
+  flex:none;height:44px;padding:0 14px;border-radius:22px;border:2px solid var(--line);background:var(--bar);
+  font-size:14px;font-weight:700;color:var(--ink-soft);position:relative;overflow:hidden;
+}
+.model::after{content:"";position:absolute;inset:0;background:var(--describe);transform:scaleX(0);transform-origin:left;z-index:0}
+.model.holding::after{transform:scaleX(1);transition:transform 1s linear}
+.model span{position:relative;z-index:1}
+body.modeling .model{background:var(--ink);border-color:var(--ink);color:#fff}
+body.modeling .model::after{display:none}
+body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
+.coach{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:8px;font-size:15px;line-height:1.4}
 .lock{
   flex:none;width:44px;height:44px;border-radius:50%;border:2px solid var(--line);background:var(--bar);
   color:var(--ink-soft);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;
@@ -208,6 +219,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 <div class="strip">
   <button class="ear" id="earBtn" type="button" aria-label="Listening status"><span class="dot"></span><span id="earTxt">Starting</span></button>
   <div class="heard" id="heard">Nothing heard yet</div>
+  <button class="model" id="modelBtn" type="button" aria-label="Grown-ups: press and hold to show her words on her board"><span>Show her</span></button>
   <button class="lock" id="lockBtn" type="button" aria-label="Grown-ups: press and hold to unlock settings">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
   </button>
@@ -365,6 +377,22 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
       </div>
       <small>New words appear on their page at Stage 3 and up. Add a photo above.</small>
       <div class="mine" id="mine"></div>
+    </div>
+
+    <h3>How to teach with this</h3>
+    <div class="row">
+      <ol class="coach">
+        <li><b>Talk and tap.</b> Say your sentence out loud and tap one or two key words on her board as you say them. "Time to EAT."</li>
+        <li><b>Use Show her.</b> Hold the Show her button at the top for one second first. Your taps then speak the word and show it, but do not build a sentence and are not counted as her words. It turns itself off after 90 quiet seconds.</li>
+        <li><b>Stay one step ahead.</b> If she uses one word, show two: WANT + EAT.</li>
+        <li><b>Ask, then wait.</b> Count to five in your head before you help. Look at her, then at the board.</li>
+        <li><b>Answer every tap.</b> Even an accident gets a real response. She taps UP, you say "You want up!" and lift her.</li>
+        <li><b>Add a little.</b> She says EAT. You say and tap EAT + MORE.</li>
+        <li><b>Do not quiz.</b> Skip "show me eat." Use it in real moments: meals, play, bath, the car.</li>
+        <li><b>Keep it in reach, always.</b> Signs, pointing and sounds still count too.</li>
+      </ol>
+      <label class="check"><input type="checkbox" id="modelOn"> Show the Show her button on her screen</label>
+      <small>These steps come from the modeling and partner-training studies listed below.</small>
     </div>
 
     <h3>The research behind this</h3>
@@ -744,7 +772,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     {n:2, name:'2. More words',  note:'20 pictures'},
     {n:3, name:'3. Word pages',  note:'Adds people, food, feelings, places, things'}
   ];
-  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, repeat:0.8, hold:0, edge:0.05, favs:{}, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, repeat:0.8, hold:0, edge:0.05, favs:{}, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
@@ -763,6 +791,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
       if(typeof saved.kiosk==='boolean') state.kiosk=saved.kiosk;
       if(typeof saved.glow==='boolean') state.glow=saved.glow;
       if(typeof saved.words==='boolean') state.words=saved.words;
+      if(typeof saved.modelBtn==='boolean') state.modelBtn=saved.modelBtn;
       if(typeof saved.repeat==='number') state.repeat=saved.repeat;
       if(typeof saved.hold==='number') state.hold=saved.hold;
       if(typeof saved.edge==='number') state.edge=saved.edge;
@@ -770,7 +799,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -806,7 +835,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v22) ---'+
+      dbgText = '\n--- Listening check (v23) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nPaid listening on this tablet: '+usageText()+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1540,6 +1569,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   }
 
   function renderAll(){
+    $('modelBtn').hidden = !state.modelBtn;
     $('typeBar').hidden = !state.typing;
     $('heard').classList.toggle('big', state.typing);
     renderTabs(); renderGrid();
@@ -1550,6 +1580,25 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     state.taps.forEach(function(id){ var w = word(id); if(w) c.appendChild(picNode(w)); });
     var t = $('sayText'); t.textContent = text; t.classList.toggle('hint', !!hint);
   }
+  /* Show her (modeling): a grown-up taps her board while talking. Those taps teach; they are not her words. */
+  var modelTaps = [], modelT = null, modelHold = null, MODEL_IDLE_MS = 90000;
+  function modelIdle(){ clearTimeout(modelT); modelT = setTimeout(function(){ setModeling(false); }, MODEL_IDLE_MS); }
+  function setModeling(on){
+    state.modeling = !!on; modelTaps = [];
+    document.body.classList.toggle('modeling', state.modeling);
+    $('modelBtn').firstChild.textContent = state.modeling ? 'Showing her' : 'Show her';
+    $('modelBtn').setAttribute('aria-pressed', state.modeling ? 'true' : 'false');
+    clearTimeout(state.timer); state.taps = []; state.fresh = true;
+    renderBar(state.modeling ? 'Grown-up showing. Tap words as you say them.' : 'Tap a picture to talk', true);
+    if(state.modeling) modelIdle(); else clearTimeout(modelT);
+  }
+  (function(){
+    var b = $('modelBtn');
+    var end = function(){ clearTimeout(modelHold); b.classList.remove('holding'); };
+    b.addEventListener('pointerdown', function(e){ e.preventDefault(); b.classList.add('holding'); modelHold = setTimeout(function(){ end(); setModeling(!state.modeling); }, 1000); });
+    ['pointerup','pointerleave','pointercancel'].forEach(function(ev){ b.addEventListener(ev, end); });
+    b.addEventListener('keydown', function(e){ if(e.key==='Enter') setModeling(!state.modeling); });
+  })();
   var WORD_SHOW_MS = 3000;
   function showWord(el, label){
     if(!state.words || !el || el.classList.contains('spot')) return;     // photo spots already show their word
@@ -1566,6 +1615,15 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     if(state.taps[state.taps.length-1]!==id){ state.taps.push(id); if(state.taps.length>4) state.taps.shift(); }
     var w = word(id);
     renderBar(state.taps.map(function(t){return word(t).label;}).join(' + '), false);
+    if(state.modeling){                           // a grown-up is showing her: say and show the word, nothing more
+      clearTimeout(state.timer);
+      if(modelTaps[modelTaps.length-1]!==id){ modelTaps.push(id); if(modelTaps.length>4) modelTaps.shift(); }
+      state.taps = modelTaps.slice(); state.fresh = true;
+      renderBar('Showing: '+modelTaps.map(function(t){ return word(t).label; }).join(' + '), false);
+      speak(w.label); showWord(el, w.label); modelIdle();
+      if(!stay && w.page!=='core' && state.page!=='core') setTimeout(function(){ state.page='core'; renderTabs(); renderGrid(); }, 2200);
+      return;
+    }
     speak(w.label);                               // her own word, right away
     showWord(el, w.label);                        // and the written word, paired with the sound
     clearTimeout(state.timer);
@@ -1773,7 +1831,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   }
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
-    $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('wordsOn').checked = state.words; $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
+    $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('wordsOn').checked = state.words; $('modelOn').checked = state.modelBtn; $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
     hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderResearch(); renderVoices(); showDiag(); $('panel').classList.add('open');
   }
   function closePanel(){ $('panel').classList.remove('open'); }
@@ -1786,6 +1844,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   $('nameIn').addEventListener('input', function(){ state.name = this.value.trim(); save(); });
   $('sentOn').addEventListener('change', function(){ state.sentences = this.checked; save(); });
   $('listenOn').addEventListener('change', function(){ state.listen = this.checked; save(); applyListen(); });
+  $('modelOn').addEventListener('change', function(){ state.modelBtn = this.checked; save(); if(!state.modelBtn) setModeling(false); renderAll(); });
   $('wordsOn').addEventListener('change', function(){ state.words = this.checked; save(); });
   $('glowOn').addEventListener('change', function(){ state.glow = this.checked; save(); });
   $('repeatSel').addEventListener('change', function(){ state.repeat = +this.value; save(); });
