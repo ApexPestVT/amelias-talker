@@ -101,6 +101,7 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
 
 /* picture grid: positions never change (motor planning) */
 .grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(4,1fr);gap:10px}
+.grid.six{grid-template-columns:repeat(6,1fr)}
 .grid.fringe{grid-template-rows:none;grid-auto-rows:minmax(23%,1fr);overflow-y:auto;touch-action:pan-y}
 .key{
   border-radius:22px;border:4px solid;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
@@ -454,6 +455,13 @@ var CORE = [
   {id:'hurt', label:'hurt',     pic:'🤕', cat:'describe', s:2},
   {id:'like', label:'like',     pic:'❤️', cat:'social',   s:2}
 ];
+/* Stage 4 building words. They sit in their own column on the left, so the 20 home words keep their places. */
+var BUILD = [
+  {id:'i',   label:'I',   pic:'🙋', cat:'social', s:4},
+  {id:'you', label:'you', pic:'🫵', cat:'social', s:4},
+  {id:'it',  label:'it',  pic:'📦', cat:'thing',  s:4},
+  {id:'not', label:'not', pic:'🚫', cat:'stop',   s:4}
+];
 var PAGES = [
   {id:'core',     label:'Words',    pic:'💬'},
   {id:'people',   label:'People',   pic:'👪', cat:'social'},
@@ -500,7 +508,7 @@ function tpl(id, i){
   if(w && w.base && w.base!==w.label) t = t.replace(new RegExp('\\b'+w.base+'\\b','i'), w.label);
   return t.charAt(0).toUpperCase()+t.slice(1);
 }
-registerWords(CORE.map(function(w){ w.page='core'; return w; })); registerWords(FRINGE);
+registerWords(CORE.map(function(w){ w.page='core'; return w; })); registerWords(BUILD.map(function(w){ w.page='core'; w.build=1; return w; })); registerWords(FRINGE);
 
 var TPL = {
   want:  ['I want that.',          "I don't want that."],
@@ -620,7 +628,44 @@ function composeFringe(f, verbs, hasYes, hasNo, hasMore, q){
   return {sentence:polar(pos, neg, hasYes, hasNo), usedHeard:false};
 }
 /* taps: array of word ids in tap order. heard: raw text or ''. Returns {sentence, usedHeard}. */
+var IT = {
+  want:['I want it.', "I don't want it."], eat:['I want to eat it.', "I don't want to eat it."], drink:['I want to drink it.', "I don't want to drink it."],
+  play:['I want to play with it.', "I don't want to play with it."], look:['Look at it!', "I don't want to look at it."], like:['I like it.', "I don't like it."],
+  help:['I need help with it.', "I don't need help with it."], on:['Turn it on, please.', "Don't turn it on."], off:['Turn it off, please.', "Don't turn it off."],
+  done:['I am all done with it.', 'I am not done with it.'], stop:['Stop it, please.', 'Stop it, please.'], hurt:['It hurts.', 'It does not hurt.'],
+  up:['Put it up, please.', "Don't put it up."], down:['Put it down, please.', "Don't put it down."]
+};
+/* "you" turns her sentence toward the other person: a question or a request. */
+function youify(s){
+  var m;
+  if((m = /^I don't (.*)$/.exec(s))) return "You don't "+m[1];
+  if((m = /^I am not (.*)$/.exec(s))) return 'You are not '+m[1];
+  if((m = /^I want ([^.]*)\.$/.exec(s))) return 'Do you want '+m[1]+'?';
+  if((m = /^I like ([^.]*)\.$/.exec(s))) return 'Do you like '+m[1]+'?';
+  if((m = /^I am ([^.]*)\.$/.exec(s))) return 'Are you '+m[1]+'?';
+  if((m = /^I need help([^.,]*)(, please)?\.$/.exec(s))) return 'Can you help me'+m[1]+'?';
+  if((m = /^I need to ([^.]*)\.$/.exec(s))) return 'Do you need to '+m[1]+'?';
+  if((m = /^(Turn|Put) ([^.,]*), please\.$/.exec(s))) return 'Can you '+m[1].toLowerCase()+' '+m[2]+'?';
+  return s;
+}
+/* Building words (stage 4): I, you, it, not. */
+function composeBuild(taps, heard, name){
+  var hasYou = taps.indexOf('you')>=0, hasIt = taps.indexOf('it')>=0, hasNot = taps.indexOf('not')>=0, saidNo = taps.indexOf('no')>=0;
+  var rest = taps.filter(function(t){ return !(LOOKUP[t] && LOOKUP[t].build); });
+  if(!rest.length) return {sentence:'', usedHeard:false};            // only building words so far: nothing to add
+  if(hasNot && !saidNo) rest = ['no'].concat(rest);
+  var content = rest.filter(function(t){ return t!=='yes' && t!=='no' && t!=='more'; });
+  var anyPage = content.some(function(t){ return LOOKUP[t] && LOOKUP[t].page!=='core'; });
+  var v = content.length ? content[content.length-1] : null, out = null;
+  if(hasIt && !anyPage && v && IT[v] && rest.indexOf('more')<0) out = {sentence:polar(IT[v][0], IT[v][1], rest.indexOf('yes')>=0, rest.indexOf('no')>=0), usedHeard:false};
+  if(!out) out = compose(rest, heard, name);
+  var sen = out.sentence;
+  if(hasNot && !saidNo) sen = capFirst(sen.replace(/^No, /, ''));    // she built the "not" herself, so no extra "No,"
+  if(hasYou) sen = youify(sen);
+  return {sentence:sen, usedHeard:out.usedHeard};
+}
 function compose(taps, heard, name){
+  if(taps.some(function(t){ return LOOKUP[t] && LOOKUP[t].build; })) return composeBuild(taps, heard, name);
   var hasYes = taps.indexOf('yes')>=0, hasNo = taps.indexOf('no')>=0, hasMore = taps.indexOf('more')>=0;
   var content = taps.filter(function(t){return t!=='yes'&&t!=='no'&&t!=='more';});
   var q = heard ? parseHeard(heard, name) : null;
@@ -708,7 +753,7 @@ function knownWord(tok){
   return hit;
 }
 function wordSentence(w){
-  return w.page==='core' ? tpl(w.id, 0) : composeFringe(w, [], false, false, false, null).sentence;
+  return w.page==='core' ? (TPL[w.id] ? tpl(w.id, 0) : capFirst(w.label)+'.') : composeFringe(w, [], false, false, false, null).sentence;
 }
 function capFirst(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 function choiceOptions(t){
@@ -782,7 +827,7 @@ function isDrink(w){
   var re = /^(milk|juice|water|soda|pop|tea|lemonade|smoothie|shake|milkshake|cocoa|hot chocolate|formula|bottle|drink|cider|punch|coffee)$|\b(milk|juice|water|tea|soda|smoothie|shake)$/;
   return re.test(l) || re.test(b);
 }
-if(typeof module!=='undefined') module.exports = {openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
+if(typeof module!=='undefined') module.exports = {BUILD:BUILD, youify:youify, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
 </script>
 
 <script>
@@ -792,7 +837,8 @@ if(typeof module!=='undefined') module.exports = {openKind:openKind, isDrink:isD
   var STAGES = [
     {n:1, name:'1. First words', note:'10 pictures'},
     {n:2, name:'2. More words',  note:'20 pictures'},
-    {n:3, name:'3. Word pages',  note:'Adds people, food, feelings, places, things'}
+    {n:3, name:'3. Word pages',  note:'Adds people, food, feelings, places, things'},
+    {n:4, name:'4. Building sentences', note:'Adds I, you, it, not in a new left column'}
   ];
   var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
@@ -808,7 +854,7 @@ if(typeof module!=='undefined') module.exports = {openKind:openKind, isDrink:isD
       if(typeof saved.listen==='boolean') state.listen=saved.listen;
       if(saved.rate) state.rate=+saved.rate;
       if(typeof saved.voiceName==='string') state.voiceName=saved.voiceName;
-      if(saved.stage>=1) state.stage=Math.min(3, +saved.stage);
+      if(saved.stage>=1) state.stage=Math.min(4, +saved.stage);
       if(typeof saved.typing==='boolean') state.typing=saved.typing;
       if(typeof saved.kiosk==='boolean') state.kiosk=saved.kiosk;
       if(typeof saved.glow==='boolean') state.glow=saved.glow;
@@ -858,7 +904,7 @@ if(typeof module!=='undefined') module.exports = {openKind:openKind, isDrink:isD
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v25) ---'+
+      dbgText = '\n--- Listening check (v26) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nPaid listening on this tablet: '+usageText()+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -953,7 +999,7 @@ if(typeof module!=='undefined') module.exports = {openKind:openKind, isDrink:isD
     scenes.forEach(function(sc){ add(sc.name); (sc.spots||[]).forEach(function(sp){ add(sp.label); }); });
     add('Hi! This is my voice.');
     /* then every two-picture sentence: a home word with a page word ("eat" + "apple"), and the "no" form of each */
-    var home = CORE.filter(function(w){ return w.id!=='yes' && w.id!=='no' && w.id!=='more'; });
+    var home = CORE.filter(function(w){ return w.id!=='yes' && w.id!=='no' && w.id!=='more'; });   // building words are left out here: too many mixes to save ahead
     allWords().filter(function(w){ return w.page!=='core'; }).forEach(function(f){
       home.forEach(function(h){ [[h.id, f.id], ['no', h.id, f.id]].forEach(function(tp){ try{ var o = compose(tp, '', state.name); if(o && o.sentence) add(o.sentence); }catch(e){} }); });
     });
@@ -1335,7 +1381,7 @@ if(typeof module!=='undefined') module.exports = {openKind:openKind, isDrink:isD
   }
 
   /* ---------- words on screen ---------- */
-  function allWords(){ return CORE.concat(FRINGE, custom); }
+  function allWords(){ return CORE.concat(BUILD, FRINGE, custom); }
   function word(id){ return LOOKUP[id]; }
   function picNode(w, cls){
     var n;
@@ -1400,17 +1446,20 @@ if(typeof module!=='undefined') module.exports = {openKind:openKind, isDrink:isD
     if(state.page==='photos' && !scenes.length) state.page = 'core';
     if(state.stage < 3 && state.page!=='photos') state.page = 'core';
     g.classList.toggle('photos', state.page==='photos');
+    g.classList.toggle('six', state.stage >= 4 && state.page==='core');
     g.classList.toggle('fringe', state.page!=='core' && state.page!=='photos');
     if(state.page==='photos'){ renderPhotos(g); return; }
     if(state.page==='core'){
-      CORE.forEach(function(w){
+      CORE.forEach(function(w, i){
+        if(state.stage >= 4 && i % 5 === 0 && BUILD[i/5]) g.appendChild(keyFor(BUILD[i/5]));   // building words lead each row
         var b = keyFor(w);
         if(w.s > state.stage){ b.classList.add('blank'); b.tabIndex = -1; b.setAttribute('aria-hidden','true'); }
         g.appendChild(b);
       });
     } else {
       var pg = PAGES.filter(function(p){ return p.id===state.page; })[0];
-      FRINGE.concat(custom).filter(function(w){ return w.page===state.page; }).forEach(function(w){ g.appendChild(keyFor(w, pg.cat)); });
+      var only = (openOnly && openOnly.page===state.page && Date.now() < openOnly.until) ? openOnly.ids : null;   // a drink question shows just the drinks
+      FRINGE.concat(custom).filter(function(w){ return w.page===state.page && (!only || only[w.id]); }).forEach(function(w){ g.appendChild(keyFor(w, pg.cat)); });
     }
   }
   function renderTabs(){
@@ -1424,7 +1473,7 @@ if(typeof module!=='undefined') module.exports = {openKind:openKind, isDrink:isD
       var l = document.createElement('span'); l.textContent = p.label;
       b.appendChild(i); b.appendChild(l);
       onPress(b, function(){
-        state.page = p.id; if(p.id==='photos' && scenes.length!==1) openScene = null; renderTabs(); renderGrid();
+        state.page = p.id; openOnly = null; if(p.id==='photos' && scenes.length!==1) openScene = null; renderTabs(); renderGrid();   // pressing a tab always shows the whole page
         if(!state.fresh && state.taps.length){ clearTimeout(state.timer); state.timer = setTimeout(finish, PAGE_WAIT); }
       }, {noRepeatGuard:true});
       t.appendChild(b);
@@ -1808,7 +1857,7 @@ if(typeof module!=='undefined') module.exports = {openKind:openKind, isDrink:isD
     if(Date.now() < tapBlockUntil) return;        // a stray second tap right after a pop-up answer
     el.classList.add('hit'); setTimeout(function(){ el.classList.remove('hit'); }, 160);
     if(state.fresh){ state.taps=[]; state.fresh=false; }
-    if(state.taps[state.taps.length-1]!==id){ state.taps.push(id); if(state.taps.length>4) state.taps.shift(); }
+    if(state.taps[state.taps.length-1]!==id){ state.taps.push(id); if(state.taps.length>(state.stage>=4?6:4)) state.taps.shift(); }
     var w = word(id);
     renderBar(state.taps.map(function(t){return word(t).label;}).join(' + '), false);
     if(state.modeling){                           // a grown-up is showing her: say and show the word, nothing more
@@ -1940,7 +1989,7 @@ if(typeof module!=='undefined') module.exports = {openKind:openKind, isDrink:isD
   }
   /* "What do you want to eat?" -> the Food words. At Stage 3 her board flips to that page.
      Before Stage 3 she has no pages yet, so up to six of those words pop up as big choices. */
-  var pageT = null;
+  var pageT = null, openOnly = null;
   /* The words offered for an open question: the grown-up's picks in their order, else her added words, then the built-in ones. */
   function offered(page){
     var all = custom.concat(FRINGE).filter(function(w){ return w.page===page; });
@@ -1983,8 +2032,9 @@ if(typeof module!=='undefined') module.exports = {openKind:openKind, isDrink:isD
     }
     if(!words.length) return;
     if(state.stage >= 3){
+      openOnly = null;
+      if(kind){ openOnly = {page:page, until:Date.now()+25000, ids:{}}; custom.concat(FRINGE).filter(function(w){ return w.page===page && fits(w); }).forEach(function(w){ openOnly.ids[w.id] = 1; }); }
       state.page = page; renderTabs(); renderGrid();
-      if(kind) words.forEach(function(w){ var k = $('grid').querySelector('.key[aria-label="'+String(w.label).replace(/"/g,'')+'"]'); if(k) glowOne(k); });
       plogAdd('asked', 'open'); openAskUntil = Date.now()+25000;
       glowOne($('tabs').querySelector('[data-page="'+page+'"]'));
       clearTimeout(pageT);
