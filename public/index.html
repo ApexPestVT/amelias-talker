@@ -522,6 +522,7 @@ body.typing #tabs, body.typing #grid{display:none}
       <b>What the talker does by itself</b>
       <ol class="coach">
         <li><b>It listens.</b> No button. When someone asks your child a yes or no question, a this-or-that question, or "what do you want to drink?", big answers pop up. Set this under "When a question is heard".</li>
+        <li><b>It knows color questions.</b> "What color do you want?" brings up red, blue and yellow at every stage. If the person names the colors ("red or green?"), it offers those instead.</li>
         <li><b>It can ask an AI for help.</b> Off by default. Turn on "Use AI for harder questions" and questions the rules miss, like "how was school?", get answer buttons matched to the stage. Only the words heard are sent.</li>
         <li><b>It glows.</b> As people talk, the pictures for the words they say light up on the board. That shows where words live without anyone pointing.</li>
         <li><b>It shows the written word</b> for 3 seconds on every tap, so the spelling is seen with the sound.</li>
@@ -989,6 +990,20 @@ function detectQuestion(text, name){
   return null;
 }
 /* Open questions ("what do you want to eat?") point at a page of words. Returns a page id or null. */
+/* "What color do you want?" / "Which color?" at any stage: offer the three primary colors. */
+var COLORS = [{id:'color:red', label:'red', pic:'🔴'}, {id:'color:blue', label:'blue', pic:'🔵'}, {id:'color:yellow', label:'yellow', pic:'🟡'}];
+function detectColorQuestion(text, name){
+  var t = clean(text, name);
+  if(!/\bcolou?rs?\b/.test(t)) return null;
+  if(!/\b(what|which|pick|choose|favorite|favourite)\b/.test(t)) return null;
+  if(/\b(favorite|favourite)\b/.test(t)) return 'fav';
+  if(/\b(want|like|pick|choose|need)\b/.test(t)) return 'want';
+  if(/\bcolou?r (is|are|was)\b/.test(t)) return 'is';
+  return 'plain';
+}
+function colorSentence(frame, label){
+  return frame==='fav' ? 'My favorite color is '+label+'.' : frame==='want' ? 'I want '+label+'.' : frame==='is' ? 'It is '+label+'.' : capFirst(label)+'.';
+}
 function detectOpenQuestion(text, name){
   var t = clean(text, name); if(!t) return null;
   if(/\bhow\b.*\b(feel|feeling)\b/.test(t) || /\bhow are you\b/.test(t) || /\b(what's|whats|what is) (wrong|the matter)\b/.test(t)) return 'feelings';
@@ -1008,7 +1023,7 @@ function isDrink(w){
   var re = /^(milk|juice|water|soda|pop|tea|lemonade|smoothie|shake|milkshake|cocoa|hot chocolate|formula|bottle|drink|cider|punch|coffee)$|\b(milk|juice|water|tea|soda|smoothie|shake)$/;
   return re.test(l) || re.test(b);
 }
-if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD, literal:literal, MORE6:MORE6, QUESTIONS_DEFAULT:QUESTIONS_DEFAULT, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
+if(typeof module!=='undefined') module.exports = {detectColorQuestion:detectColorQuestion, colorSentence:colorSentence, COLORS:COLORS, setOlder:setOlder, BUILD:BUILD, literal:literal, MORE6:MORE6, QUESTIONS_DEFAULT:QUESTIONS_DEFAULT, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
 </script>
 
 <script>
@@ -1094,7 +1109,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v37) ---'+
+      dbgText = '\n--- Listening check (v38) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -2338,6 +2353,15 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     $('ask').hidden = false;
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
   }
+  function showColors(text, frame){
+    var box = $('askOpts'); box.textContent = ''; box.classList.remove('many');
+    $('askQ').textContent = clean(text, state.name)+'?';
+    COLORS.forEach(function(c){ box.appendChild(askKey(c, c.label, 'thing', colorSentence(frame, c.label), [])); });
+    askKind = 'choice'; plogAdd('asked', 'choice');
+    askDone = false; $('askSkip').style.visibility = '';
+    $('ask').hidden = false;
+    clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
+  }
   function askKey(w, label, cat, sentence, ids){
     var b = document.createElement('button');
     b.type = 'button'; b.className = 'key '+cat; b.setAttribute('aria-label', label);
@@ -2352,6 +2376,8 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     if(!state.fresh && state.taps.length){ pendingQ = {text:text, at:Date.now()}; return; }   // mid-message: ask right after
     if(state.ask==='name' && state.name && !nameHeard(text, state.name)) return;
     var q = detectQuestion(text, state.name);
+    var col = (!q || q.kind!=='choice') ? detectColorQuestion(text, state.name) : null;   // named choices ("red or blue?") win over the standard three
+    if(col){ showColors(text, col); return; }
     if(smartWanted(text, q)){ smartAsk(text, q); return; }             // the rules are unsure: let the AI try first, rules stay as the fallback
     showAsk(text, q);
   }
