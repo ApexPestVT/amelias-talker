@@ -98,6 +98,14 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .key .pic{font-size:min(8vh,10vw);line-height:1}
 .key img.pic{height:62%;max-width:92%;aspect-ratio:1;object-fit:cover;border-radius:14px;font-size:0}
 .key .lab{font-size:min(3.2vh,3.6vw);font-weight:700;line-height:1.1;text-align:center}
+.key{position:relative}
+/* early reading: the written word grows out of the small label, holds 3 seconds, then fades. Slow and steady, never a flash. */
+.t2l{position:absolute;left:4%;right:4%;bottom:4%;height:38%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.97);
+  border-radius:14px;font-weight:700;font-size:min(6vh,5.4vw);line-height:1.02;color:var(--ink);text-align:center;pointer-events:none;
+  opacity:0;transform:scale(.45);transform-origin:50% 85%;transition:opacity .35s ease, transform .35s ease;box-shadow:0 2px 10px rgba(22,34,58,.25)}
+.t2l.long{font-size:min(5vh,4.4vw)}
+.t2l.in{opacity:1;transform:scale(1)}
+@media (prefers-reduced-motion:reduce){.t2l{transition:opacity .35s ease;transform:none}}
 .key.hit{transform:scale(.93);filter:brightness(.93)}
 .key.pressing{filter:brightness(.9)}
 /* Glow-along: a slow, steady halo. Never flashes. */
@@ -255,6 +263,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
       <label for="nameIn">Child's name</label>
       <input type="text" id="nameIn" autocomplete="off">
     </div>
+    <label class="check"><input type="checkbox" id="wordsOn"> Show the written word big for 3 seconds when she taps (early reading)</label>
     <label class="check"><input type="checkbox" id="glowOn"> Light up her pictures as people talk to her</label>
     <div class="row">
       <label for="repeatSel">Ignore extra taps (for double-tapping)</label>
@@ -735,7 +744,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     {n:2, name:'2. More words',  note:'20 pictures'},
     {n:3, name:'3. Word pages',  note:'Adds people, food, feelings, places, things'}
   ];
-  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, repeat:0.8, hold:0, edge:0.05, favs:{}, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, repeat:0.8, hold:0, edge:0.05, favs:{}, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
@@ -753,6 +762,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
       if(typeof saved.typing==='boolean') state.typing=saved.typing;
       if(typeof saved.kiosk==='boolean') state.kiosk=saved.kiosk;
       if(typeof saved.glow==='boolean') state.glow=saved.glow;
+      if(typeof saved.words==='boolean') state.words=saved.words;
       if(typeof saved.repeat==='number') state.repeat=saved.repeat;
       if(typeof saved.hold==='number') state.hold=saved.hold;
       if(typeof saved.edge==='number') state.edge=saved.edge;
@@ -760,7 +770,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -796,7 +806,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v21) ---'+
+      dbgText = '\n--- Listening check (v22) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nPaid listening on this tablet: '+usageText()+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1540,6 +1550,15 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     state.taps.forEach(function(id){ var w = word(id); if(w) c.appendChild(picNode(w)); });
     var t = $('sayText'); t.textContent = text; t.classList.toggle('hint', !!hint);
   }
+  var WORD_SHOW_MS = 3000;
+  function showWord(el, label){
+    if(!state.words || !el || el.classList.contains('spot')) return;     // photo spots already show their word
+    var old = el.querySelector('.t2l'); if(old) old.remove();
+    var t = document.createElement('span'); t.className = 't2l'+(String(label).length > 7 ? ' long' : ''); t.textContent = label; t.setAttribute('aria-hidden','true');
+    el.appendChild(t);
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ t.classList.add('in'); }); });
+    setTimeout(function(){ t.classList.remove('in'); setTimeout(function(){ if(t.parentNode) t.remove(); }, 400); }, WORD_SHOW_MS);
+  }
   function tap(id, el, stay){
     if(Date.now() < tapBlockUntil) return;        // a stray second tap right after a pop-up answer
     el.classList.add('hit'); setTimeout(function(){ el.classList.remove('hit'); }, 160);
@@ -1548,10 +1567,11 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     var w = word(id);
     renderBar(state.taps.map(function(t){return word(t).label;}).join(' + '), false);
     speak(w.label);                               // her own word, right away
+    showWord(el, w.label);                        // and the written word, paired with the sound
     clearTimeout(state.timer);
     state.timer = setTimeout(finish, Math.max(COMPOSE_WAIT, state.repeat*1000 + 1500));
     if(!stay && w.page!=='core' && state.page!=='core'){   // back to the home words after a page word
-      setTimeout(function(){ state.page='core'; renderTabs(); renderGrid(); }, 350);
+      setTimeout(function(){ state.page='core'; renderTabs(); renderGrid(); }, state.words ? 2200 : 350);
     }
   }
   function finish(){
@@ -1753,7 +1773,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   }
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
-    $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
+    $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('wordsOn').checked = state.words; $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
     hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderResearch(); renderVoices(); showDiag(); $('panel').classList.add('open');
   }
   function closePanel(){ $('panel').classList.remove('open'); }
@@ -1766,6 +1786,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   $('nameIn').addEventListener('input', function(){ state.name = this.value.trim(); save(); });
   $('sentOn').addEventListener('change', function(){ state.sentences = this.checked; save(); });
   $('listenOn').addEventListener('change', function(){ state.listen = this.checked; save(); applyListen(); });
+  $('wordsOn').addEventListener('change', function(){ state.words = this.checked; save(); });
   $('glowOn').addEventListener('change', function(){ state.glow = this.checked; save(); });
   $('repeatSel').addEventListener('change', function(){ state.repeat = +this.value; save(); });
   $('holdSel').addEventListener('change', function(){ state.hold = +this.value; save(); });
