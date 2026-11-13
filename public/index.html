@@ -785,8 +785,9 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v18) ---'+
+      dbgText = '\n--- Listening check (v20) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
+        '\nPaid listening on this tablet: '+usageText()+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
         '\nLast words back: '+(d.lastText||'none')+(d.echo?' ('+d.echo+' ignored as her own voice)':'')+
@@ -959,7 +960,35 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   var cloud = { on:false, starting:false, ctx:null, stream:null, src:null, node:null, ws:null, opening:false, ring:[],
                 lastVoice:0, backoff:0, openedAt:0, usedMs:0, provider:'', dgBuf:'',
                 dbg:{level:0, peak:0, chunks:0, sent:0, skipped:0, msgs:{}, last:'', lastText:'', echo:0, closed:''} };
-  var VOICE_RMS = 0.012, QUIET_HANGUP = 20000, PRE_ROLL = 14, RING_MAX = 60;
+  var VOICE_RMS = 0.012, QUIET_HANGUP = 10000, PRE_ROLL = 14, RING_MAX = 60;
+  /* What the paid listening actually costs: connected time is what the speech service bills. Kept per day on this tablet. */
+  function dayKey(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+  function readUsage(){ try{ return JSON.parse(localStorage.getItem('talker-usage')||'{}') || {}; }catch(e){ return {}; } }
+  function addUsage(ms){
+    if(!(ms > 0)) return;
+    try{
+      var u = readUsage(), k = dayKey(new Date()); u[k] = (u[k]||0) + ms;
+      var keys = Object.keys(u).sort(); while(keys.length > 70){ delete u[keys.shift()]; }
+      localStorage.setItem('talker-usage', JSON.stringify(u));
+    }catch(e){}
+  }
+  function hourRate(){
+    var p = String(cloud.provider||'');
+    if(/deepgram/.test(p)) return 0.46;
+    if(/whisper/.test(p)) return 0.30;
+    return 0.15;
+  }
+  function usageText(){
+    var u = readUsage(), now = new Date(), today = dayKey(now), month = today.slice(0,7), live = cloud.openedAt ? Date.now()-cloud.openedAt : 0;
+    var t = (u[today]||0) + live, m = live, days = 0;
+    Object.keys(u).forEach(function(k){ if(k.slice(0,7)===month){ m += u[k]; days++; } });
+    if(!days && live) days = 1;
+    var rate = hourRate(), cost = function(ms){ return '$'+(ms/3600000*rate).toFixed(2); };
+    var mins = function(ms){ return ms < 5400000 ? Math.round(ms/60000)+' min' : (ms/3600000).toFixed(1)+' hours'; };
+    var perDay = days ? m/days : 0;
+    return 'today '+mins(t)+' ('+cost(t)+'), this month '+mins(m)+' ('+cost(m)+') over '+days+' day'+(days===1?'':'s')+
+           '. At this pace a full month is about '+cost(perDay*30)+'. Rate used: $'+rate.toFixed(2)+' an hour.';
+  }
   function cloudNote(t){
     var mins = Math.round((cloud.usedMs + (cloud.openedAt ? Date.now()-cloud.openedAt : 0))/6000)/10;
     diag.cloud = cloud.provider+', '+t+'. Used '+mins+' min since the app opened.'; showDiag();
@@ -1026,7 +1055,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
       ws.onerror = function(){ fails++; };
       ws.onclose = function(ev){
         if(cloud.ws!==ws) return;
-        if(cloud.openedAt){ cloud.usedMs += Date.now()-cloud.openedAt; cloud.openedAt = 0; }
+        if(cloud.openedAt){ addUsage(Date.now()-cloud.openedAt); cloud.usedMs += Date.now()-cloud.openedAt; cloud.openedAt = 0; }
         cloud.ws = null; cloud.opening = false;
         cloud.dbg.closed = 'code '+ev.code+(ev.reason?' '+ev.reason:'');
         if(ev.code===1000 || ev.code===1005) cloudNote('the service closed the connection ('+cloud.dbg.closed+')');
@@ -1039,7 +1068,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   }
   function cloudHangup(note){
     var ws = cloud.ws; if(!ws) return;
-    if(cloud.openedAt){ cloud.usedMs += Date.now()-cloud.openedAt; cloud.openedAt = 0; }
+    if(cloud.openedAt){ addUsage(Date.now()-cloud.openedAt); cloud.usedMs += Date.now()-cloud.openedAt; cloud.openedAt = 0; }
     cloud.ws = null; cloud.opening = false;
     try{ ws.send(JSON.stringify({type: cloud.provider==='deepgram' ? 'CloseStream' : 'Terminate'})); }catch(e){}
     try{ ws.close(1000); }catch(e){}
