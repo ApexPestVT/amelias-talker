@@ -98,8 +98,9 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
 .tabs{flex:none;display:flex;gap:8px;overflow-x:auto;touch-action:pan-x}
 .tab{flex:1 0 auto;white-space:nowrap;min-width:84px;min-height:48px;border-radius:14px;border:3px solid var(--line);background:var(--bar);font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;padding:4px 8px}
 .tab.sel{background:var(--ink);color:#fff;border-color:var(--ink)}
-.tabs.many{gap:6px}
-.tabs.many .tab{min-width:0;padding:4px 6px;font-size:15px}
+.tabs{padding:0 max(0px, calc(var(--edge, 0px) - 12px))}
+.tabs.many{gap:4px}
+.tabs.many .tab{min-width:0;padding:4px 3px;font-size:14px}
 .tabs.many .tab span[aria-hidden]{display:none}
 
 /* picture grid: positions never change (motor planning) */
@@ -128,6 +129,8 @@ body.typing #tabs, body.typing #grid{display:none}
 .key.blank{visibility:hidden}
 .key .pic{font-size:min(8vh,10vw);line-height:1}
 .key img.pic{height:62%;max-width:92%;aspect-ratio:1;object-fit:cover;border-radius:14px;font-size:0}
+.key img.pic[data-drawn]{height:min(10.5vh,12vw);object-fit:contain;border-radius:0}
+.chips img[data-drawn]{height:1.15em;vertical-align:middle}
 .key .lab{font-size:min(3.2vh,3.6vw);font-weight:700;line-height:1.1;text-align:center}
 .key{position:relative}
 /* early reading: the written word grows out of the small label, holds 3 seconds, then fades. Slow and steady, never a flash. */
@@ -205,12 +208,12 @@ body.typing #tabs, body.typing #grid{display:none}
 .sheet h3{margin:0;font-size:16px;border-top:2px solid var(--line);padding-top:14px}
 .sec{border:2px solid var(--line);border-radius:14px;padding:0 14px}
 .sec[open]{padding-bottom:14px}
-.sec summary{list-style:none;cursor:pointer;display:flex;flex-direction:column;gap:2px;padding:14px 28px 14px 0;position:relative;min-height:48px;justify-content:center}
-.sec summary::-webkit-details-marker{display:none}
-.sec summary b{font-size:18px}
-.sec summary span{font-size:14px;color:#5b6478}
-.sec summary::after{content:'+';position:absolute;right:2px;top:50%;transform:translateY(-50%);font-size:26px;font-weight:700;color:#5b6478}
-.sec[open] summary::after{content:'–'}
+.sec > summary{list-style:none;cursor:pointer;display:flex;flex-direction:column;gap:2px;padding:14px 28px 14px 0;position:relative;min-height:48px;justify-content:center}
+.sec > summary::-webkit-details-marker{display:none}
+.sec > summary b{font-size:18px}
+.sec > summary span{font-size:14px;color:#5b6478}
+.sec > summary::after{content:'+';position:absolute;right:2px;top:50%;transform:translateY(-50%);font-size:26px;font-weight:700;color:#5b6478}
+.sec[open] > summary::after{content:'–'}
 .sec[open] > *:not(summary){margin-top:14px}
 .sec > .check{display:flex}
 #closeBtn{position:sticky;bottom:0;flex:none;box-shadow:0 0 0 20px var(--bar)}
@@ -250,7 +253,7 @@ body.typing #tabs, body.typing #grid{display:none}
 <div class="strip">
   <button class="ear" id="earBtn" type="button" aria-label="Listening status"><span class="dot"></span><span id="earTxt">Starting</span></button>
   <div class="heard" id="heard">Nothing heard yet</div>
-  <button class="model" id="modelBtn" type="button" aria-label="Grown-ups: press and hold to show her words on her board"><span>Show her</span></button>
+  <button class="model" id="modelBtn" type="button" aria-label="Grown-ups: press and hold to show words on the child's board"><span>Show me</span></button>
   <button class="lock" id="lockBtn" type="button" aria-label="Grown-ups: press and hold to unlock settings">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
   </button>
@@ -294,18 +297,18 @@ body.typing #tabs, body.typing #grid{display:none}
     <button class="btn" id="scSpotDel" type="button">Remove spot</button>
     <button class="btn" id="scDelete" type="button">Delete photo</button>
   </div>
-  <small id="scMsg">Tap anything in the photo she would want to talk about, then type its word. Drag a circle to move it.</small>
+  <small id="scMsg">Tap anything in the photo your child would want to talk about, then type its word. Drag a circle to move it.</small>
 </div>
 
 <div class="panel" id="panel">
   <div class="sheet">
     <h2>Grown-ups</h2>
     <details class="sec" open>
-      <summary><b>1. Her stage</b><span>Which board she sees, and her name</span></summary>
+      <summary><b>1. Stage and name</b><span>Which board your child sees, and their name</span></summary>
     <div class="row">
       <span class="lbl">Stage</span>
       <div class="stages" id="stages"></div>
-      <small>Move up when she is ready. Words she already knows never change place.</small>
+      <small>Move up when your child is ready. Words already learned never change place.</small>
     </div>
     <div class="row">
       <label for="nameIn">Child's name</label>
@@ -313,13 +316,13 @@ body.typing #tabs, body.typing #grid{display:none}
     </div>
     </details>
     <details class="sec">
-      <summary><b>2. Listening and questions</b><span>What happens when people talk to her</span></summary>
-    <label class="check"><input type="checkbox" id="listenOn"> Listen to people talking to her</label>
+      <summary><b>2. Listening and questions</b><span>What happens when people talk to your child</span></summary>
+    <label class="check"><input type="checkbox" id="listenOn"> Listen to people talking to your child</label>
     <div class="row">
       <label for="askSel">When a question is heard</label>
       <select id="askSel">
         <option value="any">Pop up big answers for any question</option>
-        <option value="name">Only when her name is said</option>
+        <option value="name">Only when the child's name is said</option>
         <option value="off">Do not pop up answers</option>
       </select>
     </div>
@@ -327,17 +330,17 @@ body.typing #tabs, body.typing #grid{display:none}
       <label for="favPage">When someone asks an open question, offer these</label>
       <select id="favPage"></select>
       <div class="favs" id="favList"></div>
-      <small id="favMsg">Tap up to six. They pop up in the order you pick them. Add her own words below and they show up here too.</small>
+      <small id="favMsg">Tap up to six. They pop up in the order you pick them. Add your child's own words below and they show up here too.</small>
     </div>
     <div class="row">
       <label for="qList">Questions page (Stage 3 and up)</label>
       <textarea id="qList" rows="6" style="width:100%;font-size:16px;padding:8px;border-radius:10px;border:2px solid var(--line)"></textarea>
-      <small>One question per line. Keep it to 5 to 10 she would really ask. She taps one and it is spoken whole.</small>
+      <small>One question per line. Keep it to 5 to 10 your child would really ask. One tap says the whole question.</small>
     </div>
     </details>
     <details class="sec">
       <summary><b>3. Talking and voice</b><span>Sentences, voice, typing, grown-up wording</span></summary>
-    <label class="check"><input type="checkbox" id="sentOn"> Build a full sentence after her tap</label>
+    <label class="check"><input type="checkbox" id="sentOn"> Build a full sentence after a tap</label>
     <label class="check"><input type="checkbox" id="olderOn"> Teen and adult wording (bathroom instead of potty, phone instead of teddy)</label>
     <label class="check"><input type="checkbox" id="typeOn"> Show a typing line</label>
     <div class="row">
@@ -354,7 +357,7 @@ body.typing #tabs, body.typing #grid{display:none}
     </div>
     </details>
     <details class="sec">
-      <summary><b>4. Words and pictures</b><span>Change a word, add her own, photo scenes</span></summary>
+      <summary><b>4. Words and pictures</b><span>Change a word, add new ones, photo scenes</span></summary>
     <h3>Change a word</h3>
     <div class="row">
       <label for="picWord">Pick the word</label>
@@ -385,7 +388,7 @@ body.typing #tabs, body.typing #grid{display:none}
     </div>
     <h3>Photo scenes</h3>
     <div class="row">
-      <small>A real photo from her life with spots she can touch. Each spot says its word.</small>
+      <small>A real photo from your child's life with spots to touch. Each spot says its word.</small>
       <div class="inline">
         <button class="btn" id="scNew" type="button">New photo scene</button>
       </div>
@@ -395,13 +398,13 @@ body.typing #tabs, body.typing #grid{display:none}
     </div>
     </details>
     <details class="sec">
-      <summary><b>5. Teaching helpers</b><span>Written words, glow, Show her button</span></summary>
-    <label class="check"><input type="checkbox" id="wordsOn"> Show the written word big for 3 seconds when she taps (early reading)</label>
-    <label class="check"><input type="checkbox" id="glowOn"> Light up her pictures as people talk to her</label>
-    <label class="check"><input type="checkbox" id="modelOn"> Show the Show her button on her screen</label>
+      <summary><b>5. Teaching helpers</b><span>Written words, glow, Show me button</span></summary>
+    <label class="check"><input type="checkbox" id="wordsOn"> Show the written word big for 3 seconds on every tap (early reading)</label>
+    <label class="check"><input type="checkbox" id="glowOn"> Light up the pictures as people talk to your child</label>
+    <label class="check"><input type="checkbox" id="modelOn"> Show the Show me button on the child's screen</label>
     </details>
     <details class="sec">
-      <summary><b>6. Touch and child lock</b><span>Double taps, resting hands, keeping her in the talker</span></summary>
+      <summary><b>6. Touch and child lock</b><span>Double taps, resting hands, keeping your child in the talker</span></summary>
     <div class="row">
       <label for="repeatSel">Ignore extra taps (for double-tapping)</label>
       <select id="repeatSel">
@@ -413,14 +416,14 @@ body.typing #tabs, body.typing #grid{display:none}
       </select>
     </div>
     <div class="row">
-      <label for="holdSel">How long she must hold a picture</label>
+      <label for="holdSel">How long a picture must be held</label>
       <select id="holdSel">
         <option value="0">A quick tap is enough</option>
         <option value="0.15">Hold 0.15 seconds (ignores brushes)</option>
         <option value="0.3">Hold 0.3 seconds</option>
         <option value="0.5">Hold 0.5 seconds</option>
       </select>
-      <small>Pictures speak when her finger lifts. A hand resting on the screen to hold the tablet is ignored.</small>
+      <small>Pictures speak when the finger lifts. A hand resting on the screen to hold the tablet is ignored.</small>
     </div>
     <div class="row">
       <label for="edgeSel">Ignore touches at the edges (where a holding hand sits)</label>
@@ -436,7 +439,7 @@ body.typing #tabs, body.typing #grid{display:none}
     </div>
     </details>
     <details class="sec">
-      <summary><b>7. Her progress</b><span>Counts and a report for her therapist</span></summary>
+      <summary><b>7. Progress</b><span>Counts and a report for the therapist</span></summary>
     <div class="row">
       <label class="check"><input type="checkbox" id="logOn"> Keep a progress log on this tablet</label>
       <pre class="report" id="reportBox"></pre>
@@ -444,7 +447,7 @@ body.typing #tabs, body.typing #grid{display:none}
         <button class="btn" id="reportCopy" type="button">Copy report</button>
         <button class="btn" id="reportClear" type="button">Clear the log</button>
       </div>
-      <small id="reportMsg">Counts only: which words, how many, how many questions answered. Nothing she hears is saved, and nothing leaves this tablet unless you copy it.</small>
+      <small id="reportMsg">Counts only: which words, how many, how many questions answered. Nothing heard is saved, and nothing leaves this tablet unless you copy it.</small>
     </div>
     </details>
     <details class="sec">
@@ -452,43 +455,43 @@ body.typing #tabs, body.typing #grid{display:none}
     <div class="row">
       <b>Every day, at every stage</b>
       <ol class="coach">
-        <li><b>Talk and tap.</b> Say your sentence out loud and tap one or two key words on her board as you say them. "Time to EAT."</li>
-        <li><b>Use Show her.</b> Hold the Show her button at the top for one second first. Your taps then speak the word and show it, but do not build a sentence and are not counted as her words. It turns itself off after 90 quiet seconds.</li>
-        <li><b>Stay one step ahead.</b> If she uses one word, show two: WANT + EAT.</li>
-        <li><b>Ask, then wait.</b> Count to five in your head before you help. Look at her, then at the board.</li>
-        <li><b>Answer every tap.</b> Even an accident gets a real response. She taps UP, you say "You want up!" and lift her.</li>
-        <li><b>Add a little.</b> She says EAT. You say and tap EAT + MORE.</li>
+        <li><b>Talk and tap.</b> Say your sentence out loud and tap one or two key words on the board as you say them. "Time to EAT."</li>
+        <li><b>Use Show me.</b> Hold the Show me button at the top for one second first. Your taps then speak the word and show it, but do not build a sentence and are not counted as your child's words. It turns itself off after 90 quiet seconds.</li>
+        <li><b>Stay one step ahead.</b> If your child uses one word, show two: WANT + EAT.</li>
+        <li><b>Ask, then wait.</b> Count to five in your head before you help. Look at your child, then at the board.</li>
+        <li><b>Answer every tap.</b> Even an accident gets a real response. A tap on UP: you say "You want up!" and lift them.</li>
+        <li><b>Add a little.</b> Your child says EAT. You say and tap EAT + MORE.</li>
         <li><b>Do not quiz.</b> Skip "show me eat." Use it in real moments: meals, play, bath, the car.</li>
         <li><b>Keep it in reach, always.</b> Signs, pointing and sounds still count too.</li>
       </ol>
 
       <b>The six stages</b>
       <ol class="coach">
-        <li><b>First words.</b> 10 pictures. One tap says the word, then a full sentence. Start here if the board is new to her.</li>
+        <li><b>First words.</b> 10 pictures. One tap says the word, then a full sentence. Start here if the board is new.</li>
         <li><b>More words.</b> 20 pictures in the same places. Two taps make a bigger sentence: NO + PLAY.</li>
-        <li><b>Word pages.</b> Tabs for People, Food, Feelings, Places and Things, plus a Questions page of whole questions she can ask with one tap. You choose the questions under "Questions page" above.</li>
-        <li><b>Building sentences.</b> Adds I, you, it and not in a new left column. "not" makes it a no. "it" stands for the thing. "you" says just what she tapped: YOU + PLAY says "You play."</li>
-        <li><b>My own sentences.</b> A typing line. Whatever she just said lands there so she can fix it and say it again. The star saves it to her My own page. The X on a saved sentence deletes it (press twice).</li>
-        <li><b>Teen and adult words.</b> Four pages of the words older kids and adults say most. No pictures. Here the talker says her words in her order and only tidies small things, like adding "am" or a question mark.</li>
+        <li><b>Word pages.</b> Tabs for People, Food, Feelings, Places and Things, plus a Questions page of whole questions to ask with one tap. You choose the questions under "Questions page" above.</li>
+        <li><b>Building sentences.</b> Adds I, you, it and not in a new left column. "not" makes it a no. "it" stands for the thing. "you" says just what was tapped: YOU + PLAY says "You play."</li>
+        <li><b>My own sentences.</b> A typing line. Whatever was just said lands there, ready to fix and say again. The star saves it to the My own page. The X on a saved sentence deletes it (press twice).</li>
+        <li><b>Teen and adult words.</b> Four pages of the words older kids and adults say most. No pictures. Here the talker says the words in the order tapped and only tidies small things, like adding "am" or a question mark.</li>
       </ol>
-      <small>The 20 home words stay in the same places at every stage, so nothing she has learned moves. Move up when she is using most of what she has, not by age. Moving up early does no harm: she can ignore what she is not ready for. Ask her speech therapist if you are unsure. This advice on when to move up is common practice, not a tested rule.</small>
+      <small>The 20 home words stay in the same places at every stage, so nothing already learned moves. Move up when your child is using most of what is there, not by age. Moving up early does no harm: extra words can be ignored until they are needed. Ask your speech therapist if you are unsure. This advice on when to move up is common practice, not a tested rule.</small>
 
       <b>What the talker does by itself</b>
       <ol class="coach">
-        <li><b>It listens.</b> No button. When someone asks her a yes or no question, a this-or-that question, or "what do you want to drink?", big answers pop up. Set this under "When a question is heard".</li>
-        <li><b>It glows.</b> As people talk, the pictures for the words they say light up on her board. That shows her where words live without anyone pointing.</li>
-        <li><b>It shows the written word</b> for 3 seconds on every tap, so she sees the spelling with the sound.</li>
-        <li><b>It keeps count.</b> "Her progress" above shows which words she uses. Press Copy report and send it to her therapist.</li>
+        <li><b>It listens.</b> No button. When someone asks your child a yes or no question, a this-or-that question, or "what do you want to drink?", big answers pop up. Set this under "When a question is heard".</li>
+        <li><b>It glows.</b> As people talk, the pictures for the words they say light up on the board. That shows where words live without anyone pointing.</li>
+        <li><b>It shows the written word</b> for 3 seconds on every tap, so the spelling is seen with the sound.</li>
+        <li><b>It keeps count.</b> "Progress" above shows which words are used. Press Copy report and send it to the therapist.</li>
       </ol>
 
       <b>Things you set up</b>
       <ol class="coach">
-        <li><b>Photo scenes.</b> Add a real photo from her life and put word spots on it. "Suggest words" finds things in the photo for you.</li>
-        <li><b>Her own words.</b> "Add a word" for names, favorite foods and places. "Change a word" swaps any picture or name.</li>
-        <li><b>Choices she is offered.</b> Pick up to six words per group for open questions like "what do you want to eat?"</li>
+        <li><b>Photo scenes.</b> Add a real photo from your child's life and put word spots on it. "Suggest words" finds things in the photo for you.</li>
+        <li><b>Personal words.</b> "Add a word" for names, favorite foods and places. "Change a word" swaps any picture or name.</li>
+        <li><b>Choices offered.</b> Pick up to six words per group for open questions like "what do you want to eat?"</li>
         <li><b>Teen and adult wording.</b> One switch changes potty to bathroom, teddy to phone and so on. It turns on by itself at Stages 5 and 6.</li>
-        <li><b>Touch settings.</b> If she rests a hand on the screen or taps twice, adjust "Ignore extra taps", "How long she must hold a picture" and "Ignore touches at the edges".</li>
-        <li><b>Child lock.</b> Keeps her in the talker. For the home button use Guided Access on an iPad or Pin app on a Galaxy.</li>
+        <li><b>Touch settings.</b> If a hand rests on the screen or taps come in twos, adjust "Ignore extra taps", "How long a picture must be held" and "Ignore touches at the edges".</li>
+        <li><b>Child lock.</b> Keeps your child in the talker. For the home button use Guided Access on an iPad or Pin app on a Galaxy.</li>
         <li><b>Typing.</b> Can be turned on at any stage for a child who reads early.</li>
       </ol>
       <small>The teaching steps come from the modeling and partner-training studies listed below. The Questions page, the meaning of "you" and the Stage 6 words each have their own studies in the list.</small>
@@ -497,7 +500,7 @@ body.typing #tabs, body.typing #grid{display:none}
     <details class="sec">
       <summary><b>9. The research behind this</b><span>Every study the talker is built on</span></summary>
     <div class="row">
-      <small>Why the talker works the way it does. Most studies in this field are small, so treat these as good bets, not guarantees. Share this list with her speech therapist.</small>
+      <small>Why the talker works the way it does. Most studies in this field are small, so treat these as good bets, not guarantees. Share this list with your speech therapist.</small>
       <div class="research" id="research"></div>
     </div>
     </details>
@@ -537,7 +540,7 @@ var CORE = [
   {id:'down', label:'down',     pic:'⬇️', cat:'describe', s:2},
   {id:'hi',   label:'hi',       pic:'👋', cat:'social',   s:2},
   {id:'on',   label:'on',       pic:'💡', cat:'describe', s:2},
-  {id:'off',  label:'off',      pic:'🔌', cat:'describe', s:2},
+  {id:'off',  label:'off',      pic:'data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Cpath d=%27M32 6c-11 0-19 8.4-19 19 0 6.6 3.3 11.6 7.4 15.8 2.2 2.3 3.6 4.6 3.6 7.2h16c0-2.6 1.4-4.9 3.6-7.2C47.700 36.600 51 31.600 51 25 51 14.400 43 6 32 6z%27 fill=%27%23c9ced8%27 stroke=%27%236b7280%27 stroke-width=%272.500%27/%3E%3Cpath d=%27M27 36c-1-5 1-8 5-8s6 3 5 8%27 fill=%27none%27 stroke=%27%236b7280%27 stroke-width=%272.200%27 stroke-linecap=%27round%27/%3E%3Crect x=%2724%27 y=%2748%27 width=%2716%27 height=%279%27 rx=%272.500%27 fill=%27%236b7280%27/%3E%3Crect x=%2727%27 y=%2757%27 width=%2710%27 height=%274%27 rx=%272%27 fill=%27%234b5563%27/%3E%3Cpath d=%27M12 54 52 10%27 stroke=%27%23c62828%27 stroke-width=%275%27 stroke-linecap=%27round%27/%3E%3C/svg%3E', cat:'describe', s:2},
   {id:'potty',label:'potty',    pic:'🚽', cat:'thing',    s:2},
   {id:'hurt', label:'hurt',     pic:'🤕', cat:'describe', s:2},
   {id:'like', label:'like',     pic:'❤️', cat:'social',   s:2}
@@ -972,7 +975,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     {n:2, name:'2. More words',  note:'20 pictures'},
     {n:3, name:'3. Word pages',  note:'Adds people, food, feelings, places, things'},
     {n:4, name:'4. Building sentences', note:'Adds I, you, it, not in a new left column'},
-    {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving her own'},
+    {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving your own'},
     {n:6, name:'6. Teen and adult words', note:'Adds 96 of the most used everyday words on four pages. Sentences are said word for word'}
   ];
   var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, rate:0.9, voiceName:'', taps:[], page:'core',
@@ -1042,12 +1045,12 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v31) ---'+
+      dbgText = '\n--- Listening check (v32) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nPaid listening on this tablet: '+usageText()+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
-        '\nLast words back: '+(d.lastText||'none')+(d.echo?' ('+d.echo+' ignored as her own voice)':'')+
+        '\nLast words back: '+(d.lastText||'none')+(d.echo?' ('+d.echo+' ignored as its own voice)':'')+
         '\nLast reply: '+(d.last||'none')+
         (d.closed?'\nLast close: '+d.closed:'');
     }
@@ -1166,7 +1169,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     }
     if(el){
       el.textContent = !id ? (cv.on ? 'Girl and boy voices are at the top of the list. The others come from this tablet.' : "Voices come from this tablet. Add more in the tablet's own settings.")
-        : cv.busy ? 'Saving her words on this tablet: '+cv.done+' of '+cv.total+'. Keep this page open.'
+        : cv.busy ? 'Saving the words on this tablet: '+cv.done+' of '+cv.total+'. Keep this page open.'
         : cv.stop ? 'Saved '+cv.done+' of '+cv.total+'. Stopped: '+cv.stop+'. It tries again each time the app opens.'
         : cv.total ? 'All '+cv.done+' words and sentences are saved on this tablet in this voice: every picture word, and every sentence one or two pictures can make. They play right away, even with no internet. Answers to a question it hears, and typed words, need internet the first time. The speed slider does not change this voice.'
         : 'Checking saved words...';
@@ -1524,6 +1527,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
   function picNode(w, cls){
     var n;
     if(pics[w.id]){ n = document.createElement('img'); n.src = pics[w.id]; n.alt = ''; }
+    else if(w.pic && w.pic.indexOf('data:image/')===0){ n = document.createElement('img'); n.src = w.pic; n.alt = ''; n.setAttribute('data-drawn','1'); }   // a built-in drawing
     else { n = document.createElement('span'); n.textContent = w.pic || '🔲'; n.setAttribute('aria-hidden','true'); }
     if(cls) n.className = cls;
     return n;
@@ -1732,7 +1736,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     $('scName').value = ed.name||''; $('scWord').value = '';
     $('scSuggest').hidden = !visionOn; $('scDelete').hidden = !!ed.isNew;
     if(!hosted) fetch('api/vision/status').then(function(r){ return r.json(); }).then(function(v){ visionOn = !!(v && v.enabled); $('scSuggest').hidden = !visionOn; }, function(){}); $('scDelete').textContent = 'Delete photo';
-    $('scMsg').textContent = 'Tap anything in the photo she would want to talk about, then type its word. Drag a circle to move it.';
+    $('scMsg').textContent = 'Tap anything in the photo your child would want to talk about, then type its word. Drag a circle to move it.';
     $('scToast').hidden = true;
     $('sced').hidden = false; drawEd(); setTimeout(drawEd, 60);
   }
@@ -1873,7 +1877,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
   var RESEARCH = [
     ['Coffin-Siris syndrome and communication', [
       ['Coffin-Siris Syndrome (GeneReviews, the main clinical reference)', 'https://www.ncbi.nlm.nih.gov/books/NBK131811/', 'Speaking is usually harder than understanding. Recommends a talker and says it supports speech, not hinders it. Lists hearing, vision and muscle-tone rates.'],
-      ['Language Impairments in Individuals With Coffin-Siris Syndrome (2022)', 'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8811135/', 'Registry study: 65% had speaking more limited than understanding. Why her vocabulary is not capped low.'],
+      ['Language Impairments in Individuals With Coffin-Siris Syndrome (2022)', 'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8811135/', 'Registry study: 65% had speaking more limited than understanding. Why the vocabulary is not capped low.'],
       ['ARID1B-Related Disorder (GeneReviews)', 'https://www.ncbi.nlm.nih.gov/books/NBK541502/', 'Details for the most common Coffin-Siris gene, including speech and vision.'],
       ['Coffin-Siris Syndrome (NORD)', 'https://rarediseases.org/rare-diseases/coffin-siris-syndrome/', 'Plain-language overview for families.']
     ]],
@@ -1882,14 +1886,14 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
       ['Communication partner instruction, a systematic review (2018)', 'https://pubs.asha.org/doi/10.1044/2018_AJSLP-18-0024', 'Training the adults around the child is where talkers succeed or fail.']
     ]],
     ['Which words, and building sentences', [
-      ['What Are Core Words Anyway? (PRC-Saltillo handout)', 'https://saltillo.com/uploads/What_Are_Core_Words_Anyway_Handout_Part_1.pdf', 'A small set of words covers most of what toddlers say. Basis for her main board.'],
+      ['What Are Core Words Anyway? (PRC-Saltillo handout)', 'https://saltillo.com/uploads/What_Are_Core_Words_Anyway_Handout_Part_1.pdf', 'A small set of words covers most of what toddlers say. Basis for the main board.'],
       ['Tracking early sentence-building in graphic symbol communication', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC7225017', 'Children need to learn to build sentences word by word. Why a sentence-growth path is on the to-do list.'],
       ['AAC Generative Language Intervention with young children with Down syndrome (2025)', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC12303605', 'Model sentences only a little longer than what the child uses now.'],
       ['Applying a Developmental Model to Preliterate Aided Language Learning (2024)', 'https://pubs.asha.org/doi/10.1044/2023_AJSLP-23-00098', 'Use typical language development as the map for what to add next.']
     ]],
-    ['Asking questions, and saying what she built', [
+    ['Asking questions, and saying what was built', [
       ['Teaching partner-focused questions (Light, Binger and others, Penn State)', 'https://pure.psu.edu/en/publications/teaching-partner-focused-questions-to-individuals-who-use-augment/', 'People who use talkers learned to ask about their partner when 5 to 10 whole questions were stored for them. Basis for the Questions page.'],
-      ['Teaching children to build yes/no questions (Kent-Walsh, Binger, Buchanan 2015)', 'https://pubs.asha.org/doi/abs/10.1044/2015_AJSLP-14-0066', 'Three children aged 4 to 6 learned to build questions themselves by word order. Why "you" now says exactly what she tapped.'],
+      ['Teaching children to build yes/no questions (Kent-Walsh, Binger, Buchanan 2015)', 'https://pubs.asha.org/doi/abs/10.1044/2015_AJSLP-14-0066', 'Three children aged 4 to 6 learned to build questions themselves by word order. Why "you" now says exactly what was tapped.'],
       ['Plain summary of the yes/no question study (NWACS)', 'https://stafford-casey.squarespace.com/blog/2019/7/aacademics-july-2019', 'Explains why asking questions matters: a talker cannot raise its voice at the end.'],
       ['Children, young people and adults who use talkers (book chapter)', 'https://link.springer.com/10.1007/978-3-030-74985-9_25', 'They tend to answer more than they start, and use few kinds of message.'],
       ['Against clipped "telegraphic" models (Fey 2008, summary)', 'https://www.researchgate.net/publication/251534991_The_mis-use_of_telegraphic_input_in_child_language_intervention', 'No proven benefit to dropping the little words when modeling. Why the talker speaks full sentences.'],
@@ -1921,7 +1925,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
       ['Aided AAC for people with visual impairments, a meta-analysis (2025)', 'https://pubs.asha.org/doi/10.1044/2024_AJSLP-24-00242', 'Adjusting the display for vision was largely effective. Seeing options are on the to-do list.']
     ]],
     ['Cautions about AI in talkers', [
-      ['A thoughtful approach to AI and AAC (AssistiveWare)', 'https://download.assistiveware.com/assistiveware/files/let%27s-look-before-we-leap-a-thoughtful-approach-to-ai-and-aac.pdf', 'Risks: whose words are they, privacy, and getting in the way of learning. Why answers are choices she picks, not text written for her.'],
+      ['A thoughtful approach to AI and AAC (AssistiveWare)', 'https://download.assistiveware.com/assistiveware/files/let%27s-look-before-we-leap-a-thoughtful-approach-to-ai-and-aac.pdf', 'Risks: whose words are they, privacy, and getting in the way of learning. Why answers are choices the child picks, not text written for them.'],
       ['The less I type, the better (Google Research)', 'https://research.google/pubs/the-less-i-type-the-better-how-ai-language-models-can-enhance-or-impede-communication-for-aac-users/', 'Adult users accept some AI help for speed but want control of their voice.']
     ]]
   ];
@@ -2002,7 +2006,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     L.push('Report made '+new Date().toLocaleDateString()+'. Days used: '+wk.days+' of 7.');
     L.push('');
     L.push('WORDS');
-    L.push('Different words she used: '+nWords+change(nWords, nPrev));
+    L.push('Different words used: '+nWords+change(nWords, nPrev));
     L.push('Total word taps: '+wk.taps+change(wk.taps, prev.taps));
     L.push('Most used: '+(top(wk.words,10).map(function(w){ return wordName(w)+' ('+wk.words[w]+')'; }).join(', ') || 'none yet'));
     L.push('New this week: '+(fresh.length ? fresh.map(wordName).join(', ') : (older.days ? 'none' : 'everything is new, this is the first week')));
@@ -2017,20 +2021,20 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     L.push('');
     L.push('OTHER');
     L.push('Photo scene touches: '+wk.photo+'. Typed messages: '+wk.typed+'.');
-    L.push('Words a grown-up showed her (Show her mode): '+wk.shown+'.');
+    L.push('Words a grown-up showed (Show me mode): '+wk.shown+'.');
     L.push('');
-    L.push('Notes: counts come from the talker on one tablet. Taps made in Show her mode are kept separate. Taps by other people outside Show her mode are counted as hers. Nothing she heard is recorded.');
+    L.push('Notes: counts come from the talker on one tablet. Taps made in Show me mode are kept separate. Taps by other people outside Show me mode are counted as the child\'s. Nothing heard is recorded.');
     return L.join('\n');
   }
   function renderReport(){ var el = document.getElementById('reportBox'); if(el) el.textContent = plogOn() ? plogReport() : 'The progress log is off.'; }
 
-  /* Show her (modeling): a grown-up taps her board while talking. Those taps teach; they are not her words. */
+  /* Show me (modeling): a grown-up taps her board while talking. Those taps teach; they are not her words. */
   var modelTaps = [], modelT = null, modelHold = null, MODEL_IDLE_MS = 90000;
   function modelIdle(){ clearTimeout(modelT); modelT = setTimeout(function(){ setModeling(false); }, MODEL_IDLE_MS); }
   function setModeling(on){
     state.modeling = !!on; modelTaps = [];
     document.body.classList.toggle('modeling', state.modeling);
-    $('modelBtn').firstChild.textContent = state.modeling ? 'Showing her' : 'Show her';
+    $('modelBtn').firstChild.textContent = state.modeling ? 'Showing' : 'Show me';
     $('modelBtn').setAttribute('aria-pressed', state.modeling ? 'true' : 'false');
     clearTimeout(state.timer); state.taps = []; state.fresh = true;
     renderBar(state.modeling ? 'Grown-up showing. Tap words as you say them.' : 'Tap a picture to talk', true);
@@ -2237,7 +2241,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
         else if(list.length < 6) list.push(w.id);
         else { $('favMsg').textContent = 'Six is the most. Tap one to remove it first.'; return; }
         state.favs[page] = list; save(); renderFavs();
-        $('favMsg').textContent = list.length ? 'She will be offered these '+list.length+', in this order.' : 'None picked: she is offered the first six on the list.';
+        $('favMsg').textContent = list.length ? 'These '+list.length+' will be offered, in this order.' : 'None picked: the first six on the list are offered.';
       });
       box.appendChild(b);
     });
@@ -2330,7 +2334,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
   var clearArmed = false;
   $('logOn').addEventListener('change', function(){ state.log = this.checked; save(); renderReport(); });
   $('reportCopy').addEventListener('click', function(){
-    var text = plogReport(), done = function(ok){ $('reportMsg').textContent = ok ? 'Copied. Paste it into a message or email to her therapist.' : 'Could not copy on this tablet. Press and hold the report text to select it.'; };
+    var text = plogReport(), done = function(ok){ $('reportMsg').textContent = ok ? 'Copied. Paste it into a message or email to the therapist.' : 'Could not copy on this tablet. Press and hold the report text to select it.'; };
     try{ navigator.clipboard.writeText(text).then(function(){ done(true); }, function(){ done(false); }); }catch(e){ done(false); }
   });
   $('reportClear').addEventListener('click', function(){
