@@ -18,4 +18,10 @@ if 'myturnTest' not in t:
     t = t.replace('    buildTypes {', "    signingConfigs {\n        myturnTest {\n            storeFile file('../../test.keystore')\n            storePassword 'myturn-test'\n            keyAlias 'myturn'\n            keyPassword 'myturn-test'\n        }\n    }\n    buildTypes {\n        debug {\n            signingConfig signingConfigs.myturnTest\n        }", 1)
     assert 'myturnTest' in t
     open(g, 'w').write(t)
+# Our own listening code (avoids the recognizer's beeps): copied into the app next to its main screen.
+import shutil, os
+dst = 'android/app/src/main/java/app/myturn/talker'
+os.makedirs(dst, exist_ok=True)
+for f in ('MainActivity.java', 'TabletSpeechPlugin.java'):
+    shutil.copy(os.path.join('native/android', f), os.path.join(dst, f))
 print('android project patched')
