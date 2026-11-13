@@ -210,6 +210,12 @@ body.typing #tabs, body.typing #grid{display:none}
 .ask-opts.many{display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:1fr}
 .ask-opts.many .key .pic{font-size:min(14vh,13vw)}
 .ask-opts.many .key .lab{font-size:min(5vh,4.5vw)}
+.ask-opts.eight{grid-template-columns:repeat(4,1fr)}
+.ask-opts.ten{grid-template-columns:repeat(5,1fr)}
+.numeral{font-weight:800;line-height:1;color:var(--ink)}
+.ask-opts.ten .key .lab{font-size:min(4vh,3.4vw)}
+.swatch{display:block;width:min(9vh,11vw);height:min(9vh,11vw);border-radius:50%;border:4px solid var(--ink);box-sizing:border-box;flex:none}
+.ask-opts .swatch{width:min(15vh,13vw);height:min(15vh,13vw);border-width:5px}
 .ask-opts .key.dim{opacity:.25}
 .ask-opts .key.picked{transform:scale(1.03);box-shadow:0 0 0 8px var(--ink)}
 .ask-skip{flex:none;align-self:center;min-height:52px;padding:0 28px;border-radius:26px;border:3px solid var(--line);background:var(--bar);font-size:18px;font-weight:600;color:var(--ink-soft)}
@@ -522,7 +528,8 @@ body.typing #tabs, body.typing #grid{display:none}
       <b>What the talker does by itself</b>
       <ol class="coach">
         <li><b>It listens.</b> No button. When someone asks your child a yes or no question, a this-or-that question, or "what do you want to drink?", big answers pop up. Set this under "When a question is heard".</li>
-        <li><b>It knows color questions.</b> "What color do you want?" brings up red, blue and yellow at every stage. If the person names the colors ("red or green?"), it offers those instead.</li>
+        <li><b>It knows color questions.</b> "What color do you want?" brings up eight colors at every stage: red, orange, yellow, green, blue, purple, brown and black. If the person names the colors ("red or green?"), it offers those instead.</li>
+        <li><b>It knows number questions.</b> "How many do you want?", "How old are you?" and "Pick a number" bring up 1 to 10 at every stage.</li>
         <li><b>It can ask an AI for help.</b> Off by default. Turn on "Use AI for harder questions" and questions the rules miss, like "how was school?", get answer buttons matched to the stage. Only the words heard are sent.</li>
         <li><b>It glows.</b> As people talk, the pictures for the words they say light up on the board. That shows where words live without anyone pointing.</li>
         <li><b>It shows the written word</b> for 3 seconds on every tap, so the spelling is seen with the sound.</li>
@@ -990,8 +997,11 @@ function detectQuestion(text, name){
   return null;
 }
 /* Open questions ("what do you want to eat?") point at a page of words. Returns a page id or null. */
-/* "What color do you want?" / "Which color?" at any stage: offer the three primary colors. */
-var COLORS = [{id:'color:red', label:'red', pic:'🔴'}, {id:'color:blue', label:'blue', pic:'🔵'}, {id:'color:yellow', label:'yellow', pic:'🟡'}];
+/* "What color do you want?" / "Which color?" at any stage: offer the eight colors of a basic crayon box. */
+var COLORS = [
+  {id:'color:red', label:'red', color:'#e5352b'}, {id:'color:orange', label:'orange', color:'#f58a1f'}, {id:'color:yellow', label:'yellow', color:'#ffd92e'}, {id:'color:green', label:'green', color:'#2fa84f'},
+  {id:'color:blue', label:'blue', color:'#2f6fe0'}, {id:'color:purple', label:'purple', color:'#8a4fd3'}, {id:'color:brown', label:'brown', color:'#8b5a2b'}, {id:'color:black', label:'black', color:'#111111'}
+];
 function detectColorQuestion(text, name){
   var t = clean(text, name);
   if(!/\bcolou?rs?\b/.test(t)) return null;
@@ -1003,6 +1013,18 @@ function detectColorQuestion(text, name){
 }
 function colorSentence(frame, label){
   return frame==='fav' ? 'My favorite color is '+label+'.' : frame==='want' ? 'I want '+label+'.' : frame==='is' ? 'It is '+label+'.' : capFirst(label)+'.';
+}
+/* "How many do you want?" / "How old are you?" / "Pick a number" at any stage: offer 1 to 10. */
+var NUMBERS = ['one','two','three','four','five','six','seven','eight','nine','ten'].map(function(w, i){ return {id:'number:'+(i+1), label:w, numeral:String(i+1)}; });
+function detectNumberQuestion(text, name){
+  var t = clean(text, name);
+  if(/\bhow old\b/.test(t)) return 'old';
+  if(/\bhow many\b/.test(t)) return /\b(want|like|need|have some)\b/.test(t) ? 'want' : 'plain';
+  if(/\b(what|which|pick a|choose a) number\b/.test(t)) return 'plain';
+  return null;
+}
+function numberSentence(frame, label){
+  return frame==='old' ? 'I am '+label+'.' : frame==='want' ? 'I want '+label+'.' : capFirst(label)+'.';
 }
 function detectOpenQuestion(text, name){
   var t = clean(text, name); if(!t) return null;
@@ -1023,7 +1045,7 @@ function isDrink(w){
   var re = /^(milk|juice|water|soda|pop|tea|lemonade|smoothie|shake|milkshake|cocoa|hot chocolate|formula|bottle|drink|cider|punch|coffee)$|\b(milk|juice|water|tea|soda|smoothie|shake)$/;
   return re.test(l) || re.test(b);
 }
-if(typeof module!=='undefined') module.exports = {detectColorQuestion:detectColorQuestion, colorSentence:colorSentence, COLORS:COLORS, setOlder:setOlder, BUILD:BUILD, literal:literal, MORE6:MORE6, QUESTIONS_DEFAULT:QUESTIONS_DEFAULT, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
+if(typeof module!=='undefined') module.exports = {detectNumberQuestion:detectNumberQuestion, numberSentence:numberSentence, NUMBERS:NUMBERS, detectColorQuestion:detectColorQuestion, colorSentence:colorSentence, COLORS:COLORS, setOlder:setOlder, BUILD:BUILD, literal:literal, MORE6:MORE6, QUESTIONS_DEFAULT:QUESTIONS_DEFAULT, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
 </script>
 
 <script>
@@ -1109,7 +1131,7 @@ if(typeof module!=='undefined') module.exports = {detectColorQuestion:detectColo
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v38) ---'+
+      dbgText = '\n--- Listening check (v39) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -1622,6 +1644,8 @@ if(typeof module!=='undefined') module.exports = {detectColorQuestion:detectColo
   function word(id){ return LOOKUP[id]; }
   function picNode(w, cls){
     var n;
+    if(w.numeral){ n = document.createElement('span'); n.setAttribute('aria-hidden','true'); n.textContent = w.numeral; n.className = (cls ? cls+' ' : '')+'numeral'; return n; }
+    if(w.color){ n = document.createElement('span'); n.setAttribute('aria-hidden','true'); n.style.background = w.color; n.className = (cls ? cls+' ' : '')+'swatch'; return n; }   // a plain colour, drawn so it looks the same on every tablet
     if(pics[w.id]){ n = document.createElement('img'); n.src = pics[w.id]; n.alt = ''; }
     else if(w.pic && w.pic.indexOf('data:image/')===0){ n = document.createElement('img'); n.src = w.pic; n.alt = ''; n.setAttribute('data-drawn','1'); }   // a built-in drawing
     else { n = document.createElement('span'); n.textContent = w.pic || '🔲'; n.setAttribute('aria-hidden','true'); }
@@ -2342,7 +2366,7 @@ if(typeof module!=='undefined') module.exports = {detectColorQuestion:detectColo
   }
   function showSmart(text, a, kind){
     var max = state.stage >= 5 ? 6 : (state.stage >= 3 ? 4 : 3), opts = a.options.slice(0, max);
-    var box = $('askOpts'); box.textContent = ''; box.classList.toggle('many', opts.length > 3);
+    var box = $('askOpts'); box.textContent = ''; box.classList.remove('eight', 'ten'); box.classList.toggle('many', opts.length > 3);
     $('askQ').textContent = clean(text, state.name)+'?';
     opts.forEach(function(o){
       var w = boardWord(o.label), cat = o.label==='yes' ? 'action' : (o.label==='no' ? 'stop' : 'thing');
@@ -2354,9 +2378,18 @@ if(typeof module!=='undefined') module.exports = {detectColorQuestion:detectColo
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
   }
   function showColors(text, frame){
-    var box = $('askOpts'); box.textContent = ''; box.classList.remove('many');
+    var box = $('askOpts'); box.textContent = ''; box.classList.remove('ten'); box.classList.add('many', 'eight');
     $('askQ').textContent = clean(text, state.name)+'?';
     COLORS.forEach(function(c){ box.appendChild(askKey(c, c.label, 'thing', colorSentence(frame, c.label), [])); });
+    askKind = 'choice'; plogAdd('asked', 'choice');
+    askDone = false; $('askSkip').style.visibility = '';
+    $('ask').hidden = false;
+    clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
+  }
+  function showNumbers(text, frame){
+    var box = $('askOpts'); box.textContent = ''; box.classList.remove('eight'); box.classList.add('many', 'ten');
+    $('askQ').textContent = clean(text, state.name)+'?';
+    NUMBERS.forEach(function(nm){ box.appendChild(askKey(nm, nm.label, 'describe', numberSentence(frame, nm.label), [])); });
     askKind = 'choice'; plogAdd('asked', 'choice');
     askDone = false; $('askSkip').style.visibility = '';
     $('ask').hidden = false;
@@ -2378,13 +2411,15 @@ if(typeof module!=='undefined') module.exports = {detectColorQuestion:detectColo
     var q = detectQuestion(text, state.name);
     var col = (!q || q.kind!=='choice') ? detectColorQuestion(text, state.name) : null;   // named choices ("red or blue?") win over the standard three
     if(col){ showColors(text, col); return; }
+    var num = (!q || q.kind!=='choice') ? detectNumberQuestion(text, state.name) : null;
+    if(num){ showNumbers(text, num); return; }
     if(smartWanted(text, q)){ smartAsk(text, q); return; }             // the rules are unsure: let the AI try first, rules stay as the fallback
     showAsk(text, q);
   }
   function showAsk(text, q){
     if(!q){ openPageFor(text); return; }
     var box = $('askOpts'); box.textContent = '';
-    box.classList.remove('many');
+    box.classList.remove('many', 'eight', 'ten');
     $('askQ').textContent = q.question+'?';
     if(q.kind==='yesno'){
       box.appendChild(askKey(LOOKUP.yes, LOOKUP.yes.label, 'action', q.yes, ['yes']));
@@ -2451,7 +2486,7 @@ if(typeof module!=='undefined') module.exports = {detectColorQuestion:detectColo
       pageT = setTimeout(function(){ if(state.page===page && (state.fresh || !state.taps.length)){ state.page='core'; renderTabs(); renderGrid(); } }, 25000);
       return;
     }
-    var box = $('askOpts'); box.textContent = ''; box.classList.add('many');
+    var box = $('askOpts'); box.textContent = ''; box.classList.remove('eight', 'ten'); box.classList.add('many');
     $('askQ').textContent = clean(text, state.name)+'?';
     var pg = PAGES.filter(function(x){ return x.id===page; })[0];
     words.slice(0, 6).forEach(function(w){ box.appendChild(askKey(w, w.label, pg.cat || 'thing', wordSentence(w), [w.id])); });
