@@ -722,7 +722,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, repeat:0.8, hold:0, edge:0.05, favs:{}, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
-  var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', store:'checking', error:'' };
+  var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
 
   /* ---------- settings (small) and pictures (IndexedDB), both on this device only ---------- */
   try{
@@ -780,7 +780,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v16) ---'+
+      dbgText = '\n--- Listening check (v17) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -788,7 +788,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
         '\nLast reply: '+(d.last||'none')+
         (d.closed?'\nLast close: '+d.closed:'');
     }
-    $('diag').textContent = 'Voice: '+diag.voice+'\nMicrophone: '+diag.mic+(diag.cloud?'\nSpeech service: '+diag.cloud:'')+(diag.kiosk?'\nChild lock: '+diag.kiosk:'')+'\nPhotos: '+diag.store+(diag.error?'\nLast problem: '+diag.error:'')+dbgText;
+    $('diag').textContent = 'Voice: '+diag.voice+'\nMicrophone: '+diag.mic+(diag.cloud?'\nSpeech service: '+diag.cloud:'')+(diag.kiosk?'\nChild lock: '+diag.kiosk:'')+(diag.vision?'\nPhoto word suggestions: '+diag.vision:'')+'\nPhotos: '+diag.store+(diag.error?'\nLast problem: '+diag.error:'')+dbgText;
   }
   window.addEventListener('error', function(e){ diag.error = (e.message||'script error'); showDiag(); });
   window.addEventListener('unhandledrejection', function(e){ diag.error = String((e.reason&&(e.reason.code||e.reason.message))||e.reason||'promise'); showDiag(); });
@@ -1290,7 +1290,8 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   function openEditor(e){
     ed = e; ed.sel = null; delArmed = false;
     $('scName').value = ed.name||''; $('scWord').value = '';
-    $('scSuggest').hidden = !visionOn; $('scDelete').hidden = !!ed.isNew; $('scDelete').textContent = 'Delete photo';
+    $('scSuggest').hidden = !visionOn; $('scDelete').hidden = !!ed.isNew;
+    if(!hosted) fetch('api/vision/status').then(function(r){ return r.json(); }).then(function(v){ visionOn = !!(v && v.enabled); $('scSuggest').hidden = !visionOn; }, function(){}); $('scDelete').textContent = 'Delete photo';
     $('scMsg').textContent = 'Tap anything in the photo she would want to talk about, then type its word. Drag a circle to move it.';
     $('sced').hidden = false; drawEd(); setTimeout(drawEd, 60);
   }
@@ -1362,7 +1363,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   });
   $('scSuggest').addEventListener('click', function(){
     if(!ed) return;
-    var btn = this; btn.disabled = true; $('scMsg').textContent = 'Looking at the photo. This takes a few seconds.';
+    var btn = this; btn.disabled = true; btn.textContent = 'Looking...'; $('scMsg').textContent = 'Looking at the photo. This takes a few seconds.';
     fetch('api/scene-words', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({image:ed.img})})
       .then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||('error '+r.status)); return d; }); })
       .then(function(d){
@@ -1370,10 +1371,17 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
         var have = {}, added = 0; ed.spots.forEach(function(x){ have[String(x.label).toLowerCase()] = 1; });
         (d.words||[]).forEach(function(w, i){ if(have[w.label]) return; ed.spots.push({id:'a'+Date.now()+i, label:w.label, x:w.x, y:w.y}); added++; });
         drawEd();
-        $('scMsg').textContent = added ? 'Added '+added+' words. Check each one: drag to move it, tap it to rename or remove it.' : 'No new words found. Add them by hand.';
+        var got = (d.words||[]).length;
+        diag.vision = 'last try found '+got+' words, added '+added+' ('+new Date().toLocaleTimeString()+')'; showDiag();
+        $('scMsg').textContent = added ? 'Added '+added+' words. Check each one: drag to move it, tap it to rename or remove it.'
+          : (got ? 'It found '+got+' words but they are already on this photo.' : 'It looked but found nothing it was sure about. Add words by hand.');
       })
-      .catch(function(err){ $('scMsg').textContent = 'Suggestions did not work ('+((err&&err.message)||'no internet')+'). You can still add words by hand.'; })
-      .then(function(){ btn.disabled = false; });
+      .catch(function(err){
+        var why = (err&&err.message)||'no internet';
+        diag.vision = 'last try FAILED: '+why+' ('+new Date().toLocaleTimeString()+')'; showDiag();
+        $('scMsg').textContent = 'Suggestions did not work: '+why+'. You can still add words by hand.';
+      })
+      .then(function(){ btn.disabled = false; btn.textContent = 'Suggest words'; });
   });
   $('scNew').addEventListener('click', function(){ $('scFile').value=''; $('scFile').click(); });
   $('scFile').addEventListener('change', function(){
