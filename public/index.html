@@ -106,7 +106,12 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
 .grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(4,1fr);gap:10px}
 .grid.six{grid-template-columns:repeat(6,1fr)}
 .grid.fringe.wide6{grid-template-columns:repeat(6,1fr)}
-.grid.sents{grid-template-columns:repeat(2,1fr);grid-template-rows:none;grid-auto-rows:minmax(17%,1fr);overflow-y:auto;touch-action:pan-y}
+.grid.sents{grid-template-columns:repeat(2,1fr);grid-template-rows:none;grid-auto-rows:minmax(96px,19%);align-content:start;overflow-y:auto;touch-action:pan-y}
+.sentwrap{position:relative;min-height:0}
+.sentwrap .key{width:100%;height:100%}
+.sentwrap.del .key{padding-right:96px}
+.sentdel{position:absolute;top:8px;right:8px;bottom:8px;width:80px;border-radius:12px;border:3px solid var(--line);background:#fff;font-size:17px;font-weight:700;color:#5b6478}
+.sentdel.sure{background:#c62828;border-color:#8e0000;color:#fff}
 .key.sent .lab{font-size:min(3.4vh,3vw);padding:0 12px}
 .key.wordonly .pic{display:none}
 .key.wordonly .lab{font-size:min(5vh,4.4vw)}
@@ -329,6 +334,7 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
     </div>
     <label class="check"><input type="checkbox" id="sentOn"> Build a full sentence after her tap</label>
     <label class="check"><input type="checkbox" id="typeOn"> Show a typing line</label>
+    <label class="check"><input type="checkbox" id="olderOn"> Teen and adult wording (bathroom instead of potty, phone instead of teddy)</label>
     <div class="row">
       <label for="qList">Questions page (Stage 3 and up)</label>
       <textarea id="qList" rows="6" style="width:100%;font-size:16px;padding:8px;border-radius:10px;border:2px solid var(--line)"></textarea>
@@ -535,8 +541,28 @@ function defaultNp(page, label){
 var LOOKUP = {};
 function registerWords(list){ list.forEach(function(w){ if(!w.base) w.base=w.label; LOOKUP[w.id]=w; }); }
 /* A grown-up can rename a word. Sentences use the new name. */
+/* Teen and adult wording for the same pictures and places on the board. */
+var OLDER = {
+  potty:{label:'bathroom', pic:'🚻'}, done:{label:'done', pic:'🏁'},
+  'things:teddy':{label:'phone', pic:'📞', np:'my phone'}, 'things:blocks':{label:'game', pic:'🎮', np:'the game'},
+  'things:bubbles':{label:'headphones', pic:'🎧', np:'my headphones'}, 'things:doll':{label:'backpack', pic:'🎒', np:'my backpack'},
+  'things:crayons':{label:'pen', pic:'🖊️', np:'a pen'}, 'things:truck':{label:'money', pic:'💵', np:'some money'},
+  'feelings:silly':{label:'annoyed', pic:'😒'}, 'places:playground':{label:'work', pic:'💼', np:'to work'}
+};
+var OLDER_TPL = { potty:['I need the bathroom.', "I don't need the bathroom."], done:['I am done.', 'I am not done.'] };
+var olderOn = false;
+function setOlder(on, keep){
+  olderOn = !!on;
+  Object.keys(OLDER).forEach(function(id){
+    var w = LOOKUP[id]; if(!w) return;
+    if(!w.young) w.young = {label:w.base, pic:w.pic, np:w.np};
+    if(keep && keep[id]) return;                       // a grown-up renamed this one: leave their name alone
+    var src = olderOn ? OLDER[id] : w.young;
+    w.label = src.label; w.base = src.label; w.pic = src.pic; w.np = src.np || (w.page==='core' ? undefined : src.label);
+  });
+}
 function tpl(id, i){
-  var t = TPL[id][i], w = LOOKUP[id];
+  var t = ((olderOn && OLDER_TPL[id]) || TPL[id])[i], w = LOOKUP[id];
   if(w && w.base && w.base!==w.label) t = t.replace(new RegExp('\\b'+w.base+'\\b','i'), w.label);
   return t.charAt(0).toUpperCase()+t.slice(1);
 }
@@ -868,7 +894,7 @@ function isDrink(w){
   var re = /^(milk|juice|water|soda|pop|tea|lemonade|smoothie|shake|milkshake|cocoa|hot chocolate|formula|bottle|drink|cider|punch|coffee)$|\b(milk|juice|water|tea|soda|smoothie|shake)$/;
   return re.test(l) || re.test(b);
 }
-if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, MORE6:MORE6, QUESTIONS_DEFAULT:QUESTIONS_DEFAULT, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
+if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD, literal:literal, MORE6:MORE6, QUESTIONS_DEFAULT:QUESTIONS_DEFAULT, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
 </script>
 
 <script>
@@ -883,7 +909,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
     {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving her own'},
     {n:6, name:'6. Teen and adult words', note:'Adds 96 of the most used everyday words on four pages. Sentences are said word for word'}
   ];
-  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
@@ -899,6 +925,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
       if(typeof saved.voiceName==='string') state.voiceName=saved.voiceName;
       if(saved.stage>=1) state.stage=Math.min(6, +saved.stage);
       if(Array.isArray(saved.questions)) state.questions = saved.questions.filter(function(q){ return typeof q==='string' && q.trim(); }).slice(0, 12);
+      state.older = typeof saved.older==='boolean' ? saved.older : state.stage >= 5;
       if(Array.isArray(saved.mine)) state.mine = saved.mine.filter(function(q){ return typeof q==='string' && q.trim(); }).slice(0, 40);
       if(typeof saved.typing==='boolean') state.typing=saved.typing;
       if(typeof saved.kiosk==='boolean') state.kiosk=saved.kiosk;
@@ -913,7 +940,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -949,7 +976,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v28) ---'+
+      dbgText = '\n--- Listening check (v29) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nPaid listening on this tablet: '+usageText()+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1500,7 +1527,20 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
     g.classList.toggle('fringe', state.page!=='core' && state.page!=='photos' && !sentPage);
     if(sentPage){
       var list = state.page==='questions' ? state.questions : state.mine;
-      list.forEach(function(q){ g.appendChild(sentKey(q)); });
+      list.forEach(function(q){
+        var wrap = document.createElement('div'); wrap.className = 'sentwrap'; wrap.appendChild(sentKey(q));
+        if(state.page==='mine'){                       // her own sentences: a delete button on every one. Two presses, so a slip does not lose it
+          wrap.classList.add('del');
+          var d = document.createElement('button'); d.type='button'; d.className='sentdel'; d.textContent='✕'; d.setAttribute('aria-label', 'Delete: '+q);
+          var t = null;
+          onPress(d, function(){
+            if(!d.classList.contains('sure')){ d.classList.add('sure'); d.textContent='Delete?'; clearTimeout(t); t = setTimeout(function(){ d.classList.remove('sure'); d.textContent='✕'; }, 3000); return; }
+            clearTimeout(t); var i = state.mine.indexOf(q); if(i >= 0) state.mine.splice(i, 1); save(); starState(); renderGrid();
+          }, {noRepeatGuard:true});
+          wrap.appendChild(d);
+        }
+        g.appendChild(wrap);
+      });
       if(!list.length){ var en = document.createElement('div'); en.className = 'empty-note'; en.textContent = state.page==='mine' ? 'Nothing saved yet. Type or build a sentence, then press the star to keep it here.' : 'No questions yet. A grown-up can add some behind the lock.'; g.appendChild(en); }
       return;
     }
@@ -2160,7 +2200,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
       var b = document.createElement('button');
       b.type='button'; b.className='stage'+(st.n===state.stage?' sel':''); b.textContent = st.name;
       var n = document.createElement('span'); n.textContent = st.note; b.appendChild(n);
-      b.addEventListener('click', function(){ state.stage = st.n; if(st.n >= 5){ state.typing = true; $('typeOn').checked = true; } save(); renderStages(); renderAll(); });
+      b.addEventListener('click', function(){ state.stage = st.n; if(st.n >= 5){ state.typing = true; $('typeOn').checked = true; } state.older = st.n >= 5; $('olderOn').checked = state.older; setOlder(state.older, labels); save(); renderStages(); renderAll(); });
       s.appendChild(b);
     });
   }
@@ -2192,7 +2232,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
   }
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
-    $('qList').value = state.questions.join('\n');
+    $('qList').value = state.questions.join('\n'); $('olderOn').checked = state.older;
     $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('wordsOn').checked = state.words; $('modelOn').checked = state.modelBtn; $('logOn').checked = state.log !== false; renderReport(); clearArmed = false; $('reportClear').textContent = 'Clear the log'; $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
     hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderResearch(); renderVoices(); showDiag(); $('panel').classList.add('open');
   }
@@ -2226,6 +2266,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
   $('kioskOn').addEventListener('change', function(){ state.kiosk = this.checked; save(); applyKiosk(); });
   $('askSel').addEventListener('change', function(){ state.ask = this.value; save(); });
   $('typeOn').addEventListener('change', function(){ state.typing = this.checked; save(); renderAll(); });
+  $('olderOn').addEventListener('change', function(){ state.older = this.checked; setOlder(state.older, labels); save(); renderPicList(); renderFavs(); renderAll(); });
   $('qList').addEventListener('change', function(){ state.questions = this.value.split('\n').map(function(q){ return q.trim().slice(0, 80); }).filter(Boolean).slice(0, 12); this.value = state.questions.join('\n'); save(); if(state.page==='questions') renderGrid(); });
   $('voiceSel').addEventListener('change', function(){ state.voiceName = this.value; save(); pickVoice(); cvUnlock(); cvWarm(); });
   $('voiceTry').addEventListener('click', function(){ speak('Hi! This is my voice.'); });
@@ -2268,7 +2309,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
   });
   $('nameReset').addEventListener('click', function(){
     var id = $('picWord').value; if(!id || !LOOKUP[id]) return;
-    LOOKUP[id].label = LOOKUP[id].base; delete labels[id]; saveLabels(); renderPicList(); renderFavs(); renderAll();
+    LOOKUP[id].label = LOOKUP[id].base; delete labels[id]; setOlder(state.older, labels); saveLabels(); renderPicList(); renderFavs(); renderAll();
     $('picMsg').textContent = 'Back to "'+LOOKUP[id].base+'".';
   });
   $('picReset').addEventListener('click', function(){
@@ -2288,6 +2329,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
   document.addEventListener('contextmenu', function(e){ if(!$('panel').classList.contains('open')) e.preventDefault(); });
 
   /* ---------- start ---------- */
+  setOlder(state.older, {});
   document.documentElement.style.setProperty('--edge', (state.edge*100)+'vmin');
   renderAll(); setEar(); applyKiosk();
   idbLoad().then(function(all){
@@ -2295,7 +2337,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
     Object.keys(all).forEach(function(k){ if(k.indexOf('tts:')===0 && !cv.clips[k]) cv.clips[k] = all[k]; }); cv.loaded = true;
     if(Array.isArray(all.custom)){ custom = all.custom; registerWords(custom); }
     if(Array.isArray(all.scenes)){ scenes = all.scenes.filter(function(sc){ return all['sceneimg:'+sc.id]; }); scenes.forEach(function(sc){ sceneImg[sc.id] = all['sceneimg:'+sc.id]; }); }
-    if(all.labels && typeof all.labels==='object'){ labels = all.labels; Object.keys(labels).forEach(function(id){ if(LOOKUP[id]) LOOKUP[id].label = labels[id]; }); }
+    if(all.labels && typeof all.labels==='object'){ labels = all.labels; setOlder(state.older, labels); Object.keys(labels).forEach(function(id){ if(LOOKUP[id]) LOOKUP[id].label = labels[id]; }); }
     diag.store = 'kept on this device ('+Object.keys(pics).length+' photos, '+custom.length+' added words)';
     renderAll(); showDiag(); cvWarm();
   }, function(){ cv.loaded = true; diag.store = 'not available in this view. Photos last until the page closes.'; showDiag(); cvWarm(); });
