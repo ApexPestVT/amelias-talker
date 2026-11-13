@@ -355,6 +355,7 @@ body.typing #tabs, body.typing #grid{display:none}
     </div>
     <div id="deviceRow" hidden>
       <label class="check"><input type="checkbox" id="deviceOn"> Listen on this tablet itself (free)</label>
+      <small id="deviceMsg" style="color:#b3261e;display:block"></small>
       <small>On: the tablet's own speech recognition is used and there is no listening charge. Off: the paid listening service is used. Try both and keep the one that hears better.</small>
     </div>
     <label class="check"><input type="checkbox" id="namesOn"> Help it hear names correctly</label>
@@ -1165,7 +1166,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v52) ---'+
+      dbgText = '\n--- Listening check (v53) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1360,7 +1361,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var b = $('earBtn'), can = mode==='hosted' ? !!dict : (mode==='cloud' ? true : (mode==='native' ? !!NS : !!SR));
     b.classList.toggle('on', listening);
     b.classList.toggle('off-air', !can || !state.listen);
-    $('earTxt').textContent = listening ? 'Listening' : (!can ? 'No microphone here' : (!state.listen ? 'Listening is off' : (blocked ? 'Tap to allow mic' : (mode==='hosted' ? 'Tap to listen' : (mode==='cloud' ? 'Tap to start listening' : 'Starting')))));
+    $('earTxt').textContent = listening ? 'Listening' : (!can ? 'No microphone here' : (!state.listen ? 'Listening is off' : (blocked ? 'Tap to allow mic' : (mode==='hosted' ? 'Tap to listen' : (mode==='cloud' ? 'Tap to start listening' : (mode==='native' && ns.streak >= 3 ? 'Listening trouble, tap to retry' : 'Starting'))))));
   }
   var glowSeen = {}, GLOW_MS = 3200;
   function glowOne(el){
@@ -1478,8 +1479,8 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
 
   /* Tablet app only: the tablet's own speech recognition. Free, no listening service. It hears one sentence at a
      time and stops, so it is started again each time. A watchdog restarts it if it goes quiet without saying so. */
-  var ns = {on:false, t:null, last:'', subs:false, starts:0, errs:0, lastErr:'', beat:0, engine:'', heard:0, echo:0, dog:0, quiet:0, codes:{}, endAt:0, gapMax:0, gapSum:0, gapN:0, since:Date.now()};
-  function nsNote(){ diag.mic = (listening ? 'listening on this tablet' : 'on this tablet, between sentences')+' ('+(ns.engine ? 'engine: '+ns.engine+', ' : '')+'started '+ns.starts+' times, '+ns.errs+' errors'+(ns.lastErr ? ', last: '+ns.lastErr : '')+')'+
+  var ns = {streak:0, noDevice:false, dead:false, on:false, t:null, last:'', subs:false, starts:0, errs:0, lastErr:'', beat:0, engine:'', heard:0, echo:0, dog:0, quiet:0, codes:{}, endAt:0, gapMax:0, gapSum:0, gapN:0, since:Date.now()};
+  function nsNote(){ diag.mic = (listening ? 'listening on this tablet' : 'on this tablet, between sentences')+' ('+(ns.engine ? 'engine: '+ns.engine+', ' : '')+'started '+ns.starts+' times, '+ns.errs+' errors'+(ns.lastErr ? ', last: '+ns.lastErr : '')+(ns.noDevice ? ', built-in listener given up' : '')+')'+
       '\nOn-tablet listening, last '+Math.round((Date.now()-ns.since)/60000)+' min: '+ns.heard+' sentences heard, '+ns.echo+' ignored as the talker\'s own voice, '+ns.quiet+' quiet time-outs, '+ns.dog+' watchdog restarts, '+early.n+' answered early'+
       '\nDeaf gaps between sessions: '+ns.gapN+' gaps, average '+(ns.gapN ? Math.round(ns.gapSum/ns.gapN) : 0)+' ms, longest '+ns.gapMax+' ms'+
       (Object.keys(ns.codes).length ? '\nStop codes: '+Object.keys(ns.codes).map(function(k){ return k+' x'+ns.codes[k]; }).join(', ') : ''); showDiag(); }
@@ -1487,7 +1488,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     if(!ns.endAt) ns.endAt = Date.now();
     if(ns.last){ var t = ns.last; ns.last = ''; finalHeard(t); }
     listening = false; setEar(); clearTimeout(ns.t);
-    if(mode==='native' && ns.on && state.listen && !blocked && !document.hidden) ns.t = setTimeout(nsGo, err ? Math.min(1200*(1+Math.min(ns.errs, 6)), 9000) : 300);
+    if(mode==='native' && ns.on && state.listen && !blocked && !document.hidden) ns.t = setTimeout(nsGo, err ? 500*(1+Math.min(ns.streak, 3)) : 300);
     else ns.on = false;
     nsNote();
   }
@@ -1495,24 +1496,25 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     if(mode!=='native' || !ns.on) return;
     if(state.speaking){ ns.t = setTimeout(nsGo, 400); return; }          // do not listen to its own voice
     ns.last = ''; ns.starts++; ns.beat = Date.now();
-    var p; try{ p = NS.start({language:'en-US', partialResults:true, popup:false, maxResults:1, onDevice:true}); }catch(e){ p = Promise.reject(e); }
+    var p; try{ p = NS.start({language:'en-US', partialResults:true, popup:false, maxResults:1, onDevice:!ns.noDevice}); }catch(e){ p = Promise.reject(e); }
     Promise.resolve(p).then(function(r){ if(r && r.engine) ns.engine = r.engine; listening = true; ns.beat = Date.now(); setEar(); nsNote(); },
-      function(e){ ns.errs++; ns.lastErr = String((e && e.message) || e).slice(0, 60); if(/not allowed/.test(ns.lastErr)){ blocked = true; ns.on = false; diag.mic = 'microphone is blocked. Allow the microphone for My Turn in the tablet settings.'; setEar(); showDiag(); return; } nsEnded(true); });
+      function(e){ ns.errs++; ns.streak++; ns.lastErr = String((e && e.message) || e).slice(0, 60); nsTrouble(); if(ns.dead) return; if(/not allowed/.test(ns.lastErr)){ blocked = true; ns.on = false; diag.mic = 'microphone is blocked. Allow the microphone for My Turn in the tablet settings.'; setEar(); showDiag(); return; } nsEnded(true); });
   }
   function nsStart(){
     if(mode!=='native' || !NS || ns.on || !state.listen || blocked || document.hidden) return;
     ns.on = true;
     if(!ns.subs){
       ns.subs = true;
-      NS.addListener('partialResults', function(d){ var t = d && d.matches && d.matches[0]; ns.beat = Date.now(); if(!t || isEcho(t)) return; ns.last = t; partialHeard(t); });
+      NS.addListener('partialResults', function(d){ var t = d && d.matches && d.matches[0]; ns.beat = Date.now(); if(t) ns.streak = 0; if(!t || isEcho(t)) return; ns.last = t; partialHeard(t); });
       if(NS_OWN){
-        NS.addListener('final', function(d){ ns.beat = Date.now(); var t = d && d.text; ns.last = ''; if(!t) return; if(isEcho(t)){ ns.echo++; nsNote(); return; } ns.heard++; finalHeard(t); nsNote(); });
+        NS.addListener('final', function(d){ ns.beat = Date.now(); var t = d && d.text; ns.last = ''; if(!t) return; ns.streak = 0; if(isEcho(t)){ ns.echo++; nsNote(); return; } ns.heard++; finalHeard(t); nsNote(); });
         NS.addListener('beat', function(){ ns.beat = Date.now(); });
       }
       NS.addListener('listeningState', function(d){ ns.beat = Date.now(); if(d && d.engine) ns.engine = d.engine;
         if(NS_OWN && d && d.status==='stopped'){              // 6 and 7 only mean nobody spoke
           var bad = d.error && d.error!==6 && d.error!==7;
           ns.codes[d.error||'ended'] = (ns.codes[d.error||'ended']||0)+1; if(d.error===6 || d.error===7) ns.quiet++;
+          if(bad){ ns.streak++; nsTrouble(); if(ns.dead) return; }
           if(bad){ ns.errs++; ns.lastErr = 'code '+d.error+(d.error===12 || d.error===13 ? ' (speech pack missing, the tablet was asked to download it)' : ''); }
           nsEnded(!!bad); return;
         }
@@ -1524,6 +1526,18 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(perm && perm.speechRecognition && perm.speechRecognition!=='granted'){ blocked = true; ns.on = false; diag.mic = 'microphone is blocked. Allow the microphone for My Turn in the tablet settings.'; setEar(); showDiag(); return; }
       nsGo();
     }, function(){ nsGo(); });
+  }
+  /* Repeated failures: first try the tablet's standard recognizer, then give up on on-tablet listening for now
+     and use the listening service, so the talker never sits on "Starting" for good. */
+  function nsTrouble(){
+    var m = $('deviceMsg');
+    if(ns.streak===3 && !ns.noDevice){ ns.noDevice = true; ns.streak = 0; if(m) m.textContent = 'The tablet\'s built-in listener failed 3 times in a row ('+(ns.lastErr||'no code')+'), so the standard one is being tried.'; }
+    else if(ns.streak >= 3 && ns.noDevice && !ns.dead){
+      ns.dead = true; clearTimeout(ns.t); ns.on = false; try{ NS.stop(); }catch(e){}
+      if(m) m.textContent = 'Listening on this tablet kept failing ('+(ns.lastErr||'no code')+'), so the paid listening service is being used for now. To try the tablet again, turn this switch off and on, or close and reopen the app.';
+      pickListening();
+    }
+    setEar();
   }
   function nsStop(){ clearTimeout(ns.t); ns.on = false; if(NS){ try{ NS.stop(); }catch(e){} } listening = false; setEar(); }
 
@@ -1767,7 +1781,10 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   }
   $('earBtn').addEventListener('click', function(){
     if(listening || !state.listen) return;          // a child's tap can start listening, never stop it
-    if(mode==='native'){ blocked = false; ns.errs = 0; nsStart(); return; }
+    if(NS && state.onDevice && (mode==='native' || ns.dead)){                 // a tap always starts on-tablet listening from scratch
+      nsStop(); blocked = false; ns.errs = 0; ns.streak = 0; ns.noDevice = false; ns.dead = false; ns.lastErr = ''; if($('deviceMsg')) $('deviceMsg').textContent = '';
+      pickListening(); return;
+    }
     if(mode==='cloud'){ blocked = false; fails = 0; cloud.backoff = 0; if(cloud.ctx && cloud.ctx.state==='suspended') cloud.ctx.resume().catch(function(){}); else cloudStart(); return; }
     if(hosted){
       if(!dict) return;
@@ -2772,7 +2789,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   $('gapSel').addEventListener('change', function(){ state.gap = this.value; save(); applyLook(); });
   $('buzzOn').addEventListener('change', function(){ state.buzz = this.checked; save(); buzz(); });
   if(!navigator.vibrate){ $('buzzOn').disabled = true; $('buzzMsg').textContent = 'This tablet or browser does not allow vibration from a web page (iPads never do).'; }
-  $('deviceOn').addEventListener('change', function(){ state.onDevice = this.checked; save(); pickListening(); });
+  $('deviceOn').addEventListener('change', function(){ state.onDevice = this.checked; ns.streak = 0; ns.noDevice = false; ns.dead = false; ns.errs = 0; ns.lastErr = ''; $('deviceMsg').textContent = ''; save(); pickListening(); });
   $('namesOn').addEventListener('change', function(){ state.names = this.checked; cloud.namesRefused = false; save(); namesNote(); });
   $('smartOn').addEventListener('change', function(){ state.smart = this.checked; save(); smartNote(); });
   $('olderOn').addEventListener('change', function(){ state.older = this.checked; setOlder(state.older, labels); save(); renderPicList(); renderFavs(); renderAll(); });
@@ -2871,7 +2888,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     }, browserListen); };
     pickListening = function(){                       // app: the tablet's own listening unless the grown-up chose the service
       srStop(); cloudStop(); nsStop();
-      if(NS && state.onDevice){ mode = 'native'; setEar(); nsStart(); } else cloudOrBrowser();
+      if(NS && state.onDevice && !ns.dead){ mode = 'native'; setEar(); nsStart(); } else cloudOrBrowser();
     };
     pickListening();
     if(NSP.TabletSpeech && NSP.TabletSpeech.speak) appVoiceNote();
