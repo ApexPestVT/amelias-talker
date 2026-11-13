@@ -68,6 +68,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 body.modeling .model{background:var(--ink);border-color:var(--ink);color:#fff}
 body.modeling .model::after{display:none}
 body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
+.report{margin:0;font-family:inherit;font-size:14px;line-height:1.5;white-space:pre-wrap;background:var(--paper);border-radius:12px;padding:12px 14px;max-height:320px;overflow:auto;touch-action:pan-y}
 .coach{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:8px;font-size:15px;line-height:1.4}
 .lock{
   flex:none;width:44px;height:44px;border-radius:50%;border:2px solid var(--line);background:var(--bar);
@@ -377,6 +378,17 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
       </div>
       <small>New words appear on their page at Stage 3 and up. Add a photo above.</small>
       <div class="mine" id="mine"></div>
+    </div>
+
+    <h3>Her progress</h3>
+    <div class="row">
+      <label class="check"><input type="checkbox" id="logOn"> Keep a progress log on this tablet</label>
+      <pre class="report" id="reportBox"></pre>
+      <div class="inline">
+        <button class="btn" id="reportCopy" type="button">Copy report</button>
+        <button class="btn" id="reportClear" type="button">Clear the log</button>
+      </div>
+      <small id="reportMsg">Counts only: which words, how many, how many questions answered. Nothing she hears is saved, and nothing leaves this tablet unless you copy it.</small>
     </div>
 
     <h3>How to teach with this</h3>
@@ -772,7 +784,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     {n:2, name:'2. More words',  note:'20 pictures'},
     {n:3, name:'3. Word pages',  note:'Adds people, food, feelings, places, things'}
   ];
-  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, repeat:0.8, hold:0, edge:0.05, favs:{}, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
@@ -792,6 +804,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
       if(typeof saved.glow==='boolean') state.glow=saved.glow;
       if(typeof saved.words==='boolean') state.words=saved.words;
       if(typeof saved.modelBtn==='boolean') state.modelBtn=saved.modelBtn;
+      if(typeof saved.log==='boolean') state.log=saved.log;
       if(typeof saved.repeat==='number') state.repeat=saved.repeat;
       if(typeof saved.hold==='number') state.hold=saved.hold;
       if(typeof saved.edge==='number') state.edge=saved.edge;
@@ -799,7 +812,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -835,7 +848,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v23) ---'+
+      dbgText = '\n--- Listening check (v24) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nPaid listening on this tablet: '+usageText()+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1317,9 +1330,9 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     if(Date.now() < tapBlockUntil) return;
     el.classList.add('say'); setTimeout(function(){ el.classList.remove('say'); }, 3000);   // the written word shows for 3 seconds
     var kw = knownWord(String(sp.label).toLowerCase());
-    if(kw && kw.page!=='core'){ tap(kw.id, el, true); return; }                             // a word she already has: build the sentence too
+    if(kw && kw.page!=='core'){ plogAdd('photo'); tap(kw.id, el, true); return; }                             // a word she already has: build the sentence too
     clearTimeout(state.timer); state.taps = []; state.fresh = true;
-    renderBar(sp.label, false); speak(sp.label);
+    renderBar(sp.label, false); speak(sp.label); plogAdd('photo');
   }
   function renderPhotos(g){
     var sc = openScene ? scenes.filter(function(x){ return x.id===openScene; })[0] : (scenes.length===1 ? scenes[0] : null);
@@ -1580,6 +1593,79 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     state.taps.forEach(function(id){ var w = word(id); if(w) c.appendChild(picNode(w)); });
     var t = $('sayText'); t.textContent = text; t.classList.toggle('hint', !!hint);
   }
+  /* ---------- progress log: counts only, kept on this tablet. Nothing that was heard is stored. ---------- */
+  var plog = {}, plogT = null, askKind = null, openAskUntil = 0;
+  try{ plog = JSON.parse(localStorage.getItem('talker-log')||'{}') || {}; }catch(e){ plog = {}; }
+  function plogDay(){
+    var k = dayKey(new Date());
+    if(!plog[k]) plog[k] = { words:{}, taps:0, msgs:0, combos:0, pairs:{}, asked:{yesno:0,choice:0,open:0}, answered:{yesno:0,choice:0,open:0}, skipped:0, shown:0, photo:0, typed:0 };
+    return plog[k];
+  }
+  function plogSave(){
+    clearTimeout(plogT);
+    plogT = setTimeout(function(){
+      try{
+        var keys = Object.keys(plog).sort(); while(keys.length > 180){ delete plog[keys.shift()]; }
+        localStorage.setItem('talker-log', JSON.stringify(plog));
+      }catch(e){}
+    }, 600);
+  }
+  function plogOn(){ return state.log !== false && !hosted; }
+  function plogWord(id){ if(!plogOn()) return; var d = plogDay(); d.words[id] = (d.words[id]||0)+1; d.taps++; plogSave(); }
+  function plogAdd(field, sub){ if(!plogOn()) return; var d = plogDay(); if(sub){ d[field][sub] = (d[field][sub]||0)+1; } else d[field] = (d[field]||0)+1; plogSave(); }
+  function plogMessage(taps){
+    if(!plogOn() || !taps.length) return;
+    var d = plogDay(); d.msgs++;
+    if(taps.length >= 2){ d.combos++; var key = taps.join('+'); d.pairs[key] = (d.pairs[key]||0)+1; }
+    plogSave();
+  }
+  function wordName(id){ return LOOKUP[id] ? LOOKUP[id].label : String(id).replace(/^.*:/,''); }
+  /* Sums the log between two day offsets (0 = today). */
+  function plogSum(fromAgo, toAgo){
+    var out = { days:0, words:{}, taps:0, msgs:0, combos:0, pairs:{}, asked:0, answered:0, kinds:{yesno:[0,0],choice:[0,0],open:[0,0]}, skipped:0, shown:0, photo:0, typed:0 };
+    for(var i=fromAgo;i<=toAgo;i++){
+      var dt = new Date(); dt.setDate(dt.getDate()-i); var d = plog[dayKey(dt)]; if(!d) continue;
+      if(d.taps || d.msgs || d.shown) out.days++;
+      Object.keys(d.words||{}).forEach(function(w){ out.words[w] = (out.words[w]||0)+d.words[w]; });
+      Object.keys(d.pairs||{}).forEach(function(w){ out.pairs[w] = (out.pairs[w]||0)+d.pairs[w]; });
+      ['taps','msgs','combos','skipped','shown','photo','typed'].forEach(function(f){ out[f] += d[f]||0; });
+      ['yesno','choice','open'].forEach(function(kd){ var a = (d.asked||{})[kd]||0, b = (d.answered||{})[kd]||0; out.kinds[kd][0] += a; out.kinds[kd][1] += b; out.asked += a; out.answered += b; });
+    }
+    return out;
+  }
+  function plogReport(){
+    var wk = plogSum(0,6), prev = plogSum(7,13), older = plogSum(7,179);
+    var top = function(obj, n){ return Object.keys(obj).sort(function(a,b){ return obj[b]-obj[a]; }).slice(0,n); };
+    var nWords = Object.keys(wk.words).length, nPrev = Object.keys(prev.words).length;
+    var fresh = Object.keys(wk.words).filter(function(w){ return !older.words[w]; });
+    var change = function(a, b){ return prev.days ? ' (week before: '+b+')' : ''; };
+    var L = [];
+    L.push((state.name||'Child')+' — talker progress, last 7 days');
+    L.push('Report made '+new Date().toLocaleDateString()+'. Days used: '+wk.days+' of 7.');
+    L.push('');
+    L.push('WORDS');
+    L.push('Different words she used: '+nWords+change(nWords, nPrev));
+    L.push('Total word taps: '+wk.taps+change(wk.taps, prev.taps));
+    L.push('Most used: '+(top(wk.words,10).map(function(w){ return wordName(w)+' ('+wk.words[w]+')'; }).join(', ') || 'none yet'));
+    L.push('New this week: '+(fresh.length ? fresh.map(wordName).join(', ') : (older.days ? 'none' : 'everything is new, this is the first week')));
+    L.push('');
+    L.push('PUTTING WORDS TOGETHER');
+    L.push('Messages: '+wk.msgs+'. With two or more words: '+wk.combos+change(wk.combos, prev.combos));
+    L.push('Most common: '+(top(wk.pairs,5).map(function(pk){ return pk.split('+').map(wordName).join(' + ')+' ('+wk.pairs[pk]+')'; }).join(', ') || 'none yet'));
+    L.push('');
+    L.push('ANSWERING QUESTIONS');
+    L.push('Questions that popped up: '+wk.asked+'. Answered: '+wk.answered+'. Closed with Something else: '+wk.skipped+'.');
+    L.push('Yes/no: '+wk.kinds.yesno[1]+' of '+wk.kinds.yesno[0]+'. This-or-that: '+wk.kinds.choice[1]+' of '+wk.kinds.choice[0]+'. Open (what/where/who/how): '+wk.kinds.open[1]+' of '+wk.kinds.open[0]+'.');
+    L.push('');
+    L.push('OTHER');
+    L.push('Photo scene touches: '+wk.photo+'. Typed messages: '+wk.typed+'.');
+    L.push('Words a grown-up showed her (Show her mode): '+wk.shown+'.');
+    L.push('');
+    L.push('Notes: counts come from the talker on one tablet. Taps made in Show her mode are kept separate. Taps by other people outside Show her mode are counted as hers. Nothing she heard is recorded.');
+    return L.join('\n');
+  }
+  function renderReport(){ var el = document.getElementById('reportBox'); if(el) el.textContent = plogOn() ? plogReport() : 'The progress log is off.'; }
+
   /* Show her (modeling): a grown-up taps her board while talking. Those taps teach; they are not her words. */
   var modelTaps = [], modelT = null, modelHold = null, MODEL_IDLE_MS = 90000;
   function modelIdle(){ clearTimeout(modelT); modelT = setTimeout(function(){ setModeling(false); }, MODEL_IDLE_MS); }
@@ -1620,12 +1706,14 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
       if(modelTaps[modelTaps.length-1]!==id){ modelTaps.push(id); if(modelTaps.length>4) modelTaps.shift(); }
       state.taps = modelTaps.slice(); state.fresh = true;
       renderBar('Showing: '+modelTaps.map(function(t){ return word(t).label; }).join(' + '), false);
-      speak(w.label); showWord(el, w.label); modelIdle();
+      speak(w.label); showWord(el, w.label); modelIdle(); plogAdd('shown');
       if(!stay && w.page!=='core' && state.page!=='core') setTimeout(function(){ state.page='core'; renderTabs(); renderGrid(); }, 2200);
       return;
     }
     speak(w.label);                               // her own word, right away
     showWord(el, w.label);                        // and the written word, paired with the sound
+    plogWord(id);
+    if(openAskUntil && Date.now() < openAskUntil && w.page!=='core'){ openAskUntil = 0; plogAdd('answered','open'); }   // answered an open question from its page
     clearTimeout(state.timer);
     state.timer = setTimeout(finish, Math.max(COMPOSE_WAIT, state.repeat*1000 + 1500));
     if(!stay && w.page!=='core' && state.page!=='core'){   // back to the home words after a page word
@@ -1636,6 +1724,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     state.fresh = true;
     var waiting = pendingQ; pendingQ = null;
     var askLater = function(delay){ if(waiting && Date.now()-waiting.at < 15000) setTimeout(function(){ maybeAsk(waiting.text); }, delay); };
+    plogMessage(state.taps);
     if(!state.sentences || !state.taps.length){ askLater(200); return; }
     var out = compose(state.taps, currentHeard(), state.name);
     if(!out.sentence){ askLater(200); return; }
@@ -1649,7 +1738,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     e.preventDefault();
     var v = $('typeIn').value.trim(); if(!v) return;
     clearTimeout(state.timer); state.taps=[]; state.fresh=true;
-    renderBar(v, false); speak(v); $('typeIn').value='';
+    renderBar(v, false); speak(v); $('typeIn').value=''; plogAdd('typed');
   });
 
   /* ---------- child lock: as much as a web page is allowed to do ---------- */
@@ -1698,6 +1787,8 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   function sayAnswer(sentence, ids, btn){
     if(askDone) return;
     askDone = true; clearTimeout(askT);
+    if(askKind) plogAdd('answered', askKind);
+    (ids||[]).forEach(function(id){ if(LOOKUP[id]) plogWord(id); });
     var all = $('askOpts').children;
     for(var i=0;i<all.length;i++){ if(all[i]!==btn) all[i].classList.add('dim'); }
     if(btn) btn.classList.add('picked');
@@ -1732,6 +1823,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     } else {
       q.options.forEach(function(o){ box.appendChild(askKey(o.id ? LOOKUP[o.id] : null, o.label, 'thing', o.sentence, o.id ? [o.id] : [])); });
     }
+    askKind = q.kind==='yesno' ? 'yesno' : 'choice'; plogAdd('asked', askKind);
     askDone = false; $('askSkip').style.visibility = '';
     $('ask').hidden = false;
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
@@ -1776,6 +1868,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     if(!words.length) return;
     if(state.stage >= 3){
       state.page = page; renderTabs(); renderGrid();
+      plogAdd('asked', 'open'); openAskUntil = Date.now()+25000;
       glowOne($('tabs').querySelector('[data-page="'+page+'"]'));
       clearTimeout(pageT);
       pageT = setTimeout(function(){ if(state.page===page && (state.fresh || !state.taps.length)){ state.page='core'; renderTabs(); renderGrid(); } }, 25000);
@@ -1785,11 +1878,12 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     $('askQ').textContent = clean(text, state.name)+'?';
     var pg = PAGES.filter(function(x){ return x.id===page; })[0];
     words.slice(0, 6).forEach(function(w){ box.appendChild(askKey(w, w.label, pg.cat || 'thing', wordSentence(w), [w.id])); });
+    askKind = 'open'; plogAdd('asked', 'open');
     askDone = false; $('askSkip').style.visibility = '';
     $('ask').hidden = false;
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
   }
-  onPress($('askSkip'), function(){ if(askDone) return; tapBlockUntil = Date.now()+BOARD_HOLD; hideAsk(); }, {noRepeatGuard:true});
+  onPress($('askSkip'), function(){ if(askDone) return; plogAdd('skipped'); tapBlockUntil = Date.now()+BOARD_HOLD; hideAsk(); }, {noRepeatGuard:true});
 
   /* ---------- grown-up panel (press and hold the lock) ---------- */
   var hold = null, lock = $('lockBtn');
@@ -1831,7 +1925,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   }
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
-    $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('wordsOn').checked = state.words; $('modelOn').checked = state.modelBtn; $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
+    $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('wordsOn').checked = state.words; $('modelOn').checked = state.modelBtn; $('logOn').checked = state.log !== false; renderReport(); clearArmed = false; $('reportClear').textContent = 'Clear the log'; $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
     hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderResearch(); renderVoices(); showDiag(); $('panel').classList.add('open');
   }
   function closePanel(){ $('panel').classList.remove('open'); }
@@ -1844,6 +1938,17 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   $('nameIn').addEventListener('input', function(){ state.name = this.value.trim(); save(); });
   $('sentOn').addEventListener('change', function(){ state.sentences = this.checked; save(); });
   $('listenOn').addEventListener('change', function(){ state.listen = this.checked; save(); applyListen(); });
+  var clearArmed = false;
+  $('logOn').addEventListener('change', function(){ state.log = this.checked; save(); renderReport(); });
+  $('reportCopy').addEventListener('click', function(){
+    var text = plogReport(), done = function(ok){ $('reportMsg').textContent = ok ? 'Copied. Paste it into a message or email to her therapist.' : 'Could not copy on this tablet. Press and hold the report text to select it.'; };
+    try{ navigator.clipboard.writeText(text).then(function(){ done(true); }, function(){ done(false); }); }catch(e){ done(false); }
+  });
+  $('reportClear').addEventListener('click', function(){
+    if(!clearArmed){ clearArmed = true; this.textContent = 'Tap again to erase everything'; return; }
+    plog = {}; try{ localStorage.removeItem('talker-log'); }catch(e){}
+    clearArmed = false; this.textContent = 'Clear the log'; renderReport(); $('reportMsg').textContent = 'Log erased.';
+  });
   $('modelOn').addEventListener('change', function(){ state.modelBtn = this.checked; save(); if(!state.modelBtn) setModeling(false); renderAll(); });
   $('wordsOn').addEventListener('change', function(){ state.words = this.checked; save(); });
   $('glowOn').addEventListener('change', function(){ state.glow = this.checked; save(); });
