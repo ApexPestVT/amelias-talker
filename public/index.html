@@ -353,6 +353,8 @@ body.typing #tabs, body.typing #grid{display:none}
         <option value="off">Do not pop up answers</option>
       </select>
     </div>
+    <label class="check"><input type="checkbox" id="namesOn"> Help it hear names correctly</label>
+    <small id="namesMsg"></small>
     <label class="check"><input type="checkbox" id="smartOn"> Use AI for harder questions</label>
     <small id="smartMsg">Off: only the built-in rules are used.</small>
     <div class="row">
@@ -1046,15 +1048,18 @@ function numberSentence(frame, label){
 function detectOpenQuestion(text, name){
   var t = clean(text, name); if(!t) return null;
   if(/\bhow\b.*\b(feel|feeling)\b/.test(t) || /\bhow are you\b/.test(t) || /\b(what's|whats|what is) (wrong|the matter)\b/.test(t)) return 'feelings';
-  if(/\bwhat\b.*\b(eat|eating|drink|drinking|snack|lunch|dinner|breakfast|hungry|thirsty)\b/.test(t)) return 'food';
+  if(/\b(what|which)\b.*\b(eat|eating|drink|drinking|drinks?|snacks?|lunch|dinner|breakfast|hungry|thirsty|foods?|meal|treat|fruit)\b/.test(t)) return 'food';
+  if(/\b(what|which|where)\b.*\bfavou?rite place\b/.test(t)) return 'places';
+  if(/\bwho\b.*\b(favou?rite|best friend|love|like)\b/.test(t) || /\b(what|which|who)\b.*\bfavou?rite (person|friend)\b/.test(t)) return 'people';
   if(/\bwhere\b.*\b(go|going|play)\b/.test(t)) return 'places';
   if(/\bwho\b.*\b(want|with|help|see|play|get)\b/.test(t)) return 'people';
-  if(/\bwhat\b.*\b(play|toy|read|watch|wear)\b/.test(t)) return 'things';
+  if(/\b(what|which)\b.*\b(play|toys?|read|watch|wear|games?|favou?rite thing)\b/.test(t)) return 'things';
   return null;
 }
 /* "What do you want to drink?" should offer drinks only, and "to eat?" food only. */
+function likeQuestion(text, name){ return /\b(favou?rite|like best|like the most|love|you like)\b/.test(clean(text, name)); }   // "what's your favorite food?" is answered "I like pizza."
 function openKind(text, name){
-  var t = clean(text, name), d = /\b(drink|drinking|thirsty|sip)\b/.test(t), e = /\b(eat|eating|snack|lunch|dinner|breakfast|hungry)\b/.test(t);
+  var t = clean(text, name), d = /\b(drink|drinking|thirsty|sip)\b/.test(t), e = /\b(eat|eating|snacks?|lunch|dinner|breakfast|hungry|foods?|meal|fruit)\b/.test(t);
   return d && !e ? 'drink' : (e && !d ? 'eat' : null);
 }
 function isDrink(w){
@@ -1062,7 +1067,7 @@ function isDrink(w){
   var re = /^(milk|juice|water|soda|pop|tea|lemonade|smoothie|shake|milkshake|cocoa|hot chocolate|formula|bottle|drink|cider|punch|coffee)$|\b(milk|juice|water|tea|soda|smoothie|shake)$/;
   return re.test(l) || re.test(b);
 }
-if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestion:detectNumberQuestion, numberSentence:numberSentence, NUMBERS:NUMBERS, detectColorQuestion:detectColorQuestion, colorSentence:colorSentence, COLORS:COLORS, setOlder:setOlder, BUILD:BUILD, literal:literal, MORE6:MORE6, QUESTIONS_DEFAULT:QUESTIONS_DEFAULT, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
+if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM6:NUM6, detectNumberQuestion:detectNumberQuestion, numberSentence:numberSentence, NUMBERS:NUMBERS, detectColorQuestion:detectColorQuestion, colorSentence:colorSentence, COLORS:COLORS, setOlder:setOlder, BUILD:BUILD, literal:literal, MORE6:MORE6, QUESTIONS_DEFAULT:QUESTIONS_DEFAULT, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
 </script>
 
 <script>
@@ -1077,7 +1082,7 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
     {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving your own'},
     {n:6, name:'6. Teen and adult words', note:'Adds 96 of the most used everyday words on four pages. Sentences are said word for word'}
   ];
-  var state = { name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { names:true, name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
@@ -1106,13 +1111,14 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
       if(typeof saved.modelBtn==='boolean') state.modelBtn=saved.modelBtn;
       if(typeof saved.log==='boolean') state.log=saved.log;
       if(typeof saved.repeat==='number') state.repeat=saved.repeat;
+      if(typeof saved.names==='boolean') state.names=saved.names;
       if(typeof saved.hold==='number') state.hold=saved.hold;
       if(typeof saved.edge==='number') state.edge=saved.edge;
       if(saved.favs && typeof saved.favs==='object') state.favs=saved.favs;
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,names:state.names,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -1148,7 +1154,8 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v41) ---'+
+      dbgText = '\n--- Listening check (v42) ---'+
+        '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -1471,6 +1478,7 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
     var p = String(cloud.provider||'');
     if(/deepgram/.test(p)) return 0.46;
     if(/whisper/.test(p)) return 0.30;
+    if(cloud.namesSent && !/multilingual/.test(p)) return 0.19;      // name help is 4 cents an hour extra on the English model
     return 0.15;
   }
   function usageText(){
@@ -1514,13 +1522,29 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
     if(cloud.ring.length > (cloud.opening ? RING_MAX : PRE_ROLL)) cloud.ring.shift();
     if(r.rms > VOICE_RMS && !cloud.opening && !cloud.ws && now > cloud.backoff) cloudConnect();
   }
+  /* Names the listening service should expect: the child's name, and people the grown-up has named on the People page. */
+  function nameTerms(){
+    var out = [], seen = {};
+    var add = function(v){ v = String(v||'').trim(); var k = v.toLowerCase(); if(v.length < 2 || v.length > 50 || seen[k]) return; seen[k] = 1; out.push(v.charAt(0).toUpperCase()+v.slice(1)); };
+    add(state.name);
+    allWords().forEach(function(w){ if(w.page==='people' && (!w.base || w.base!==w.label)) add(w.label); });
+    return out.slice(0, 20);
+  }
+  function namesNote(){
+    var n = nameTerms(), m = $('namesMsg'); if(!m) return;
+    m.textContent = !state.names ? 'Off.' : (cloud.namesRefused ? 'The listening service refused the name list, so it is off for now.' :
+      (n.length ? 'Names it is told to expect: '+n.join(', ')+'. Adds about 4 cents per listening hour. To add a name, set it in section 1 or rename a person on the People page.' : 'No names yet. Set the name in section 1, or rename a person on the People page.'));
+  }
   function cloudConnect(){
     cloud.opening = true; cloudNote('connecting');
     fetch('api/stt/token', {method:'POST'}).then(function(r){
       return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||('error '+r.status)); return d; });
     }).then(function(t){
       if(!cloud.on){ cloud.opening=false; return; }
-      var ws = t.protocols ? new WebSocket(t.url, t.protocols) : new WebSocket(t.url);
+      var terms = (state.names && !cloud.namesRefused && /universal-streaming/.test(t.url)) ? nameTerms() : [], gotMsg = false;
+      var url = terms.length ? t.url+'&keyterms_prompt='+encodeURIComponent(JSON.stringify(terms)) : t.url;
+      cloud.namesSent = terms.length ? terms.join(', ') : '';
+      var ws = t.protocols ? new WebSocket(url, t.protocols) : new WebSocket(url);
       ws.binaryType = 'arraybuffer'; cloud.ws = ws; cloud.dgBuf = '';
       ws.onopen = function(){
         cloud.opening = false; cloud.openedAt = Date.now(); fails = 0;
@@ -1528,7 +1552,7 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
         cloudNote('connected');
       };
       ws.onmessage = function(ev){
-        var raw = ev.data, m;
+        var raw = ev.data, m; gotMsg = true;
         if(typeof raw !== 'string'){ try{ raw = new TextDecoder().decode(raw); }catch(e){ raw = ''; } }
         try{ m = JSON.parse(raw); }catch(e){ cloud.dbg.msgs.unreadable = (cloud.dbg.msgs.unreadable||0)+1; cloud.dbg.last = String(raw).slice(0,120); return; }
         var kind = m.type || (m.error ? 'error' : 'other');
@@ -1540,7 +1564,7 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
           if(m.is_final){ cloud.dgBuf = (cloud.dgBuf+' '+piece).trim(); text = cloud.dgBuf; fin = true; if(m.speech_final) cloud.dgBuf = ''; }
           else text = (cloud.dgBuf+' '+piece).trim();
         }
-        else if(m.error || m.type==='Error'){ cloudNote('problem: '+(m.error||m.description||m.message||'unknown')); return; }
+        else if(m.error || m.type==='Error'){ if(terms.length && !cloud.dbg.msgs.Turn){ cloud.namesRefused = true; } cloudNote('problem: '+(m.error||m.description||m.message||'unknown')); return; }
         if(!text) return;
         cloud.dbg.lastText = text;
         if(isEcho(text)){ cloud.dbg.echo++; return; }
@@ -1553,6 +1577,7 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
         if(cloud.openedAt){ addUsage(Date.now()-cloud.openedAt); cloud.usedMs += Date.now()-cloud.openedAt; cloud.openedAt = 0; }
         cloud.ws = null; cloud.opening = false;
         cloud.dbg.closed = 'code '+ev.code+(ev.reason?' '+ev.reason:'');
+        if(terms.length && !gotMsg && ev.code!==1000){ cloud.namesRefused = true; cloud.namesSent = ''; }   // the name list may be what it refused: next try goes without it
         if(ev.code===1000 || ev.code===1005) cloudNote('the service closed the connection ('+cloud.dbg.closed+')');
         if(ev.code!==1000 && ev.code!==1005){ fails++; cloud.backoff = Date.now()+Math.min(3000*fails, 30000); cloudNote('connection dropped (code '+ev.code+'), will retry'); }
       };
@@ -2518,11 +2543,19 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
     var box = $('askOpts'); box.textContent = ''; box.classList.remove('eight', 'ten'); box.classList.add('many');
     $('askQ').textContent = clean(text, state.name)+'?';
     var pg = PAGES.filter(function(x){ return x.id===page; })[0];
-    words.slice(0, 6).forEach(function(w){ box.appendChild(askKey(w, w.label, pg.cat || 'thing', wordSentence(w), [w.id])); });
+    var liking = likeQuestion(text, state.name) && page!=='feelings';
+    words.slice(0, 6).forEach(function(w){ box.appendChild(askKey(w, w.label, pg.cat || 'thing', (liking && likeSentence(w)) || wordSentence(w), [w.id])); });
     askKind = 'open'; plogAdd('asked', 'open');
     askDone = false; $('askSkip').style.visibility = '';
     $('ask').hidden = false;
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
+  }
+  function likeSentence(w){                       // "I like this apple." -> "I like apples."
+    var out = compose(['like', w.id], '', state.name).sentence || '';
+    return out.replace(/^I like (this|that|the|a|an) (.+)\.$/, function(m, d, n){
+      if(d==='the' || / /.test(n)) return m;
+      return 'I like '+(/s$/.test(n) ? n : (/(x|ch|sh)$/.test(n) ? n+'es' : (/[^aeiou]y$/.test(n) ? n.slice(0,-1)+'ies' : n+'s')))+'.';
+    });
   }
   var askFrame = 'plain';
   onPress($('askMore'), function(){
@@ -2574,7 +2607,7 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
   }
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
-    $('qList').value = state.questions.join('\n'); $('olderOn').checked = state.older; $('smartOn').checked = state.smart; smartNote();
+    $('qList').value = state.questions.join('\n'); $('olderOn').checked = state.older; $('smartOn').checked = state.smart; smartNote(); $('namesOn').checked = state.names; namesNote();
     $('hcOn').checked = state.hc; $('seeTalkOn').checked = state.seeTalk; $('buzzOn').checked = state.buzz; $('sizeSel').value = state.size; $('gapSel').value = state.gap;
     $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('wordsOn').checked = state.words; $('modelOn').checked = state.modelBtn; $('logOn').checked = state.log !== false; renderReport(); clearArmed = false; $('reportClear').textContent = 'Clear the log'; $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
     hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderResearch(); renderVoices(); showDiag(); $('panel').classList.add('open');
@@ -2622,6 +2655,7 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
   $('gapSel').addEventListener('change', function(){ state.gap = this.value; save(); applyLook(); });
   $('buzzOn').addEventListener('change', function(){ state.buzz = this.checked; save(); buzz(); });
   if(!navigator.vibrate){ $('buzzOn').disabled = true; $('buzzMsg').textContent = 'This tablet or browser does not allow vibration from a web page (iPads never do).'; }
+  $('namesOn').addEventListener('change', function(){ state.names = this.checked; cloud.namesRefused = false; save(); namesNote(); });
   $('smartOn').addEventListener('change', function(){ state.smart = this.checked; save(); smartNote(); });
   $('olderOn').addEventListener('change', function(){ state.older = this.checked; setOlder(state.older, labels); save(); renderPicList(); renderFavs(); renderAll(); });
   $('qList').addEventListener('change', function(){ state.questions = this.value.split('\n').map(function(q){ return q.trim().slice(0, 80); }).filter(Boolean).slice(0, 12); this.value = state.questions.join('\n'); save(); if(state.page==='questions') renderGrid(); });
