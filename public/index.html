@@ -526,7 +526,7 @@ body.typing #tabs, body.typing #grid{display:none}
         <li><b>More words.</b> 20 pictures in the same places. Two taps make a bigger sentence: NO + PLAY.</li>
         <li><b>Word pages.</b> Tabs for People, Food, Feelings, Places and Things, plus a Questions page of whole questions to ask with one tap. You choose the questions under "Questions page" above.</li>
         <li><b>Building sentences.</b> Adds I, you, it and not in a new left column. "not" makes it a no. "it" stands for the thing. "you" says just what was tapped: YOU + PLAY says "You play."</li>
-        <li><b>My own sentences.</b> A Numbers page with 0 to 9, plus o'clock, dollars, years old, minutes and times. A typing line. Whatever was just said lands there, ready to fix and say again. The star saves it to the My own page. The X on a saved sentence deletes it (press twice).</li>
+        <li><b>My own sentences.</b> A typing line. Whatever was just said lands there, ready to fix and say again. The star saves it to the My own page. The X on a saved sentence deletes it (press twice).</li>
         <li><b>Teen and adult words.</b> Four pages of the words older kids and adults say most. No pictures. Here the talker says the words in the order tapped and only tidies small things, like adding "am" or a question mark.</li>
       </ol>
       <small>The 20 home words stay in the same places at every stage, so nothing already learned moves. Move up when your child is using most of what is there, not by age. Moving up early does no harm: extra words can be ignored until they are needed. Ask your speech therapist if you are unsure. This advice on when to move up is common practice, not a tested rule.</small>
@@ -535,7 +535,7 @@ body.typing #tabs, body.typing #grid{display:none}
       <ol class="coach">
         <li><b>It listens.</b> No button. When someone asks your child a yes or no question, a this-or-that question, or "what do you want to drink?", big answers pop up. Set this under "When a question is heard".</li>
         <li><b>It knows color questions.</b> "What color do you want?" brings up eight colors at every stage: red, orange, yellow, green, blue, purple, brown and black. If the person names the colors ("red or green?"), it offers those instead.</li>
-        <li><b>It knows number questions.</b> "How many do you want?", "How old are you?" and "Pick a number" bring up 1 to 10 at every stage. At Stages 5 and 6 a "Bigger number" button opens the Numbers page, where digits tapped in a row make any number: 1 then 2 says "I am 12."</li>
+        <li><b>It knows number questions.</b> "How many do you want?", "How old are you?" and "Pick a number" bring up 1 to 10 at every stage. So do school math questions like "What is 2 plus 2?". From Stage 3 up there is a Numbers page (0 to 9, plus o'clock, dollars, years old, minutes, times) and a "Bigger number" button that opens it. There, digits tapped in a row make any number: 1 then 2 says "I am 12."</li>
         <li><b>It can ask an AI for help.</b> Off by default. Turn on "Use AI for harder questions" and questions the rules miss, like "how was school?", get answer buttons matched to the stage. Only the words heard are sent.</li>
         <li><b>It glows.</b> As people talk, the pictures for the words they say light up on the board. That shows where words live without anyone pointing.</li>
         <li><b>It shows the written word</b> for 3 seconds on every tap, so the spelling is seen with the sound.</li>
@@ -625,7 +625,7 @@ var MORE6_SRC = {
   ask:['what','how','when','where','why','who','he','she','they','him','her','here','there','now','then','today','tomorrow','good','really','very','okay','just','too','all'],
   chat:['yeah','oh','hey','well','right','please','sure','one','two','three','people','guy','thing','something','some','much','about','still','out','back','last','word','work','time']
 };
-/* Numbers page (Stage 5 and up): digits she can put together into any number, plus the words numbers usually go with. */
+/* Numbers page (Stage 3 and up): digits she can put together into any number, plus the words numbers usually go with. */
 var NUMPAGE = {id:'numbers', label:'Numbers', pic:'🔢', cat:'describe'};
 var NUM6 = ['0','1','2','3','4','5','6','7','8','9'].map(function(d){ return {id:'numbers:'+d, label:d, pic:'', page:'numbers', np:d, lit:1, digit:1}; })
   .concat(["o'clock", 'dollars', 'years old', 'minutes', 'times'].map(function(l){ return {id:'numbers:'+l, label:l, pic:'', page:'numbers', np:l, lit:1}; }));
@@ -1037,6 +1037,7 @@ function detectNumberQuestion(text, name){
   if(/\bhow old\b/.test(t)) return 'old';
   if(/\bhow many\b/.test(t)) return /\b(want|like|need|have some)\b/.test(t) ? 'want' : 'plain';
   if(/\b(what|which|pick a|choose a) number\b/.test(t)) return 'plain';
+  if(/\d\s*[+\-x×÷=]\s*\d/.test(String(text||'')) || /\b(plus|minus|take away|divided by|equals?)\b/.test(t) || /\b(what|how much) (is|does|are|s)\b.*\btimes\b/.test(t) || /\bwhat comes (after|before|next)\b/.test(t)) return 'plain';   // school math: "what is 2 plus 2"
   return null;
 }
 function numberSentence(frame, label){
@@ -1073,7 +1074,7 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
     {n:2, name:'2. More words',  note:'20 pictures'},
     {n:3, name:'3. Word pages',  note:'Adds people, food, feelings, places, things'},
     {n:4, name:'4. Building sentences', note:'Adds I, you, it, not in a new left column'},
-    {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, saving your own, and a Numbers page'},
+    {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving your own'},
     {n:6, name:'6. Teen and adult words', note:'Adds 96 of the most used everyday words on four pages. Sentences are said word for word'}
   ];
   var state = { name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
@@ -1147,7 +1148,7 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v40) ---'+
+      dbgText = '\n--- Listening check (v41) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -1744,7 +1745,7 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
     g.classList.toggle('photos', state.page==='photos');
     g.classList.toggle('six', state.stage >= 4 && state.page==='core');
     var sentPage = state.page==='questions' || state.page==='mine';
-    if((state.page==='questions' && state.stage < 3) || ((state.page==='mine' || state.page==='numbers') && state.stage < 5) || (LOOKUP[state.page+':the'] || MORE6_SRC[state.page]) && state.stage < 6) state.page = 'core', sentPage = false;
+    if((state.page==='questions' && state.stage < 3) || (state.page==='mine' && state.stage < 5) || (state.page==='numbers' && state.stage < 3) || (LOOKUP[state.page+':the'] || MORE6_SRC[state.page]) && state.stage < 6) state.page = 'core', sentPage = false;
     g.classList.toggle('sents', sentPage);
     g.classList.toggle('wide6', !!MORE6_SRC[state.page]);
     g.classList.toggle('fringe', state.page!=='core' && state.page!=='photos' && !sentPage);
@@ -1806,7 +1807,7 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
   function renderTabs(){
     var t = $('tabs'); t.hidden = state.stage < 3 && !scenes.length; t.textContent = '';
     if(t.hidden) return;
-    var list = (state.stage >= 3 ? PAGES.concat([{id:'questions', label:'Questions', pic:'❔'}]) : [PAGES[0]]).concat(state.stage >= 5 ? [{id:'mine', label:'My own', pic:'⭐'}, NUMPAGE] : [], state.stage >= 6 ? PAGES6 : [], scenes.length ? [{id:'photos', label:'Photos', pic:'\uD83D\uDCF7'}] : []);
+    var list = (state.stage >= 3 ? PAGES.concat([{id:'questions', label:'Questions', pic:'❔'}, NUMPAGE]) : [PAGES[0]]).concat(state.stage >= 5 ? [{id:'mine', label:'My own', pic:'⭐'}] : [], state.stage >= 6 ? PAGES6 : [], scenes.length ? [{id:'photos', label:'Photos', pic:'\uD83D\uDCF7'}] : []);
     t.classList.toggle('many', list.length > 9);
     list.forEach(function(p){
       var b = document.createElement('button');
@@ -2419,7 +2420,7 @@ if(typeof module!=='undefined') module.exports = {NUM6:NUM6, detectNumberQuestio
     $('askQ').textContent = clean(text, state.name)+'?';
     NUMBERS.forEach(function(nm){ box.appendChild(askKey(nm, nm.label, 'describe', numberSentence(frame, nm.label), [])); });
     askKind = 'choice'; plogAdd('asked', 'choice'); askFrame = frame;
-    askDone = false; $('askSkip').style.visibility = ''; $('askMore').hidden = state.stage < 5;       // older stages can go past ten
+    askDone = false; $('askSkip').style.visibility = ''; $('askMore').hidden = state.stage < 3;       // once the word pages are open, numbers can go past ten
     $('ask').hidden = false;
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
   }
