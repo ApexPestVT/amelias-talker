@@ -105,6 +105,7 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
 /* picture grid: positions never change (motor planning) */
 .grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(4,1fr);gap:10px}
 .grid.six{grid-template-columns:repeat(6,1fr)}
+.grid.fringe.wide6{grid-template-columns:repeat(6,1fr)}
 .grid.sents{grid-template-columns:repeat(2,1fr);grid-template-rows:none;grid-auto-rows:minmax(17%,1fr);overflow-y:auto;touch-action:pan-y}
 .key.sent .lab{font-size:min(3.4vh,3vw);padding:0 12px}
 .key.wordonly .pic{display:none}
@@ -476,16 +477,19 @@ var BUILD = [
   {id:'it',  label:'it',  pic:'📦', cat:'thing',  s:4},
   {id:'not', label:'not', pic:'🚫', cat:'stop',   s:4}
 ];
-/* Stage 6: the words adults who use talkers say most (Beukelman, Yorkston, Poblete & Naranjo 1984), minus the ones already on the board. */
+/* Stage 6: the most used words of school-aged children in grades 2 to 8 (Boenisch & Soto 2015, top 100) and of adults who use talkers
+   (Beukelman, Yorkston, Poblete & Naranjo 1984), minus the words already on the board. */
 var PAGES6 = [
   {id:'small', label:'Little words', pic:'🔗', cat:'describe'},
   {id:'doing', label:'Doing',        pic:'⚙️', cat:'action'},
-  {id:'ask',   label:'Ask & when',   pic:'🕒', cat:'social'}
+  {id:'ask',   label:'Ask & when',   pic:'🕒', cat:'social'},
+  {id:'chat',  label:'Chat',         pic:'💭', cat:'thing'}
 ];
 var MORE6_SRC = {
-  small:['the','a','and','to','in','of','for','with','at','but','if','or','so','because','this','that','my','me','your','we'],
-  doing:['is','are','was','have','do','can','will','would','could','get','put','take','make','know','think','need','see','tell','say','work'],
-  ask:['what','how','when','where','why','who','he','she','they','her','here','there','now','today','tomorrow','time','good','really','very','okay']
+  small:['the','a','and','to','in','of','for','with','at','but','if','or','so','because','this','that','these','my','me','your','we','us','our','them'],
+  doing:['is','are','was','have','do','can','will','would','could','get','put','take','make','know','think','need','see','tell','say','come','wait','let','talk','mean'],
+  ask:['what','how','when','where','why','who','he','she','they','him','her','here','there','now','then','today','tomorrow','good','really','very','okay','just','too','all'],
+  chat:['yeah','oh','hey','well','right','please','sure','one','two','three','people','guy','thing','something','some','much','about','still','out','back','last','word','work','time']
 };
 var MORE6 = [];
 Object.keys(MORE6_SRC).forEach(function(pg){ MORE6_SRC[pg].forEach(function(l){ MORE6.push({id:pg+':'+l, label:l, pic:'', page:pg, np:l, lit:1}); }); });
@@ -877,7 +881,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
     {n:3, name:'3. Word pages',  note:'Adds people, food, feelings, places, things'},
     {n:4, name:'4. Building sentences', note:'Adds I, you, it, not in a new left column'},
     {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving her own'},
-    {n:6, name:'6. Teen and adult words', note:'Adds 60 of the most used everyday words. Sentences are said word for word'}
+    {n:6, name:'6. Teen and adult words', note:'Adds 96 of the most used everyday words on four pages. Sentences are said word for word'}
   ];
   var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
@@ -945,7 +949,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v27) ---'+
+      dbgText = '\n--- Listening check (v28) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nPaid listening on this tablet: '+usageText()+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1492,6 +1496,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
     var sentPage = state.page==='questions' || state.page==='mine';
     if((state.page==='questions' && state.stage < 3) || (state.page==='mine' && state.stage < 5) || (LOOKUP[state.page+':the'] || MORE6_SRC[state.page]) && state.stage < 6) state.page = 'core', sentPage = false;
     g.classList.toggle('sents', sentPage);
+    g.classList.toggle('wide6', !!MORE6_SRC[state.page]);
     g.classList.toggle('fringe', state.page!=='core' && state.page!=='photos' && !sentPage);
     if(sentPage){
       var list = state.page==='questions' ? state.questions : state.mine;
@@ -1537,7 +1542,7 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
   function renderTabs(){
     var t = $('tabs'); t.hidden = state.stage < 3 && !scenes.length; t.textContent = '';
     if(t.hidden) return;
-    var list = (state.stage >= 3 ? PAGES.concat([{id:'questions', label:'Questions', pic:'❔'}]) : [PAGES[0]]).concat(state.stage >= 5 ? [{id:'mine', label:'My sentences', pic:'⭐'}] : [], state.stage >= 6 ? PAGES6 : [], scenes.length ? [{id:'photos', label:'Photos', pic:'\uD83D\uDCF7'}] : []);
+    var list = (state.stage >= 3 ? PAGES.concat([{id:'questions', label:'Questions', pic:'❔'}]) : [PAGES[0]]).concat(state.stage >= 5 ? [{id:'mine', label:'My own', pic:'⭐'}] : [], state.stage >= 6 ? PAGES6 : [], scenes.length ? [{id:'photos', label:'Photos', pic:'\uD83D\uDCF7'}] : []);
     t.classList.toggle('many', list.length > 9);
     list.forEach(function(p){
       var b = document.createElement('button');
@@ -1785,9 +1790,10 @@ if(typeof module!=='undefined') module.exports = {BUILD:BUILD, literal:literal, 
       ['Construction grammar approaches for learners who use talkers (2026)', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC13724842', 'Cautions that children can miss learning to build language if whole phrases are always entered for them.']
     ]],
     ['Words for teens and adults (Stage 6)', [
-      ['500 most used words of five adults who use talkers (Beukelman, Yorkston, Poblete, Naranjo 1984), reprinted in this essay', 'https://ttac.odu.edu/ATN/Core/CoreVocabularyEssay_Cannon.pdf', 'The Stage 6 pages are taken from the top of this list, minus words already on the board.'],
+      ['500 most used words of five adults who use talkers (Beukelman, Yorkston, Poblete, Naranjo 1984), reprinted in this essay', 'https://ttac.odu.edu/ATN/Core/CoreVocabularyEssay_Cannon.pdf', 'The adult half of the Stage 6 words comes from the top 150 of this list.'],
       ['100 frequently used core words (PRC-Saltillo AAC Language Lab)', 'https://aaclanguagelab.com/materials/100highfrequencycorewords21.pdf', 'A one-page list by word type, used as a cross-check.'],
-      ['Core vocabulary of school-aged children, grades 2 to 8 (Boenisch and Soto 2015)', 'https://informahealthcare.com/doi/abs/10.3109/07434618.2014.1001521', 'A source list for school-age users. Full list is behind a paywall and was not read.'],
+      ['Top 100 words of school-aged children, grades 2 to 8 (Boenisch and Soto, University of Cologne page)', 'https://www.hf.uni-koeln.de/36605', 'The authors\' own free page with the ranked list. Stage 6 covers this list except a few words that came from the recording itself.'],
+      ['Core vocabulary of school-aged children (Boenisch and Soto 2015, journal abstract)', 'https://informahealthcare.com/doi/abs/10.3109/07434618.2014.1001521', 'The study behind that list: 30 children recorded through a school day.'],
       ['Vocabulary selection: applying core vocabulary (handout)', 'https://ksha.org/docs/autism_intervention_handout_3.pdf', 'Summarises several studies: a few hundred words make up most of what people say at every age.']
     ]],
     ['Listening and question pop-ups', [
