@@ -105,6 +105,10 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
 /* picture grid: positions never change (motor planning) */
 .grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(4,1fr);gap:10px}
 .grid.six{grid-template-columns:repeat(6,1fr)}
+.typing-note{display:none;flex:none;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:3px dashed var(--line);border-radius:14px;font-size:18px;color:#5b6478}
+.typing-note button{font-size:18px;font-weight:700;padding:0 20px;min-height:48px;border-radius:14px;border:3px solid var(--line);background:var(--bar)}
+body.typing .typing-note{display:flex}
+body.typing #tabs, body.typing #grid{display:none}
 .grid.fringe.wide6{grid-template-columns:repeat(6,1fr)}
 .grid.sents{grid-template-columns:repeat(2,1fr);grid-template-rows:none;grid-auto-rows:minmax(96px,19%);align-content:start;overflow-y:auto;touch-action:pan-y}
 .sentwrap{position:relative;min-height:0}
@@ -251,6 +255,10 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
   <button type="submit" id="typeBtn">Say it</button>
   <button type="button" id="typeSave" hidden>⭐ Save</button>
 </form>
+<div class="typing-note" id="typingNote">
+  <span>Typing. Press <b>Say it</b> to speak, or <b>⭐ Save</b> to keep it.</span>
+  <button type="button" id="typingDone">Show pictures</button>
+</div>
 
 <div class="tabs" id="tabs" hidden></div>
 <div class="grid" id="grid"></div>
@@ -413,8 +421,9 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
       <small id="reportMsg">Counts only: which words, how many, how many questions answered. Nothing she hears is saved, and nothing leaves this tablet unless you copy it.</small>
     </div>
 
-    <h3>How to teach with this</h3>
+    <h3>How to teach and use this</h3>
     <div class="row">
+      <b>Every day, at every stage</b>
       <ol class="coach">
         <li><b>Talk and tap.</b> Say your sentence out loud and tap one or two key words on her board as you say them. "Time to EAT."</li>
         <li><b>Use Show her.</b> Hold the Show her button at the top for one second first. Your taps then speak the word and show it, but do not build a sentence and are not counted as her words. It turns itself off after 90 quiet seconds.</li>
@@ -426,7 +435,37 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
         <li><b>Keep it in reach, always.</b> Signs, pointing and sounds still count too.</li>
       </ol>
       <label class="check"><input type="checkbox" id="modelOn"> Show the Show her button on her screen</label>
-      <small>These steps come from the modeling and partner-training studies listed below.</small>
+
+      <b>The six stages</b>
+      <ol class="coach">
+        <li><b>First words.</b> 10 pictures. One tap says the word, then a full sentence. Start here if the board is new to her.</li>
+        <li><b>More words.</b> 20 pictures in the same places. Two taps make a bigger sentence: NO + PLAY.</li>
+        <li><b>Word pages.</b> Tabs for People, Food, Feelings, Places and Things, plus a Questions page of whole questions she can ask with one tap. You choose the questions under "Questions page" above.</li>
+        <li><b>Building sentences.</b> Adds I, you, it and not in a new left column. "not" makes it a no. "it" stands for the thing. "you" says just what she tapped: YOU + PLAY says "You play."</li>
+        <li><b>My own sentences.</b> A typing line. Whatever she just said lands there so she can fix it and say it again. The star saves it to her My own page. The X on a saved sentence deletes it (press twice).</li>
+        <li><b>Teen and adult words.</b> Four pages of the words older kids and adults say most. No pictures. Here the talker says her words in her order and only tidies small things, like adding "am" or a question mark.</li>
+      </ol>
+      <small>The 20 home words stay in the same places at every stage, so nothing she has learned moves. Move up when she is using most of what she has, not by age. Moving up early does no harm: she can ignore what she is not ready for. Ask her speech therapist if you are unsure. This advice on when to move up is common practice, not a tested rule.</small>
+
+      <b>What the talker does by itself</b>
+      <ol class="coach">
+        <li><b>It listens.</b> No button. When someone asks her a yes or no question, a this-or-that question, or "what do you want to drink?", big answers pop up. Set this under "When a question is heard".</li>
+        <li><b>It glows.</b> As people talk, the pictures for the words they say light up on her board. That shows her where words live without anyone pointing.</li>
+        <li><b>It shows the written word</b> for 3 seconds on every tap, so she sees the spelling with the sound.</li>
+        <li><b>It keeps count.</b> "Her progress" above shows which words she uses. Press Copy report and send it to her therapist.</li>
+      </ol>
+
+      <b>Things you set up</b>
+      <ol class="coach">
+        <li><b>Photo scenes.</b> Add a real photo from her life and put word spots on it. "Suggest words" finds things in the photo for you.</li>
+        <li><b>Her own words.</b> "Add a word" for names, favorite foods and places. "Change a word" swaps any picture or name.</li>
+        <li><b>Choices she is offered.</b> Pick up to six words per group for open questions like "what do you want to eat?"</li>
+        <li><b>Teen and adult wording.</b> One switch changes potty to bathroom, teddy to phone and so on. It turns on by itself at Stages 5 and 6.</li>
+        <li><b>Touch settings.</b> If she rests a hand on the screen or taps twice, adjust "Ignore extra taps", "How long she must hold a picture" and "Ignore touches at the edges".</li>
+        <li><b>Child lock.</b> Keeps her in the talker. For the home button use Guided Access on an iPad or Pin app on a Galaxy.</li>
+        <li><b>Typing.</b> Can be turned on at any stage for a child who reads early.</li>
+      </ol>
+      <small>The teaching steps come from the modeling and partner-training studies listed below. The Questions page, the meaning of "you" and the Stage 6 words each have their own studies in the list.</small>
     </div>
 
     <h3>The research behind this</h3>
@@ -976,7 +1015,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v29) ---'+
+      dbgText = '\n--- Listening check (v30) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nPaid listening on this tablet: '+usageText()+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2033,6 +2072,21 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     renderBar(v, false); speak(v); $('typeIn').value=''; plogAdd('typed'); starState();
   });
   $('typeIn').addEventListener('input', starState);
+  /* On a touch tablet the keyboard covers the pictures, so put them away while she types instead of leaving half a row showing. */
+  var touchTablet = (navigator.maxTouchPoints||0) > 0;
+  function typingMode(on){ document.body.classList.toggle('typing', !!on && touchTablet); }
+  $('typeIn').addEventListener('focus', function(){ typingMode(true); });
+  $('typeIn').addEventListener('blur', function(){ setTimeout(function(){ if(document.activeElement !== $('typeIn')) typingMode(false); }, 150); });
+  $('typingDone').addEventListener('click', function(){ $('typeIn').blur(); typingMode(false); });
+  if(window.visualViewport){                      // keyboard closed with the tablet's own back arrow: the box keeps focus, so watch the screen size too
+    var vvMax = window.visualViewport.height;
+    window.visualViewport.addEventListener('resize', function(){
+      var h = window.visualViewport.height; if(h > vvMax) vvMax = h;
+      if(document.body.classList.contains('typing') && h > vvMax - 80 && vvShrunk){ $('typeIn').blur(); typingMode(false); }
+      vvShrunk = h < vvMax - 80;
+    });
+  }
+  var vvShrunk = false;
   $('typeSave').addEventListener('click', function(){
     var t = starText(); if(!t) return;
     var i = state.mine.indexOf(t);
