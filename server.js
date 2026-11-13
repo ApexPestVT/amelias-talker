@@ -60,8 +60,8 @@ const SCENE_PROMPT = [
   '- One simple everyday word each, lowercase, the word a parent would say to a toddler ("dog", "swing", "cup").',
   '- Never name or identify a person. For people use a role word only: "girl", "boy", "baby", "woman", "man".',
   '- No brand names. Skip tiny background clutter. No duplicates.',
-  '- x and y are the centre of the thing as a percent of the photo width and height (0 to 100, origin top left).',
-  'Answer by calling place_words with the list, for example {"words":[{"label":"dog","x":42,"y":61}]}.'
+  '- Positions are percentages, never pixels: x_percent is 0 at the left edge and 100 at the right edge; y_percent is 0 at the top and 100 at the bottom.',
+  'Answer by calling place_words with the list, for example {"words":[{"label":"dog","x_percent":42,"y_percent":61}]}.'
 ].join('\n');
 let selftests = [];
 const visionHits = new Map();   // ip -> [timestamps], separate from the listening allowance
@@ -79,7 +79,7 @@ function readBody(req, max) {
     req.on('error', reject);
   });
 }
-async function sceneWords(image) {
+async function sceneWords(image, w, h) {
   const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(image || ''));
   if (!m) throw new Error('not a photo');
   const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -92,13 +92,17 @@ async function sceneWords(image) {
         name: 'place_words',
         description: 'Place the words on the photo.',
         input_schema: { type: 'object', required: ['words'], properties: { words: { type: 'array', items: {
-          type: 'object', required: ['label', 'x', 'y'],
-          properties: { label: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' } } } } } }
+          type: 'object', required: ['label', 'x_percent', 'y_percent'],
+          properties: {
+            label: { type: 'string', description: 'one simple lowercase word' },
+            x_percent: { type: 'number', minimum: 0, maximum: 100, description: 'centre of the thing, as a percent of the photo WIDTH from the left edge. Not pixels.' },
+            y_percent: { type: 'number', minimum: 0, maximum: 100, description: 'centre of the thing, as a percent of the photo HEIGHT from the top edge. Not pixels.' }
+          } } } } }
       }],
       tool_choice: { type: 'tool', name: 'place_words' },
       messages: [{ role: 'user', content: [
         { type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } },
-        { type: 'text', text: SCENE_PROMPT }
+        { type: 'text', text: SCENE_PROMPT + (w && h ? '\nFor reference, the photo is ' + w + ' pixels wide and ' + h + ' pixels tall.' : '') }
       ] }]
     })
   });
@@ -116,8 +120,12 @@ async function sceneWords(image) {
   if (typeof out.words === 'string') { try { out.words = JSON.parse(out.words); } catch (e) {} }
   const seen = new Set();
   const clamp = v => Math.max(5, Math.min(95, Math.round(Number(v))));
-  return (Array.isArray(out.words) ? out.words : []).map(w => ({
-    label: String(w.label || '').toLowerCase().replace(/[^a-z0-9' -]/g, '').trim().slice(0, 24), x: clamp(w.x), y: clamp(w.y)
+  const list = (Array.isArray(out.words) ? out.words : []).map(o => ({ label: o.label, x: Number(o.x_percent !== undefined ? o.x_percent : o.x), y: Number(o.y_percent !== undefined ? o.y_percent : o.y) }));
+  // Safety net: if any position is over 100 the model answered in pixels, so convert using the photo size.
+  const pixels = w && h && list.some(o => o.x > 100 || o.y > 100);
+  return list.map(o => ({
+    label: String(o.label || '').toLowerCase().replace(/[^a-z0-9' -]/g, '').trim().slice(0, 24),
+    x: clamp(pixels ? o.x / w * 100 : o.x), y: clamp(pixels ? o.y / h * 100 : o.y)
   })).filter(w => w.label && Number.isFinite(w.x) && Number.isFinite(w.y) && !seen.has(w.label) && seen.add(w.label)).slice(0, 8);
 }
 
@@ -130,7 +138,7 @@ http.createServer((req, res) => {
     const now = Date.now(); selftests = selftests.filter(t => now - t < 3600e3);
     if (selftests.length >= 8) return json(res, 429, { ok: false, error: 'self-test limit reached, try again in an hour' });
     selftests.push(now);
-    return sceneWords(SELFTEST_IMG).then(words => json(res, 200, { ok: true, model: VISION_MODEL, words }), e => json(res, 200, { ok: false, model: VISION_MODEL, error: e.message }));
+    return sceneWords(SELFTEST_IMG, 256, 192).then(words => json(res, 200, { ok: true, model: VISION_MODEL, words }), e => json(res, 200, { ok: false, model: VISION_MODEL, error: e.message }));
   }
   if (p === '/api/scene-words') {
     if (req.method !== 'POST') return json(res, 405, { error: 'POST only' });
@@ -138,7 +146,7 @@ http.createServer((req, res) => {
     if (!sameSite(req)) return json(res, 403, { error: 'wrong site' });
     const ip2 = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
     if (!visionAllowed(ip2)) return json(res, 429, { error: 'too many photo suggestions this hour, try again later' });
-    return readBody(req, 4 * 1024 * 1024).then(b => sceneWords(JSON.parse(b).image))
+    return readBody(req, 4 * 1024 * 1024).then(b => { const q = JSON.parse(b); return sceneWords(q.image, Number(q.w) || 0, Number(q.h) || 0); })
       .then(words => json(res, 200, { words }), e => { console.error('scene words failed:', e.message); json(res, 502, { error: e.message }); });
   }
   if (p === '/api/stt/token') {

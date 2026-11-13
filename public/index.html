@@ -1393,7 +1393,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     scToast('Looking at the photo. This takes a few seconds.', '', 0);
     var ctl = window.AbortController ? new AbortController() : null;
     var giveUp = setTimeout(function(){ if(ctl) ctl.abort(); }, 45000);
-    fetch('api/scene-words', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({image:ed.img}), signal: ctl ? ctl.signal : undefined})
+    fetch('api/scene-words', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({image:ed.img, w:ed.w, h:ed.h}), signal: ctl ? ctl.signal : undefined})
       .then(function(r){ return r.text().then(function(body){
         var d; try{ d = JSON.parse(body); }catch(e){ throw new Error('error '+r.status); }
         if(!r.ok) throw new Error(d.error||('error '+r.status)); return d; }); })
