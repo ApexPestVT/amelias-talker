@@ -1156,7 +1156,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v44) ---'+
+      dbgText = '\n--- Listening check (v45) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2427,7 +2427,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
     $('askQ').textContent = clean(text, state.name)+'?';
     opts.forEach(function(o){
       var w = boardWord(o.label), cat = o.label==='yes' ? 'action' : (o.label==='no' ? 'stop' : 'thing');
-      box.appendChild(askKey(w, o.label, cat, o.sentence, w ? [w.id] : []));
+      box.appendChild(askKey(w || (o.emoji ? {id:'', label:o.label, pic:String(o.emoji)} : null), o.label, cat, o.sentence, w ? [w.id] : []));   // a board word keeps its own picture; anything else gets the AI's picture
     });
     askKind = kind; plogAdd('asked', kind);
     askDone = false; $('askSkip').style.visibility = '';

@@ -170,6 +170,8 @@ function askPrompt(level, words) {
     '- Otherwise use kind "choices". Take the choices from the question itself when it names them ("the red one or the blue one" gives "red" and "blue").',
     '- For open questions with no named choices, offer the most ordinary answers a person that age would give. Include one honest negative or unsure answer when it fits ("bad", "not sure").',
     '- Each option has a short label and a full first-person sentence the tablet will say. The sentence must only say what the label means. Add no facts, names, reasons or feelings that were not asked about.',
+    '- Every option needs a picture: one single standard emoji that shows what the label means (soccer gets the soccer ball, not sure gets the thinking or shrugging face). Never a flag, never text.',
+    '- When the question asks for a favorite or a pick from a well-known group (sports, animals, seasons, school subjects and the like), use every choice you are allowed, with the most common answers for a person in the United States first. For sports that includes football.',
     '- Never use the name of a real person. No slang. Nothing rude, scary, medical or grown-up for a young child.',
     words && words.length ? '- Words already on their board (prefer these as labels when they fit): ' + words.join(', ') + '.' : '',
     'Reply only by calling offer_answers.'
@@ -180,6 +182,12 @@ function askAllowed(ip) {
   const now = Date.now(), mine = (askHits.get(ip) || []).filter(t => now - t < 3600e3);
   if (mine.length >= 240) return false;
   mine.push(now); askHits.set(ip, mine); return true;
+}
+// One picture only: must be a real emoji, short, and not a flag. Anything else is dropped and the button shows the word alone.
+function askEmoji(v) {
+  const e = String(v || '').trim();
+  if (!e || e.length > 14 || [...new Intl.Segmenter('en', { granularity: 'grapheme' }).segment(e)].length !== 1 || /[\p{L}\p{N}<>&"']/u.test(e) || /\p{Regional_Indicator}/u.test(e) || !/\p{Extended_Pictographic}/u.test(e)) return '';
+  return e;
 }
 const askCache = new Map();       // same question at the same level: answer once
 let lastAsk = null;
@@ -198,7 +206,8 @@ async function askHelp(heard, stage, words) {
       tools: [{ name: 'offer_answers', description: 'Offer answers the person can tap, or none.',
         input_schema: { type: 'object', required: ['kind', 'options'], properties: {
           kind: { type: 'string', enum: ['yesno', 'choices', 'none'] },
-          options: { type: 'array', items: { type: 'object', required: ['label', 'sentence'], properties: {
+          options: { type: 'array', items: { type: 'object', required: ['label', 'emoji', 'sentence'], properties: {
+            emoji: { type: 'string', description: 'exactly one standard emoji picture for this label' },
             label: { type: 'string', description: 'what is shown on the button, lowercase, 1 to 3 words' },
             sentence: { type: 'string', description: 'the full first-person sentence the tablet says' } } } } } } }],
       tool_choice: { type: 'tool', name: 'offer_answers' },
@@ -213,7 +222,8 @@ async function askHelp(heard, stage, words) {
   const seen = new Set();
   let options = (Array.isArray(inp.options) ? inp.options : []).map(o => ({
     label: String((o && o.label) || '').toLowerCase().replace(/[^a-z0-9' -]/g, '').trim().slice(0, 28),
-    sentence: String((o && o.sentence) || '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 90)
+    sentence: String((o && o.sentence) || '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 90),
+    emoji: askEmoji(o && o.emoji)
   })).filter(o => o.label && o.sentence && !seen.has(o.label) && seen.add(o.label));
   if (kind === 'yesno') {
     const y = options.find(o => o.label === 'yes'), n = options.find(o => o.label === 'no');
