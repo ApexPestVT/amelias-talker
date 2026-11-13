@@ -1080,6 +1080,7 @@ if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM
 /* Inside the tablet app (iPad or Android wrapper) the pages are stored in the app, so the server has to be named in full. */
 var NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 var API = NATIVE ? 'https://amelias-talker-production.up.railway.app/' : '';
+var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpers (listening and voice); empty on the web
 (function(){
   var $ = function(id){ return document.getElementById(id); };
   var HEARD_TTL = 30000, COMPOSE_WAIT = 1400, PAGE_WAIT = 6000;
@@ -1164,7 +1165,7 @@ var API = NATIVE ? 'https://amelias-talker-production.up.railway.app/' : '';
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v50) ---'+
+      dbgText = '\n--- Listening check (v51) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1182,6 +1183,7 @@ var API = NATIVE ? 'https://amelias-talker-production.up.railway.app/' : '';
   var cv = { on:false, voices:[], clips:{}, bufs:{}, ctx:null, src:null, busy:false, done:0, total:0, stop:'', skipped:0 };
   try{ var cvSaved = JSON.parse(localStorage.getItem('talker-cv')||'null'); if(Array.isArray(cvSaved) && cvSaved.length){ cv.on = true; cv.voices = cvSaved; } }catch(e){}
   var synth = ('speechSynthesis' in window) ? window.speechSynthesis : null;
+  var appVoice = {said:0, fails:0, last:''};       // the tablet app's own voice (Android app only)
   var voice = null, tts = null;
   function pickVoice(){
     if(!synth) return;
@@ -1190,6 +1192,7 @@ var API = NATIVE ? 'https://amelias-talker-production.up.railway.app/' : '';
             vs.filter(function(v){return /^en[-_]US/i.test(v.lang);})[0] || vs.filter(function(v){return /^en/i.test(v.lang);})[0] || null;
     renderVoices();
     diag.voice = vs.length ? 'this device'+(voice?' ('+voice.name+')':'') : (tts?'Claude voice':'waiting for a first tap');
+    if(NSP.TabletSpeech && NSP.TabletSpeech.speak) appVoiceNote();
     cvMsg();
   }
   function renderVoices(){
@@ -1241,6 +1244,7 @@ var API = NATIVE ? 'https://amelias-talker-production.up.railway.app/' : '';
     var v = cvId(), k = cvKey(v, text), c = cvCtx(), gave = false;
     if(!c){ fallback(); return; }
     cvStop(); if(synth){ try{ synth.cancel(); }catch(e){} }
+    if(NSP.TabletSpeech && NSP.TabletSpeech.stopSpeaking){ try{ NSP.TabletSpeech.stopSpeaking(); }catch(e){} }
     var give = function(fn){ if(gave) return; gave = true; clearTimeout(late); if(n===speakN) fn(); };
     var late = setTimeout(function(){ give(fallback); }, cv.clips[k] ? 1500 : 4000);   // never leave her waiting in silence
     (cv.clips[k] ? Promise.resolve() : cvFetch(v, text)).then(function(){ return cvDecode(k); }).then(function(buf){
@@ -1307,7 +1311,22 @@ var API = NATIVE ? 'https://amelias-talker-production.up.railway.app/' : '';
     if(cvId()){ speakCloud(text, n, fin, function(){ speakDevice(text, fin); }); return; }
     cvStop(); speakDevice(text, fin);
   }
+  function appVoiceNote(){
+    diag.voice = 'the tablet app\'s own voice (spoke '+appVoice.said+' times, '+appVoice.fails+' failures'+(appVoice.last ? ', last: '+appVoice.last : '')+')'; showDiag();
+    if(NSP.TabletSpeech && NSP.TabletSpeech.voiceStatus) NSP.TabletSpeech.voiceStatus().then(function(v){
+      diag.voice += '\nTablet sound: voice '+(v.ready ? 'ready' : 'NOT ready')+(v.engine ? ' ('+v.engine+')' : '')+', media volume '+v.mediaVolume+' of '+v.mediaMax+(v.mediaMuted ? ', MUTED' : '')+(v.mediaVolume===0 ? ' (turn the volume up)' : ''); showDiag();
+    }, function(){});
+  }
   function speakDevice(text, fin){
+    var own = NSP.TabletSpeech;                     // inside the Android app the browser's voice is not available: use the tablet's
+    if(own && own.speak){
+      own.speak({text:text, rate:state.rate, pitch:state.typing ? 1 : 1.15}).then(function(){ appVoice.said++; appVoice.last = ''; fin(); appVoiceNote(); },
+        function(e){ appVoice.fails++; appVoice.last = String((e && e.message) || e).slice(0, 50); appVoiceNote(); speakBrowser(text, fin); });
+      return;
+    }
+    speakBrowser(text, fin);
+  }
+  function speakBrowser(text, fin){
     if(synth){
       try{
         synth.cancel();
@@ -1332,7 +1351,6 @@ var API = NATIVE ? 'https://amelias-talker-production.up.railway.app/' : '';
   /* ---------- hearing ---------- */
   var listening = false, blocked = false, pickListening = function(){};
   var hosted = !!(window.claude && typeof window.claude.use==='function');
-  var NSP = NATIVE && window.Capacitor.Plugins || {};
   var NS = NSP.TabletSpeech || NSP.SpeechRecognition || null, NS_OWN = !!NSP.TabletSpeech;   // TabletSpeech is our own quiet listener; the other is the stock one (beeps)   // the tablet's own speech recognition (app only)   // preview inside Claude
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   var rec = null, restartT = null, fails = 0, dict = null;
@@ -2833,6 +2851,7 @@ var API = NATIVE ? 'https://amelias-talker-production.up.railway.app/' : '';
       if(NS && state.onDevice){ mode = 'native'; setEar(); nsStart(); } else cloudOrBrowser();
     };
     pickListening();
+    if(NSP.TabletSpeech && NSP.TabletSpeech.speak) appVoiceNote();
     if(!NATIVE && 'serviceWorker' in navigator){ try{ navigator.serviceWorker.register('sw.js').catch(function(){}); }catch(e){} }
   }
 })();

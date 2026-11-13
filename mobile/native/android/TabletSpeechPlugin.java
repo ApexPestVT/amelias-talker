@@ -11,6 +11,8 @@ import android.os.Looper;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
@@ -21,6 +23,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Locale;
 
 /**
  * Listening for My Turn, written to avoid the start/stop beeps of the standard recognizer.
@@ -45,6 +49,84 @@ public class TabletSpeechPlugin extends Plugin implements RecognitionListener {
     private long lastBeat = 0;
     private final Handler main = new Handler(Looper.getMainLooper());
     private static final int[] QUIET_STREAMS = { AudioManager.STREAM_NOTIFICATION, AudioManager.STREAM_SYSTEM };
+
+    // ---- talking: the tablet's own voice. A web page inside an Android app cannot use the browser's voice. ----
+    private TextToSpeech tts;
+    private volatile boolean ttsReady = false;
+    private volatile boolean speakingNow = false;
+    private int utterance = 0;
+    private final HashMap<String, PluginCall> speakCalls = new HashMap<>();
+
+    @Override
+    public void load() {
+        try {
+            tts = new TextToSpeech(getContext(), status -> {
+                ttsReady = (status == TextToSpeech.SUCCESS);
+                if (!ttsReady) return;
+                try { tts.setLanguage(Locale.US); } catch (Exception ignored) {}
+                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                    @Override public void onStart(String id) { speakingNow = true; }
+                    @Override public void onDone(String id) { finishSpeak(id, null); }
+                    @Override public void onError(String id) { finishSpeak(id, "voice error"); }
+                    @Override public void onStop(String id, boolean interrupted) { finishSpeak(id, null); }
+                });
+            });
+        } catch (Exception ignored) {}
+    }
+
+    private void finishSpeak(String id, String err) {
+        PluginCall c;
+        synchronized (speakCalls) {
+            c = speakCalls.remove(id);
+            speakingNow = !speakCalls.isEmpty();
+        }
+        if (c == null) return;
+        if (err == null) c.resolve(); else c.reject(err);
+    }
+
+    @PluginMethod
+    public void speak(PluginCall call) {
+        String text = call.getString("text", "");
+        Float rate = call.getFloat("rate", 1f);
+        Float pitch = call.getFloat("pitch", 1f);
+        if (tts == null || !ttsReady) { call.reject("voice not ready"); return; }
+        if (text == null || text.length() == 0) { call.resolve(); return; }
+        main.removeCallbacks(unquietLater);
+        unquiet();                                   // never talk into a muted tablet
+        String id = "u" + (++utterance);
+        synchronized (speakCalls) { speakCalls.put(id, call); }
+        try {
+            tts.setSpeechRate(rate == null ? 1f : rate);
+            tts.setPitch(pitch == null ? 1f : pitch);
+            speakingNow = true;
+            int r = tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, id);
+            if (r != TextToSpeech.SUCCESS) finishSpeak(id, "voice could not start");
+        } catch (Exception ex) {
+            finishSpeak(id, String.valueOf(ex.getMessage()));
+        }
+    }
+
+    @PluginMethod
+    public void stopSpeaking(PluginCall call) {
+        try { if (tts != null) tts.stop(); } catch (Exception ignored) {}
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void voiceStatus(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("ready", ttsReady);
+        try {
+            AudioManager am = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+            if (am != null) {
+                ret.put("mediaVolume", am.getStreamVolume(AudioManager.STREAM_MUSIC));
+                ret.put("mediaMax", am.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+                ret.put("mediaMuted", am.isStreamMute(AudioManager.STREAM_MUSIC));
+            }
+            if (tts != null && ttsReady) ret.put("engine", String.valueOf(tts.getDefaultEngine()));
+        } catch (Exception ignored) {}
+        call.resolve(ret);
+    }
 
     @PluginMethod
     public void start(PluginCall call) {
@@ -121,7 +203,7 @@ public class TabletSpeechPlugin extends Plugin implements RecognitionListener {
             AudioManager am = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
             if (am == null) return;
             for (int s : QUIET_STREAMS) { try { am.adjustStreamVolume(s, AudioManager.ADJUST_MUTE, 0); } catch (Exception ignored) {} }
-            if (alsoMedia) { try { am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0); } catch (Exception ignored) {} }
+            if (alsoMedia && !speakingNow) { try { am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0); } catch (Exception ignored) {} }
             muted = true;
             main.removeCallbacks(unquietLater);
             main.postDelayed(unquietLater, 700);
@@ -153,6 +235,7 @@ public class TabletSpeechPlugin extends Plugin implements RecognitionListener {
         main.removeCallbacks(unquietLater);
         unquiet();
         try { if (rec != null) { rec.cancel(); rec.destroy(); rec = null; } } catch (Exception ignored) {}
+        try { if (tts != null) { tts.stop(); tts.shutdown(); tts = null; } } catch (Exception ignored) {}
         super.handleOnDestroy();
     }
 
