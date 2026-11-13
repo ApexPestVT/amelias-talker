@@ -106,6 +106,20 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
 /* picture grid: positions never change (motor planning) */
 .grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(4,1fr);gap:10px}
 .grid.six{grid-template-columns:repeat(6,1fr)}
+/* Seeing and hearing options */
+body.hc{--paper:#000;--bar:#000;--ink:#fff;--ink-soft:#e8e8e8;--line:#fff;
+  --social:#000;--social-edge:#ff7ab0;--action:#000;--action-edge:#5dff7f;--describe:#000;--describe-edge:#74b6ff;--thing:#000;--thing-edge:#ffb547;--stop:#000;--stop-edge:#ff6f61}
+body.hc .key{border-width:5px;color:#fff}
+body.hc .key.blank{border-color:transparent}
+body.hc .tab.sel{color:#000}
+body.hc .tab{color:#fff}
+body.hc .panel{--paper:#f3f6fb;--bar:#ffffff;--ink:#16223a;--ink-soft:#5b6780;--line:#d5dcea;color:#16223a}
+body.sz-pic .key .pic{font-size:min(11vh,13vw)} body.sz-pic .key .lab{font-size:min(2.4vh,2.8vw)} body.sz-pic .key img.pic{height:72%}
+body.sz-word .key .pic{font-size:min(5.5vh,7vw)} body.sz-word .key .lab{font-size:min(4.8vh,5.2vw)} body.sz-word .key img.pic{height:44%}
+body.gap-wide .grid{gap:22px} body.gap-xwide .grid{gap:36px}
+body.seetalk .say.speaking{border-color:var(--glow);box-shadow:0 0 0 7px var(--glow)}
+body.seetalk .say.speaking::after{content:'🔊';position:absolute;right:18px;top:50%;transform:translateY(-50%);font-size:min(6vh,7vw)}
+body.seetalk .say{position:relative}
 .typing-note{display:none;flex:none;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:3px dashed var(--line);border-radius:14px;font-size:18px;color:#5b6478}
 .typing-note button{font-size:18px;font-weight:700;padding:0 20px;min-height:48px;border-radius:14px;border:3px solid var(--line);background:var(--bar)}
 body.typing .typing-note{display:flex}
@@ -406,7 +420,32 @@ body.typing #tabs, body.typing #grid{display:none}
     <label class="check"><input type="checkbox" id="modelOn"> Show the Show me button on the child's screen</label>
     </details>
     <details class="sec">
-      <summary><b>6. Touch and child lock</b><span>Double taps, resting hands, keeping your child in the talker</span></summary>
+      <summary><b>6. Seeing and hearing</b><span>High contrast, bigger pictures, more space, vibration</span></summary>
+    <label class="check"><input type="checkbox" id="hcOn"> High contrast (black background, bright outlines, white words)</label>
+    <div class="row">
+      <label for="sizeSel">Pictures and words</label>
+      <select id="sizeSel">
+        <option value="normal">Normal</option>
+        <option value="pic">Bigger pictures, smaller words</option>
+        <option value="word">Bigger words, smaller pictures</option>
+      </select>
+    </div>
+    <div class="row">
+      <label for="gapSel">Space between pictures</label>
+      <select id="gapSel">
+        <option value="normal">Normal</option>
+        <option value="wide">Wide</option>
+        <option value="xwide">Extra wide</option>
+      </select>
+      <small>More space helps when pictures are hard to tell apart or a finger lands between two.</small>
+    </div>
+    <label class="check"><input type="checkbox" id="seeTalkOn"> Show clearly when the talker is speaking (steady yellow frame, no flashing)</label>
+    <label class="check"><input type="checkbox" id="buzzOn"> Vibrate on each tap</label>
+    <small id="buzzMsg">Vibration works on most Android tablets. iPads do not allow it from a web page.</small>
+    <small>These follow good practice for children with low vision or hearing loss. Ask the vision or hearing specialist which ones fit. Nothing here flashes.</small>
+    </details>
+    <details class="sec">
+      <summary><b>7. Touch and child lock</b><span>Double taps, resting hands, keeping your child in the talker</span></summary>
     <div class="row">
       <label for="repeatSel">Ignore extra taps (for double-tapping)</label>
       <select id="repeatSel">
@@ -441,7 +480,7 @@ body.typing #tabs, body.typing #grid{display:none}
     </div>
     </details>
     <details class="sec">
-      <summary><b>7. Progress</b><span>Counts and a report for the therapist</span></summary>
+      <summary><b>8. Progress</b><span>Counts and a report for the therapist</span></summary>
     <div class="row">
       <label class="check"><input type="checkbox" id="logOn"> Keep a progress log on this tablet</label>
       <pre class="report" id="reportBox"></pre>
@@ -453,7 +492,7 @@ body.typing #tabs, body.typing #grid{display:none}
     </div>
     </details>
     <details class="sec">
-      <summary><b>8. How to teach and use this</b><span>Daily steps, the six stages, every feature</span></summary>
+      <summary><b>9. How to teach and use this</b><span>Daily steps, the six stages, every feature</span></summary>
     <div class="row">
       <b>Every day, at every stage</b>
       <ol class="coach">
@@ -493,6 +532,7 @@ body.typing #tabs, body.typing #grid{display:none}
         <li><b>Personal words.</b> "Add a word" for names, favorite foods and places. "Change a word" swaps any picture or name.</li>
         <li><b>Choices offered.</b> Pick up to six words per group for open questions like "what do you want to eat?"</li>
         <li><b>Teen and adult wording.</b> One switch changes potty to bathroom, teddy to phone and so on. It turns on by itself at Stages 5 and 6.</li>
+        <li><b>Seeing and hearing.</b> High contrast, bigger pictures or words, more space between pictures, a clear sign when the talker is speaking, and vibration on tap. Ask the vision or hearing specialist which fit.</li>
         <li><b>Touch settings.</b> If a hand rests on the screen or taps come in twos, adjust "Ignore extra taps", "How long a picture must be held" and "Ignore touches at the edges".</li>
         <li><b>Child lock.</b> Keeps your child in the talker. For the home button use Guided Access on an iPad or Pin app on a Galaxy.</li>
         <li><b>Typing.</b> Can be turned on at any stage for a child who reads early.</li>
@@ -501,14 +541,14 @@ body.typing #tabs, body.typing #grid{display:none}
     </div>
     </details>
     <details class="sec">
-      <summary><b>9. The research behind this</b><span>Every study the talker is built on</span></summary>
+      <summary><b>10. The research behind this</b><span>Every study the talker is built on</span></summary>
     <div class="row">
       <small>Why the talker works the way it does. Most studies in this field are small, so treat these as good bets, not guarantees. Share this list with your speech therapist.</small>
       <div class="research" id="research"></div>
     </div>
     </details>
     <details class="sec">
-      <summary><b>10. Check and fix</b><span>Test a sentence, see what is working</span></summary>
+      <summary><b>11. Check and fix</b><span>Test a sentence, see what is working</span></summary>
     <h3>Test</h3>
     <div class="row">
       <label for="testIn">Pretend someone said this</label>
@@ -981,7 +1021,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving your own'},
     {n:6, name:'6. Teen and adult words', note:'Adds 96 of the most used everyday words on four pages. Sentences are said word for word'}
   ];
-  var state = { name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
@@ -998,6 +1038,9 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
       if(saved.stage>=1) state.stage=Math.min(6, +saved.stage);
       if(Array.isArray(saved.questions)) state.questions = saved.questions.filter(function(q){ return typeof q==='string' && q.trim(); }).slice(0, 12);
       state.smart = saved.smart===true;
+      state.hc = saved.hc===true; state.seeTalk = saved.seeTalk===true; state.buzz = saved.buzz===true;
+      if(saved.size==='pic' || saved.size==='word') state.size = saved.size;
+      if(saved.gap==='wide' || saved.gap==='xwide') state.gap = saved.gap;
       state.older = typeof saved.older==='boolean' ? saved.older : state.stage >= 5;
       if(Array.isArray(saved.mine)) state.mine = saved.mine.filter(function(q){ return typeof q==='string' && q.trim(); }).slice(0, 40);
       if(typeof saved.typing==='boolean') state.typing=saved.typing;
@@ -1013,7 +1056,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -1049,7 +1092,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v35) ---'+
+      dbgText = '\n--- Listening check (v36) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -1573,6 +1616,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
   /* Each finger is tracked on its own, so a hand resting on the screen (holding the tablet) does not block
      the other hand. A touch counts as a choice only if it lifts fairly soon, on the picture it landed on.
      A touch that stays down longer than REST_MS is a resting hand and is ignored when it finally lifts. */
+  function buzz(){ if(state.buzz && navigator.vibrate){ try{ navigator.vibrate(35); }catch(e){} } }
   var REST_MS = 1500;
   function inEdge(e){
     if(!(state.edge > 0) || e.pointerType==='mouse') return false;
@@ -1601,7 +1645,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
       var guarded = !(opts && opts.noRepeatGuard);                 // page tabs and Back do not start the extra-tap timer
       if(guarded && state.repeat > 0 && now - lastTapAt < state.repeat*1000) return;   // extra tap
       if(guarded) lastTapAt = now;
-      fn();
+      buzz(); fn();
     });
     b.addEventListener('click', function(e){                       // keyboard and switch access only; touches are handled above
       if(e.detail !== 0) return;
@@ -2415,6 +2459,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
     $('qList').value = state.questions.join('\n'); $('olderOn').checked = state.older; $('smartOn').checked = state.smart; smartNote();
+    $('hcOn').checked = state.hc; $('seeTalkOn').checked = state.seeTalk; $('buzzOn').checked = state.buzz; $('sizeSel').value = state.size; $('gapSel').value = state.gap;
     $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('wordsOn').checked = state.words; $('modelOn').checked = state.modelBtn; $('logOn').checked = state.log !== false; renderReport(); clearArmed = false; $('reportClear').textContent = 'Clear the log'; $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
     hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderResearch(); renderVoices(); showDiag(); $('panel').classList.add('open');
   }
@@ -2448,6 +2493,19 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
   $('kioskOn').addEventListener('change', function(){ state.kiosk = this.checked; save(); applyKiosk(); });
   $('askSel').addEventListener('change', function(){ state.ask = this.value; save(); });
   $('typeOn').addEventListener('change', function(){ state.typing = this.checked; save(); renderAll(); });
+  function applyLook(){
+    var c = document.body.classList;
+    c.toggle('hc', state.hc); c.toggle('seetalk', state.seeTalk);
+    c.toggle('sz-pic', state.size==='pic'); c.toggle('sz-word', state.size==='word');
+    c.toggle('gap-wide', state.gap==='wide'); c.toggle('gap-xwide', state.gap==='xwide');
+  }
+  applyLook();
+  $('hcOn').addEventListener('change', function(){ state.hc = this.checked; save(); applyLook(); });
+  $('seeTalkOn').addEventListener('change', function(){ state.seeTalk = this.checked; save(); applyLook(); });
+  $('sizeSel').addEventListener('change', function(){ state.size = this.value; save(); applyLook(); });
+  $('gapSel').addEventListener('change', function(){ state.gap = this.value; save(); applyLook(); });
+  $('buzzOn').addEventListener('change', function(){ state.buzz = this.checked; save(); buzz(); });
+  if(!navigator.vibrate){ $('buzzOn').disabled = true; $('buzzMsg').textContent = 'This tablet or browser does not allow vibration from a web page (iPads never do).'; }
   $('smartOn').addEventListener('change', function(){ state.smart = this.checked; save(); smartNote(); });
   $('olderOn').addEventListener('change', function(){ state.older = this.checked; setOlder(state.older, labels); save(); renderPicList(); renderFavs(); renderAll(); });
   $('qList').addEventListener('change', function(){ state.questions = this.value.split('\n').map(function(q){ return q.trim().slice(0, 80); }).filter(Boolean).slice(0, 12); this.value = state.questions.join('\n'); save(); if(state.page==='questions') renderGrid(); });
