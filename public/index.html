@@ -133,6 +133,11 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .sced .spot.sel{box-shadow:0 0 0 4px var(--describe-edge);background:rgba(47,103,196,.3)}
 .sced .spot .tag{font-size:14px;padding:2px 8px}
 .sced small{color:var(--ink-soft);font-size:13px;line-height:1.4}
+.sced .scene-wrap{position:relative}
+.sc-toast{position:absolute;left:50%;top:14px;transform:translateX(-50%);max-width:min(92%,640px);z-index:3;background:var(--ink);color:#fff;
+  font-size:19px;font-weight:600;line-height:1.3;padding:14px 20px;border-radius:16px;text-align:center;box-shadow:0 6px 24px rgba(22,34,58,.35);pointer-events:none}
+.sc-toast.bad{background:var(--stop-edge)}
+.sc-toast.good{background:var(--listen)}
 .scenes-list{display:flex;flex-direction:column;gap:6px}
 .scenes-list div{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:15px;background:var(--paper);border-radius:10px;padding:6px 10px}
 
@@ -221,7 +226,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
     <button class="btn primary" id="scSave" type="button">Save</button>
     <button class="btn" id="scCancel" type="button">Cancel</button>
   </div>
-  <div class="scene-wrap" id="scWrap"><div class="scene" id="scStage"></div></div>
+  <div class="scene-wrap" id="scWrap"><div class="scene" id="scStage"></div><div class="sc-toast" id="scToast" hidden role="status"></div></div>
   <div class="bar">
     <input type="text" id="scWord" placeholder="Tap the photo, then type the word" maxlength="24" autocomplete="off" aria-label="Word for this spot">
     <button class="btn" id="scWordSave" type="button">Set word</button>
@@ -780,7 +785,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v17) ---'+
+      dbgText = '\n--- Listening check (v18) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -1293,6 +1298,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     $('scSuggest').hidden = !visionOn; $('scDelete').hidden = !!ed.isNew;
     if(!hosted) fetch('api/vision/status').then(function(r){ return r.json(); }).then(function(v){ visionOn = !!(v && v.enabled); $('scSuggest').hidden = !visionOn; }, function(){}); $('scDelete').textContent = 'Delete photo';
     $('scMsg').textContent = 'Tap anything in the photo she would want to talk about, then type its word. Drag a circle to move it.';
+    $('scToast').hidden = true;
     $('sced').hidden = false; drawEd(); setTimeout(drawEd, 60);
   }
   function closeEditor(){ ed = null; $('sced').hidden = true; $('scStage').textContent = ''; }
@@ -1361,11 +1367,36 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     idbDel('sceneimg:'+id).catch(function(){}); saveScenes();
     closeEditor(); renderSceneList(); renderAll();
   });
+  var toastT = null;
+  function scToast(text, kind, ms){
+    var t = $('scToast'); clearTimeout(toastT);
+    t.className = 'sc-toast'+(kind?' '+kind:''); t.textContent = text; t.hidden = false;
+    $('scMsg').textContent = text;
+    if(ms) toastT = setTimeout(function(){ t.hidden = true; }, ms);
+  }
+  function plainWhy(msg){
+    msg = String(msg||'');
+    if(/401|authentication/i.test(msg)) return 'the Anthropic key in Railway was not accepted';
+    if(/\b403\b|permission/i.test(msg)) return 'the Anthropic account is not allowed to use this';
+    if(/\b404\b|not_found/i.test(msg)) return 'the AI model name was not found';
+    if(/credit|billing|\b402\b/i.test(msg)) return 'the Anthropic account needs credit added';
+    if(/429|too many|rate/i.test(msg)) return 'too many tries just now, wait a minute';
+    if(/529|overloaded|\b50\d\b/i.test(msg)) return 'the AI service is busy, try again';
+    if(/too large|413/i.test(msg)) return 'that photo is too big';
+    if(/abort|timed out/i.test(msg)) return 'it took too long';
+    if(/Failed to fetch|NetworkError|Load failed|no internet/i.test(msg)) return 'no internet connection';
+    return msg.slice(0, 120) || 'unknown reason';
+  }
   $('scSuggest').addEventListener('click', function(){
     if(!ed) return;
-    var btn = this; btn.disabled = true; btn.textContent = 'Looking...'; $('scMsg').textContent = 'Looking at the photo. This takes a few seconds.';
-    fetch('api/scene-words', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({image:ed.img})})
-      .then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||('error '+r.status)); return d; }); })
+    var btn = this; btn.disabled = true; btn.textContent = 'Looking...';
+    scToast('Looking at the photo. This takes a few seconds.', '', 0);
+    var ctl = window.AbortController ? new AbortController() : null;
+    var giveUp = setTimeout(function(){ if(ctl) ctl.abort(); }, 45000);
+    fetch('api/scene-words', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({image:ed.img}), signal: ctl ? ctl.signal : undefined})
+      .then(function(r){ return r.text().then(function(body){
+        var d; try{ d = JSON.parse(body); }catch(e){ throw new Error('error '+r.status); }
+        if(!r.ok) throw new Error(d.error||('error '+r.status)); return d; }); })
       .then(function(d){
         if(!ed) return;
         var have = {}, added = 0; ed.spots.forEach(function(x){ have[String(x.label).toLowerCase()] = 1; });
@@ -1373,15 +1404,16 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
         drawEd();
         var got = (d.words||[]).length;
         diag.vision = 'last try found '+got+' words, added '+added+' ('+new Date().toLocaleTimeString()+')'; showDiag();
-        $('scMsg').textContent = added ? 'Added '+added+' words. Check each one: drag to move it, tap it to rename or remove it.'
-          : (got ? 'It found '+got+' words but they are already on this photo.' : 'It looked but found nothing it was sure about. Add words by hand.');
+        if(added) scToast('Added '+added+' words. Drag a circle to move it. Tap one to rename or remove it.', 'good', 7000);
+        else if(got) scToast('It found '+got+' words, but they are already on this photo.', '', 6000);
+        else scToast('It looked but was not sure of anything. Add words by hand.', '', 6000);
       })
       .catch(function(err){
-        var why = (err&&err.message)||'no internet';
-        diag.vision = 'last try FAILED: '+why+' ('+new Date().toLocaleTimeString()+')'; showDiag();
-        $('scMsg').textContent = 'Suggestions did not work: '+why+'. You can still add words by hand.';
+        var raw = (err&&(err.name==='AbortError' ? 'timed out' : err.message))||'no internet';
+        diag.vision = 'last try FAILED: '+raw.slice(0,200)+' ('+new Date().toLocaleTimeString()+')'; showDiag();
+        scToast('Word suggestions did not work: '+plainWhy(raw)+'. You can still add words by hand.', 'bad', 9000);
       })
-      .then(function(){ btn.disabled = false; btn.textContent = 'Suggest words'; });
+      .then(function(){ clearTimeout(giveUp); btn.disabled = false; btn.textContent = 'Suggest words'; });
   });
   $('scNew').addEventListener('click', function(){ $('scFile').value=''; $('scFile').click(); });
   $('scFile').addEventListener('change', function(){

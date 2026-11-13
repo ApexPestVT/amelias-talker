@@ -61,7 +61,7 @@ const SCENE_PROMPT = [
   '- Never name or identify a person. For people use a role word only: "girl", "boy", "baby", "woman", "man".',
   '- No brand names. Skip tiny background clutter. No duplicates.',
   '- x and y are the centre of the thing as a percent of the photo width and height (0 to 100, origin top left).',
-  'Reply with JSON only, no other text: {"words":[{"label":"dog","x":42,"y":61}]}'
+  'Answer by calling place_words with the list, for example {"words":[{"label":"dog","x":42,"y":61}]}.'
 ].join('\n');
 let selftests = [];
 const visionHits = new Map();   // ip -> [timestamps], separate from the listening allowance
@@ -86,7 +86,16 @@ async function sceneWords(image) {
     method: 'POST',
     headers: { 'x-api-key': VISION_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: VISION_MODEL, max_tokens: 600,
+      model: VISION_MODEL, max_tokens: 1024,
+      // Make the model answer through a form, so the word list always comes back in a shape the app can read.
+      tools: [{
+        name: 'place_words',
+        description: 'Place the words on the photo.',
+        input_schema: { type: 'object', required: ['words'], properties: { words: { type: 'array', items: {
+          type: 'object', required: ['label', 'x', 'y'],
+          properties: { label: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' } } } } } }
+      }],
+      tool_choice: { type: 'tool', name: 'place_words' },
       messages: [{ role: 'user', content: [
         { type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } },
         { type: 'text', text: SCENE_PROMPT }
@@ -95,10 +104,16 @@ async function sceneWords(image) {
   });
   if (!r.ok) { const t = await r.text().catch(() => ''); throw new Error('AI service ' + r.status + ' ' + t.slice(0, 140)); }
   const d = await r.json();
-  const text = (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
-  const a = text.indexOf('{'), z = text.lastIndexOf('}');
-  if (a < 0 || z <= a) throw new Error('AI gave no word list');
-  const out = JSON.parse(text.slice(a, z + 1));
+  const blocks = d.content || [];
+  const form = blocks.find(b => b.type === 'tool_use' && b.input);
+  const text = blocks.filter(b => b.type === 'text').map(b => b.text).join('');
+  let out = form ? form.input : null;
+  if (!out) {                                   // older reply style: look for a JSON list in the text
+    const a = text.indexOf('{'), z = text.lastIndexOf('}');
+    if (a >= 0 && z > a) { try { out = JSON.parse(text.slice(a, z + 1)); } catch (e) { out = null; } }
+  }
+  if (!out) throw new Error('AI gave no word list (stop: ' + (d.stop_reason || '?') + '; blocks: ' + (blocks.map(b => b.type).join(',') || 'none') + '; said: ' + (text.slice(0, 160) || 'nothing') + ')');
+  if (typeof out.words === 'string') { try { out.words = JSON.parse(out.words); } catch (e) {} }
   const seen = new Set();
   const clamp = v => Math.max(5, Math.min(95, Math.round(Number(v))));
   return (Array.isArray(out.words) ? out.words : []).map(w => ({
