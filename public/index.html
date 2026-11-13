@@ -282,6 +282,15 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
     <label class="check"><input type="checkbox" id="kioskOn"> Child lock: fill the screen, keep it on, block swipes and the back button</label>
     <label class="check"><input type="checkbox" id="listenOn"> Listen to people talking to her</label>
     <div class="row">
+      <label for="engineSel">How it listens</label>
+      <select id="engineSel">
+        <option value="auto">Automatic</option>
+        <option value="free">On this tablet (free, private, less accurate)</option>
+        <option value="cloud">Speech service (paid, most accurate)</option>
+      </select>
+      <small id="engineMsg"></small>
+    </div>
+    <div class="row">
       <label for="askSel">When a question is heard</label>
       <select id="askSel">
         <option value="any">Pop up big answers for any question</option>
@@ -724,7 +733,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     {n:2, name:'2. More words',  note:'20 pictures'},
     {n:3, name:'3. Word pages',  note:'Adds people, food, feelings, places, things'}
   ];
-  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, repeat:0.8, hold:0, edge:0.05, favs:{}, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { name:'Amelia', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, repeat:0.8, hold:0, edge:0.05, favs:{}, engine:'auto', rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
@@ -746,10 +755,11 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
       if(typeof saved.hold==='number') state.hold=saved.hold;
       if(typeof saved.edge==='number') state.edge=saved.edge;
       if(saved.favs && typeof saved.favs==='object') state.favs=saved.favs;
+      if(saved.engine==='auto'||saved.engine==='free'||saved.engine==='cloud') state.engine=saved.engine;
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,repeat:state.repeat,hold:state.hold,edge:state.edge,favs:state.favs,engine:state.engine,ask:state.ask,voiceName:state.voiceName})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -785,9 +795,10 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v18) ---'+
+      dbgText = '\n--- Listening check (v19) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
+        (cloud.engine==='local' ? '\nOn-device: '+(loc.failed?'FAILED to load':(loc.ready?'model ready':'model loading'))+', '+loc.heard+' phrases heard, '+(loc.talking?'someone is talking now':'quiet') : '')+
         '\nReplies from service: '+kinds+
         '\nLast words back: '+(d.lastText||'none')+(d.echo?' ('+d.echo+' ignored as her own voice)':'')+
         '\nLast reply: '+(d.last||'none')+
@@ -957,29 +968,109 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   /* Cloud listening (iPad and Android): the tablet's mic audio goes to a speech service.
      To keep cost down it only connects while it hears a voice, and hangs up after 20 quiet seconds. */
   var cloud = { on:false, starting:false, ctx:null, stream:null, src:null, node:null, ws:null, opening:false, ring:[],
-                lastVoice:0, backoff:0, openedAt:0, usedMs:0, provider:'', dgBuf:'',
+                lastVoice:0, backoff:0, openedAt:0, usedMs:0, provider:'', engine:'assembly', dgBuf:'',
                 dbg:{level:0, peak:0, chunks:0, sent:0, skipped:0, msgs:{}, last:'', lastText:'', echo:0, closed:''} };
+  var cloudAvail = false, cloudName = 'speech service';
+  /* Automatic = the paid speech service when its key is set (most accurate), otherwise free on-device listening. */
+  function chooseEngine(fallback){
+    var want = state.engine, eng = null;
+    if(want==='free' && LOCAL_OK) eng = 'local';
+    else if(want==='cloud' && cloudAvail) eng = 'assembly';
+    else eng = cloudAvail ? 'assembly' : (LOCAL_OK ? 'local' : null);
+    if(!eng){ if(fallback) fallback(); return; }
+    if(cloud.on || cloud.starting) cloudStop();
+    mode = 'cloud'; cloud.engine = eng; cloud.provider = eng==='local' ? 'on this tablet' : cloudName;
+    engineNote(); setEar(); cloudStart();
+  }
+  function engineNote(){
+    var el = document.getElementById('engineMsg'); if(!el) return;
+    var now = mode!=='cloud' ? 'the browser\'s own listening' : (cloud.engine==='local' ? 'free listening on this tablet' : 'the paid speech service ('+cloudName+')');
+    el.textContent = 'Using '+now+' right now.'+(cloudAvail ? '' : ' No speech service key is set, so the paid option is not available.');
+  }
   var VOICE_RMS = 0.012, QUIET_HANGUP = 20000, PRE_ROLL = 14, RING_MAX = 60;
   function cloudNote(t){
+    if(cloud.engine==='local'){ diag.cloud = 'free, on this tablet. '+t; showDiag(); return; }
     var mins = Math.round((cloud.usedMs + (cloud.openedAt ? Date.now()-cloud.openedAt : 0))/6000)/10;
     diag.cloud = cloud.provider+', '+t+'. Used '+mins+' min since the app opened.'; showDiag();
   }
   function toPcm16(f32, inRate){
-    var ratio = inRate/16000, n = Math.floor(f32.length/ratio), out = new Int16Array(n), sum = 0;
+    var ratio = inRate/16000, n = Math.floor(f32.length/ratio), out = new Int16Array(n), flo = new Float32Array(n), sum = 0;
     for(var i=0;i<n;i++){
       var a = Math.floor(i*ratio), b = Math.min(f32.length, Math.floor((i+1)*ratio)), acc = 0, c = 0;
       for(var j=a;j<b;j++){ acc += f32[j]; c++; }
-      var v = c ? acc/c : 0; sum += v*v;
+      var v = c ? acc/c : 0; sum += v*v; flo[i] = v;
       out[i] = Math.max(-32768, Math.min(32767, Math.round(v*32767)));
     }
-    return { pcm:out, rms: n ? Math.sqrt(sum/n) : 0 };
+    return { pcm:out, f:flo, rms: n ? Math.sqrt(sum/n) : 0 };
+  }
+  /* Free listening: the Moonshine speech model runs inside the tablet. No audio leaves it and there is no per-minute cost.
+     We cut the microphone stream into phrases ourselves (a phrase starts on a voice and ends after a short quiet gap). */
+  var loc = { w:null, ready:false, failed:false, busy:false, pre:[], utt:[], len:0, talking:false, loud:0, quiet:0, lastPartial:0, seq:0, waiting:null, heard:0, lastMs:0, lastSecs:0 };
+  var LOCAL_OK = typeof Worker !== 'undefined' && typeof WebAssembly === 'object';
+  function localWorker(){
+    if(loc.w || loc.failed) return loc.w;
+    try{
+      loc.w = new Worker('vendor/moonshine/stt-worker.js', {type:'module'});
+    }catch(e){ loc.failed = true; cloudNote('could not start on this tablet ('+((e&&e.message)||'error')+')'); return null; }
+    cloudNote('getting ready. The first time it downloads about 51 MB, then it is kept on the tablet.');
+    loc.w.onmessage = function(ev){
+      var m = ev.data || {};
+      if(m.type==='ready'){ loc.ready = true; cloudNote('ready (loaded in '+(m.ms/1000).toFixed(1)+' s). Waiting for a voice.'); return; }
+      if(m.type==='error'){ loc.busy = false; cloudNote('problem: '+m.message); return; }
+      if(m.type!=='text') return;
+      loc.busy = false; loc.lastMs = m.ms; loc.lastSecs = m.secs;
+      var text = String(m.text||'').replace(/\s+/g,' ').trim();
+      if(/[a-z]/i.test(text) && !isEcho(text)){
+        if(m.partial){ if(loc.talking) showHeard(text, true); }
+        else { loc.heard++; setHeard(text); }
+      }
+      if(!m.partial) cloudNote('ready. Last phrase: '+m.secs.toFixed(1)+' s of speech understood in '+(m.ms/1000).toFixed(1)+' s. '+loc.heard+' phrases so far.');
+      if(loc.waiting){ var a = loc.waiting; loc.waiting = null; localSend(a, false); }
+    };
+    loc.w.onerror = function(e){ loc.failed = true; loc.busy = false; cloudNote('could not load on this tablet ('+((e&&e.message)||'unknown')+'). Switch to the speech service behind the lock.'); };
+    loc.w.postMessage({type:'load'});
+    return loc.w;
+  }
+  function localSend(audio, partial){
+    var w = localWorker(); if(!w) return;
+    loc.busy = true;
+    w.postMessage({type:'hear', id:++loc.seq, partial:!!partial, audio:audio}, [audio.buffer]);
+  }
+  function localJoin(){
+    var out = new Float32Array(loc.len), at = 0;
+    loc.utt.forEach(function(c){ out.set(c, at); at += c.length; });
+    return out;
+  }
+  function localReset(){ loc.talking = false; loc.loud = 0; loc.quiet = 0; loc.utt = []; loc.len = 0; loc.pre = []; }
+  function localFeed(f, rms, now){
+    var voiced = rms > VOICE_RMS;
+    if(!loc.talking){
+      loc.pre.push(f); if(loc.pre.length > 6) loc.pre.shift();        // keep half a second so the first word is not clipped
+      if(!voiced){ loc.loud = 0; return; }
+      if(++loc.loud < 2) return;                                       // two voiced pieces in a row = someone is talking
+      loc.talking = true; loc.utt = loc.pre.slice(); loc.len = 0; loc.utt.forEach(function(c){ loc.len += c.length; });
+      loc.pre = []; loc.quiet = 0; loc.lastPartial = now;
+      return;
+    }
+    loc.utt.push(f); loc.len += f.length;
+    loc.quiet = voiced ? 0 : loc.quiet + 1;
+    if(loc.quiet >= 8 || loc.len > 16000*10){                          // about 0.7 s of quiet, or 10 s long: the phrase is over
+      var audio = loc.len >= 16000*0.5 ? localJoin() : null;
+      localReset();
+      if(audio){ if(loc.busy) loc.waiting = audio; else localSend(audio, false); }
+      return;
+    }
+    if(loc.ready && !loc.busy && now - loc.lastPartial > 1300 && loc.len > 16000*0.9){   // a running guess while they are still talking
+      loc.lastPartial = now; localSend(localJoin(), true);
+    }
   }
   function onAudio(f32){
     if(!cloud.on) return;
     var now = Date.now();
     var r = toPcm16(f32, cloud.ctx.sampleRate);
     cloud.dbg.chunks++; cloud.dbg.level = r.rms; if(r.rms > cloud.dbg.peak) cloud.dbg.peak = r.rms;
-    if(state.speaking || now-state.spokeEnd < 800){ cloud.dbg.skipped++; return; }   // never send the talker's own voice
+    if(state.speaking || now-state.spokeEnd < 800){ cloud.dbg.skipped++; localReset(); return; }   // never listen to the talker's own voice
+    if(cloud.engine==='local'){ localFeed(r.f, r.rms, now); return; }
     if(r.rms > VOICE_RMS) cloud.lastVoice = now;
     if(cloud.ws && cloud.ws.readyState===1 && !cloud.opening){
       try{ cloud.ws.send(r.pcm.buffer); cloud.dbg.sent++; }catch(e){}
@@ -1057,7 +1148,8 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
         cloud.node = node; cloud.src.connect(node); node.connect(mute);
         cloud.on = true; cloud.starting = false; listening = (ctx.state==='running');
         diag.mic = listening ? 'listening' : 'ready. Tap anywhere once to start listening.';
-        cloudNote('idle, waiting for a voice'); setEar();
+        if(cloud.engine==='local') localWorker(); else cloudNote('idle, waiting for a voice');
+        setEar();
       };
       var classic = function(){
         var sp = ctx.createScriptProcessor(4096, 1, 1);
@@ -1086,6 +1178,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     if(cloud.stream){ cloud.stream.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} }); }
     if(cloud.ctx){ try{ cloud.ctx.close(); }catch(e){} }
     cloud.on = false; cloud.starting = false; cloud.ctx = cloud.stream = cloud.src = cloud.node = null; cloud.ring = [];
+    localReset();
     listening = false; setEar();
   }
   /* iPad only lets sound start after a touch: the first tap anywhere wakes the microphone. */
@@ -1658,7 +1751,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   }
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
-    $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
+    $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('engineSel').value = state.engine; engineNote(); $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
     hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderVoices(); showDiag(); $('panel').classList.add('open');
   }
   function closePanel(){ $('panel').classList.remove('open'); }
@@ -1671,6 +1764,7 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
   $('nameIn').addEventListener('input', function(){ state.name = this.value.trim(); save(); });
   $('sentOn').addEventListener('change', function(){ state.sentences = this.checked; save(); });
   $('listenOn').addEventListener('change', function(){ state.listen = this.checked; save(); applyListen(); });
+  $('engineSel').addEventListener('change', function(){ state.engine = this.value; save(); if(!hosted) chooseEngine(null); engineNote(); });
   $('glowOn').addEventListener('change', function(){ state.glow = this.checked; save(); });
   $('repeatSel').addEventListener('change', function(){ state.repeat = +this.value; save(); });
   $('holdSel').addEventListener('change', function(){ state.hold = +this.value; save(); });
@@ -1759,9 +1853,9 @@ if(typeof module!=='undefined') module.exports = {detectOpenQuestion:detectOpenQ
     };
     fetch('api/vision/status').then(function(r){ return r.json(); }).then(function(v){ visionOn = !!(v && v.enabled); }, function(){});
     fetch('api/stt/status').then(function(r){ return r.json(); }).then(function(st){
-      if(st && st.enabled){ mode = 'cloud'; cloud.provider = st.provider||'speech service'; setEar(); cloudStart(); }
-      else browserListen();
-    }, browserListen);
+      cloudAvail = !!(st && st.enabled); cloudName = (st && st.provider) || 'speech service';
+      chooseEngine(browserListen);
+    }, function(){ cloudAvail = false; chooseEngine(browserListen); });
     if('serviceWorker' in navigator){ try{ navigator.serviceWorker.register('sw.js').catch(function(){}); }catch(e){} }
   }
 })();

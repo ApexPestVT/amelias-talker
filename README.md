@@ -32,3 +32,9 @@ It only connects while it hears a voice and hangs up after 20 quiet seconds.
 Photo scenes work with no extra setup: add words to a photo by hand.
 To have the app suggest words from a photo, add `ANTHROPIC_API_KEY` in Railway. Optional: `VISION_MODEL` (default `claude-haiku-5-5`).
 The photo is sent to Anthropic only when a grown-up presses "Suggest words".
+
+## Free on-device listening
+`public/vendor/moonshine/` holds the open-source Moonshine speech model (tiny, quantized), its ONNX runtime, and a small worker script.
+It runs inside the tablet's browser: no key, no per-minute cost, no audio leaves the device. First use downloads about 51 MB and keeps it.
+With no speech-service key set, the app uses this automatically. With a key set, switch behind the lock: "How it listens".
+Source: npm `@moonshine-ai/moonshine-js` 0.1.29 (MIT) and `onnxruntime-web` 1.22.0 (MIT).

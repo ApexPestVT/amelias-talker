@@ -8,7 +8,8 @@ const PORT = process.env.PORT || 3000;
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json',
-  '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png'
+  '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png',
+  '.mjs': 'text/javascript; charset=utf-8', '.wasm': 'application/wasm', '.onnx': 'application/octet-stream'
 };
 
 // ---- Speech service (cloud listening). The key stays here; tablets only get a short-lived token. ----
@@ -184,7 +185,11 @@ http.createServer((req, res) => {
     if (err) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Not found'); }
     res.writeHead(200, {
       'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',
-      'Cache-Control': 'no-cache',
+      // The on-device listening model never changes once shipped, so tablets keep it instead of downloading 51 MB again.
+      'Cache-Control': p.startsWith('/vendor/') ? 'public, max-age=31536000, immutable' : 'no-cache',
+      // These two let the on-device model use more than one processor core where the browser allows it.
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'credentialless',
       'Permissions-Policy': 'microphone=(self), camera=(self)'
     });
     res.end(data);
