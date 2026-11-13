@@ -112,6 +112,7 @@ body.hc{--paper:#000;--bar:#000;--ink:#fff;--ink-soft:#e8e8e8;--line:#fff;
 body.hc .key{border-width:5px;color:#fff}
 body.hc .key.blank{border-color:transparent}
 body.hc .tab.sel{color:#000}
+body.hc .lighten{filter:invert(1) hue-rotate(180deg)}
 body.hc .tab{color:#fff}
 body.hc .panel{--paper:#f3f6fb;--bar:#ffffff;--ink:#16223a;--ink-soft:#5b6780;--line:#d5dcea;color:#16223a}
 body.sz-pic .key .pic{font-size:min(11vh,13vw)} body.sz-pic .key .lab{font-size:min(2.4vh,2.8vw)} body.sz-pic .key img.pic{height:72%}
@@ -422,6 +423,7 @@ body.typing #tabs, body.typing #grid{display:none}
     <details class="sec">
       <summary><b>6. Seeing and hearing</b><span>High contrast, bigger pictures, more space, vibration</span></summary>
     <label class="check"><input type="checkbox" id="hcOn"> High contrast (black background, bright outlines, white words)</label>
+    <small>Any picture that is mostly dark or grey on this tablet is shown lightened so it stands out on black.</small>
     <div class="row">
       <label for="sizeSel">Pictures and words</label>
       <select id="sizeSel">
@@ -1092,7 +1094,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v36) ---'+
+      dbgText = '\n--- Listening check (v37) ---'+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
         '\nReplies from service: '+kinds+
@@ -1609,6 +1611,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     else if(w.pic && w.pic.indexOf('data:image/')===0){ n = document.createElement('img'); n.src = w.pic; n.alt = ''; n.setAttribute('data-drawn','1'); }   // a built-in drawing
     else { n = document.createElement('span'); n.textContent = w.pic || '🔲'; n.setAttribute('aria-hidden','true'); }
     if(cls) n.className = cls;
+    if(state.hc && n.tagName==='SPAN' && darkPic(n.textContent)) n.classList.add('lighten');
     return n;
   }
   /* Every picture goes through here: hold time, lift-to-speak, and ignoring extra taps. */
@@ -1616,6 +1619,21 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
   /* Each finger is tracked on its own, so a hand resting on the screen (holding the tablet) does not block
      the other hand. A touch counts as a choice only if it lifts fairly soon, on the picture it landed on.
      A touch that stays down longer than REST_MS is a resting hand and is ignored when it finally lifts. */
+  /* High contrast: a picture that is mostly dark or grey on THIS tablet would vanish on black, so it is shown lightened.
+     Measured from the tablet's own picture set, because the same picture looks different on Samsung, Apple and others. */
+  var darkSeen = {}, darkCtx = null;
+  function darkPic(ch){
+    if(ch in darkSeen) return darkSeen[ch];
+    var out = false;
+    try{
+      if(!darkCtx){ var cv = document.createElement('canvas'); cv.width = cv.height = 48; darkCtx = cv.getContext('2d', {willReadFrequently:true}); }
+      var x = darkCtx; x.clearRect(0, 0, 48, 48); x.font = '36px sans-serif'; x.textBaseline = 'middle'; x.textAlign = 'center'; x.fillText(ch, 24, 26);
+      var d = x.getImageData(0, 0, 48, 48).data, n = 0, dim = 0, bright = 0;
+      for(var i = 0; i < d.length; i += 4){ if(d[i+3] > 60){ var m = Math.max(d[i], d[i+1], d[i+2]); n++; if(m < 125) dim++; else if(m > 175) bright++; } }
+      out = n > 40 && dim / n > 0.5 && bright / n < 0.22;      // mostly dark, with little bright colour to carry it (faces with dark hair stay as they are)
+    }catch(e){}
+    return (darkSeen[ch] = out);
+  }
   function buzz(){ if(state.buzz && navigator.vibrate){ try{ navigator.vibrate(35); }catch(e){} } }
   var REST_MS = 1500;
   function inEdge(e){
@@ -2500,7 +2518,7 @@ if(typeof module!=='undefined') module.exports = {setOlder:setOlder, BUILD:BUILD
     c.toggle('gap-wide', state.gap==='wide'); c.toggle('gap-xwide', state.gap==='xwide');
   }
   applyLook();
-  $('hcOn').addEventListener('change', function(){ state.hc = this.checked; save(); applyLook(); });
+  $('hcOn').addEventListener('change', function(){ state.hc = this.checked; save(); applyLook(); renderAll(); });
   $('seeTalkOn').addEventListener('change', function(){ state.seeTalk = this.checked; save(); applyLook(); });
   $('sizeSel').addEventListener('change', function(){ state.size = this.value; save(); applyLook(); });
   $('gapSel').addEventListener('change', function(){ state.gap = this.value; save(); applyLook(); });
