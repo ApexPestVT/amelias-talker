@@ -61,7 +61,8 @@ const SCENE_PROMPT = [
   '- Never name or identify a person. For people use a role word only: "girl", "boy", "baby", "woman", "man".',
   '- No brand names. Skip tiny background clutter. No duplicates.',
   '- Positions are percentages, never pixels: x_percent is 0 at the left edge and 100 at the right edge; y_percent is 0 at the top and 100 at the bottom.',
-  'Answer by calling place_words with the list, for example {"words":[{"label":"dog","x_percent":42,"y_percent":61}]}.'
+  'Work in two steps. Step 1: write one short line per thing you picked, saying where it sits (for example "dog: left side, a bit below the middle").',
+  'Step 2: call place_words with the list, for example {"words":[{"label":"dog","x_percent":25,"y_percent":61}]}. You must call place_words.'
 ].join('\n');
 let selftests = [];
 const visionHits = new Map();   // ip -> [timestamps], separate from the listening allowance
@@ -79,14 +80,14 @@ function readBody(req, max) {
     req.on('error', reject);
   });
 }
-async function sceneWords(image, w, h) {
+async function sceneWords(image, w, h, model) {
   const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(image || ''));
   if (!m) throw new Error('not a photo');
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': VISION_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: VISION_MODEL, max_tokens: 1024,
+      model: model || VISION_MODEL, max_tokens: 1024,
       // Make the model answer through a form, so the word list always comes back in a shape the app can read.
       tools: [{
         name: 'place_words',
@@ -99,7 +100,7 @@ async function sceneWords(image, w, h) {
             y_percent: { type: 'number', minimum: 0, maximum: 100, description: 'centre of the thing, as a percent of the photo HEIGHT from the top edge. Not pixels.' }
           } } } } }
       }],
-      tool_choice: { type: 'tool', name: 'place_words' },
+      tool_choice: { type: 'auto' },   // lets it look and describe before placing; forcing the form straight away gave worse positions
       messages: [{ role: 'user', content: [
         { type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } },
         { type: 'text', text: SCENE_PROMPT + (w && h ? '\nFor reference, the photo is ' + w + ' pixels wide and ' + h + ' pixels tall.' : '') }
@@ -136,9 +137,10 @@ http.createServer((req, res) => {
   if (p === '/api/vision/selftest') {          // sends a tiny built-in drawing (no user photo) so a failure can be read from outside
     if (!VISION_KEY) return json(res, 200, { ok: false, error: 'no AI key set' });
     const now = Date.now(); selftests = selftests.filter(t => now - t < 3600e3);
-    if (selftests.length >= 8) return json(res, 429, { ok: false, error: 'self-test limit reached, try again in an hour' });
+    if (selftests.length >= 24) return json(res, 429, { ok: false, error: 'self-test limit reached, try again in an hour' });
     selftests.push(now);
-    return sceneWords(SELFTEST_IMG, 256, 192).then(words => json(res, 200, { ok: true, model: VISION_MODEL, words }), e => json(res, 200, { ok: false, model: VISION_MODEL, error: e.message }));
+    const tm = /model=sonnet/.test(req.url || '') ? 'claude-sonnet-5-5' : VISION_MODEL;
+    return sceneWords(SELFTEST_IMG, 256, 192, tm).then(words => json(res, 200, { ok: true, model: tm, expected: 'ball near x31 y52, box near x74 y52', words }), e => json(res, 200, { ok: false, model: tm, error: e.message }));
   }
   if (p === '/api/scene-words') {
     if (req.method !== 'POST') return json(res, 405, { error: 'POST only' });
