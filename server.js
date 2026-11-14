@@ -257,9 +257,7 @@ const AZ_URL = process.env.AZURE_SPEECH_ENDPOINT || ('https://' + AZ_REGION + '.
 const AZ_PACE = process.env.AZURE_PACE_MS === undefined ? 3200 : Math.max(0, +process.env.AZURE_PACE_MS || 0);   // the free resource allows about 20 requests a minute
 const AZ_PAID = process.env.AZURE_PAID === '1';                                                                // set when the Speech resource is a paid one, so the cost tracker counts it
 const AZ_VOICES = [{ id: 'Ana', label: 'Girl (Ana)', az: 'en-US-AnaNeural' },
-  { id: 'AnaBoyA', label: 'Boy test A (Ana, a little lower)', az: 'en-US-AnaNeural', pitch: '-6%', noSave: true },
-  { id: 'AnaBoyB', label: 'Boy test B (Ana, lower)', az: 'en-US-AnaNeural', pitch: '-12%', noSave: true },
-  { id: 'AnaBoyC', label: 'Boy test C (Ana, lowest)', az: 'en-US-AnaNeural', pitch: '-20%', noSave: true }];
+  { id: 'AnaBoyB', label: 'Boy', az: 'en-US-AnaNeural', pitch: '-12%' }];      // Ana at a lower pitch; Chris picked this one of three by ear (14 Nov 2026). The id stays so a tablet already set to it keeps it.
 const VOICES = (AZ_KEY ? AZ_VOICES : []).concat(AWS_ID && AWS_SECRET ? POLLY_VOICES : []);
 const VOICE_ON = VOICES.length > 0;
 const xml = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
