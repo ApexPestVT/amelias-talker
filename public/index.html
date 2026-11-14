@@ -1067,6 +1067,7 @@ function numberSentence(frame, label){
 function detectOpenQuestion(text, name){
   var t = clean(text, name); if(!t) return null;
   if(/\bhow\b.*\b(feel|feeling)\b/.test(t) || /\bhow are you\b/.test(t) || /\b(what's|whats|what is) (wrong|the matter)\b/.test(t)) return 'feelings';
+  if(/\b(restaurants?|fast food|places? to eat|drive ?thru|drive through|diner|cafe)\b/.test(t)) return null;   // asking WHERE to eat, not what: the food words would be wrong answers. Left for the AI help (kinds of places, or the family's own places).
   if(/\b(what|which)\b.*\b(eat|eating|drink|drinking|drinks?|snacks?|lunch|dinner|breakfast|hungry|thirsty|foods?|meal|treat|fruit)\b/.test(t)) return 'food';
   if(/\b(what|which|where)\b.*\bfavou?rite place\b/.test(t)) return 'places';
   if(/\bwhat\b.*\b(want|wanna|like|love|going|gonna|should|shall)\b.*\b(to )?do\b/.test(t) && !/\bwhat do you (want|like|love)$/.test(t)) return 'do';   // "what do you want to do today"
@@ -1179,7 +1180,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v55) ---'+
+      dbgText = '\n--- Listening check (v56) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
