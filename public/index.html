@@ -265,6 +265,11 @@ body.typing #tabs, body.typing #grid{display:none}
 .research p{margin:8px 0 2px;font-size:14px;line-height:1.4}
 .research a{color:var(--describe-edge);font-weight:600;word-break:break-word}
 .research span{display:block;font-size:13px;color:var(--ink-soft);line-height:1.4}
+.picgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px;max-height:300px;overflow-y:auto}
+.picgrid:empty{display:none}
+.picgrid button{aspect-ratio:1;border:2px solid var(--line,#c9c9c9);border-radius:12px;background:#fff;padding:4px;font-size:34px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.picgrid button img{width:100%;height:100%;object-fit:contain}
+.picgrid button:focus-visible{outline:3px solid #1a5fd0}
 .mine{display:flex;flex-direction:column;gap:6px}
 .mine div{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:15px;background:var(--paper);border-radius:10px;padding:6px 10px}
 .diag{font-size:13px;color:var(--ink-soft);background:var(--paper);border-radius:12px;padding:10px 12px;line-height:1.5;white-space:pre-wrap}
@@ -411,6 +416,14 @@ body.typing #tabs, body.typing #grid{display:none}
       </div>
       <input type="file" id="picFile" accept="image/*" hidden>
       <small id="picMsg">Photos and word changes stay on this tablet.</small>
+      <label for="picFind">Or search the picture library</label>
+      <div class="inline">
+        <input type="text" id="picFind" autocomplete="off" maxlength="30" placeholder="dog, swim, happy" enterkeyhint="search">
+        <button class="btn" id="picFindBtn" type="button">Search</button>
+      </div>
+      <div class="picgrid" id="picGrid"></div>
+      <small id="picFindMsg">Tap a picture to use it for the word picked above.</small>
+      <small>Symbols: author Sergio Palao. Origin: ARASAAC (arasaac.org). Licence: CC BY-NC-SA. Owner: Government of Aragon (Spain). Free to use, never to sell.</small>
     </div>
     <h3>Add a word</h3>
     <div class="row">
@@ -419,7 +432,7 @@ body.typing #tabs, body.typing #grid{display:none}
         <select id="newPage" aria-label="Page for the new word"></select>
         <button class="btn" id="addWord" type="button">Add</button>
       </div>
-      <small>New words appear on their page at Stage 3 and up. Add a photo above.</small>
+      <small>New words appear on their page at Stage 3 and up. Pick a picture for it above.</small>
       <div class="mine" id="mine"></div>
     </div>
     <h3>Photo scenes</h3>
@@ -1180,7 +1193,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v56) ---'+
+      dbgText = '\n--- Listening check (v57) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2554,6 +2567,17 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     fetch(API+'api/ask', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({heard:clean(text, state.name), stage:state.stage, words:words})})
       .then(function(r){ return r.ok ? r.json() : null; }).then(function(a){ if(a && a.cost) addAi('ask', a.cost); finish(a); }, function(){ finish(null); });
   }
+  var askSym = {};                                   // word -> symbol id, or 0 for "none", remembered while the app is open
+  function askSymbol(key, label){
+    var put = function(id){
+      if(!id || !key.isConnected) return;
+      var im = new Image(); im.alt = ''; im.className = 'pic';
+      im.onload = function(){ var old = key.querySelector('.pic'); if(key.isConnected && old) key.replaceChild(im, old); };   // the emoji stays unless the symbol really loaded
+      im.src = API+'api/pics/img/'+id;
+    };
+    if(label in askSym) return put(askSym[label]);
+    fetch(API+'api/pics/best?q='+encodeURIComponent(label)).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){ if(j){ askSym[label] = j.id || 0; put(askSym[label]); } }, function(){});
+  }
   function boardWord(label){
     var l = String(label).toLowerCase(), hit = null;
     allWords().forEach(function(w){ if(!hit && !w.lit && String(w.label).toLowerCase()===l && (w.page==='core' ? (w.s||1) <= state.stage : state.stage >= 3)) hit = w; });
@@ -2565,7 +2589,9 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     $('askQ').textContent = clean(text, state.name)+'?';
     opts.forEach(function(o){
       var w = boardWord(o.label), cat = o.label==='yes' ? 'action' : (o.label==='no' ? 'stop' : 'thing');
-      box.appendChild(askKey(w || (o.emoji ? {id:'', label:o.label, pic:String(o.emoji)} : null), o.label, cat, o.sentence, w ? [w.id] : []));   // a board word keeps its own picture; anything else gets the AI's picture
+      var key = askKey(w || (o.emoji ? {id:'', label:o.label, pic:String(o.emoji)} : null), o.label, cat, o.sentence, w ? [w.id] : []);   // a board word keeps its own picture; anything else gets the AI's picture
+      box.appendChild(key);
+      if(!w && o.label===o.label.toLowerCase() && !/^(yes|no)$/.test(o.label)) askSymbol(key, o.label);   // then a clearer symbol if the library has one for exactly this word (never for a brand name)
     });
     askKind = kind; plogAdd('asked', kind);
     askDone = false; $('askSkip').style.visibility = '';
@@ -2735,7 +2761,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     PAGES.forEach(function(p){
       var og = document.createElement('optgroup'); og.label = p.label;
       allWords().filter(function(w){ return w.page===p.id; }).forEach(function(w){
-        var o = document.createElement('option'); o.value = w.id; o.textContent = w.label+(pics[w.id]?' (photo)':''); og.appendChild(o);
+        var o = document.createElement('option'); o.value = w.id; o.textContent = w.label+(pics[w.id]?' (own picture)':''); og.appendChild(o);
       });
       sel.appendChild(og);
     });
@@ -2761,7 +2787,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     $('qList').value = state.questions.join('\n'); $('olderOn').checked = state.older; $('smartOn').checked = state.smart; smartNote(); $('namesOn').checked = state.names; namesNote(); $('deviceRow').hidden = !NS; $('deviceOn').checked = state.onDevice;
     $('hcOn').checked = state.hc; $('seeTalkOn').checked = state.seeTalk; $('buzzOn').checked = state.buzz; $('sizeSel').value = state.size; $('gapSel').value = state.gap;
     $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('wordsOn').checked = state.words; $('modelOn').checked = state.modelBtn; $('logOn').checked = state.log !== false; renderReport(); clearArmed = false; $('reportClear').textContent = 'Clear the log'; $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
-    hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderResearch(); renderVoices(); showDiag(); $('panel').classList.add('open');
+    hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderResearch(); renderVoices(); showDiag(); $('picGrid').textContent = ''; $('picFind').value = LOOKUP[$('picWord').value] ? LOOKUP[$('picWord').value].label : ''; $('panel').classList.add('open');
   }
   function closePanel(){ $('panel').classList.remove('open'); cvWarm(); }
   function holdStart(e){ e.preventDefault(); lock.classList.add('holding'); hold = setTimeout(function(){ holdEnd(); openPanel(); }, 1500); }
@@ -2843,7 +2869,77 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     img.onerror = function(){ URL.revokeObjectURL(url); $('picMsg').textContent = 'That file is not a photo this tablet can open.'; };
     img.src = url;
   });
-  $('picWord').addEventListener('change', function(){ $('wordName').value = LOOKUP[this.value] ? LOOKUP[this.value].label : ''; });
+  $('picWord').addEventListener('change', function(){ $('wordName').value = LOOKUP[this.value] ? LOOKUP[this.value].label : ''; $('picFind').value = LOOKUP[this.value] ? LOOKUP[this.value].label : ''; $('picGrid').textContent = ''; });
+
+  /* ---------- picture library: emoji (on the tablet) and ARASAAC symbols (through our server) ---------- */
+  var emojiWords = null, picFindN = 0;
+  function emojiLoad(){
+    if(emojiWords) return Promise.resolve(emojiWords);
+    return fetch('emoji-words.json').then(function(r){ if(!r.ok) throw new Error('no list'); return r.json(); }).then(function(l){ emojiWords = l; return l; });
+  }
+  function emojiFind(q){
+    var qs = q.split(' ').filter(Boolean), hits = [];
+    (emojiWords || []).forEach(function(e, n){
+      var ws = e[1].split(' '), worst = 0;                           // the earlier the word sits in the emoji's own name, the better the match
+      var ok = qs.every(function(x){
+        var i = ws.indexOf(x), j = i >= 0 ? i : (x.length >= 3 ? ws.findIndex(function(w){ return w.indexOf(x)===0; }) + 0.5 : -1);
+        if(i < 0 && j < 0.5) return false; worst = Math.max(worst, j); return true;
+      });
+      if(ok) hits.push([worst, n, e[0]]);
+    });
+    hits.sort(function(a, b){ return a[0]-b[0] || a[1]-b[1]; });
+    return hits.slice(0, 18).map(function(h){ return h[2]; });
+  }
+  function picKeep(id, data, what){
+    pics[id] = data; renderPicList(); $('picWord').value = id; renderFavs(); renderAll();
+    $('picMsg').textContent = what+' set for "'+word(id).label+'".';
+    idbSet('pic:'+id, data).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
+  }
+  function emojiData(e){
+    var S = 320, c = document.createElement('canvas'); c.width = S; c.height = S;
+    var x = c.getContext('2d'); x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = '236px "Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif'; x.fillText(e, S/2, S/2 + 18);
+    return c.toDataURL('image/png');
+  }
+  function picFindRun(){
+    var q = $('picFind').value.toLowerCase().replace(/[^a-z0-9' -]/g,' ').replace(/\s+/g,' ').trim(), n = ++picFindN, grid = $('picGrid');
+    if(q.length < 2){ grid.textContent = ''; $('picFindMsg').textContent = 'Type a word to search for.'; return; }
+    grid.textContent = ''; $('picFindMsg').textContent = 'Searching';
+    var shown = {e:0, s:0, sErr:''}, note = function(){
+      if(n !== picFindN) return;
+      $('picFindMsg').textContent = (shown.e + shown.s) ? 'Tap a picture to use it for the word picked above.'+(shown.sErr ? ' '+shown.sErr : '') : (shown.sErr || 'Nothing found for "'+q+'". Try a simpler word.');
+    };
+    var add = function(node, label, pick){
+      var b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', label); b.appendChild(node);
+      b.addEventListener('click', function(){ var id = $('picWord').value; if(!id){ $('picFindMsg').textContent = 'Pick the word first.'; return; } pick(id); });
+      grid.appendChild(b);
+    };
+    var symbols = fetch(API+'api/pics/search?q='+encodeURIComponent(q)).then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j && j.error || 'failed'); return j.results || []; }); })
+      .catch(function(e){ shown.sErr = navigator.onLine===false ? 'Symbols need the internet.' : 'Symbols could not be loaded ('+String(e.message||e).slice(0,60)+').'; return []; });
+    emojiLoad().catch(function(){ return []; }).then(function(){
+      if(n !== picFindN) return;
+      emojiFind(q).forEach(function(e){
+        var sp = document.createElement('span'); sp.textContent = e; sp.setAttribute('aria-hidden','true'); shown.e++;
+        add(sp, 'emoji '+e, function(id){ try{ picKeep(id, emojiData(e), 'Picture'); }catch(x){ $('picFindMsg').textContent = 'That picture could not be used.'; } });
+      });
+      return symbols;
+    }).then(function(list){
+      if(n !== picFindN || !list) return;
+      list.forEach(function(p){
+        var im = document.createElement('img'); im.alt = ''; im.src = API+'api/pics/img/'+p.id; shown.s++;
+        add(im, 'symbol '+p.word, function(id){
+          $('picFindMsg').textContent = 'Saving the picture';
+          fetch(API+'api/pics/img/'+p.id).then(function(r){ if(!r.ok) throw new Error('failed'); return r.blob(); }).then(function(bl){
+            var fr = new FileReader(); fr.onload = function(){ picKeep(id, String(fr.result), 'Symbol'); $('picFindMsg').textContent = 'Saved. It now works with no internet.'; };
+            fr.onerror = function(){ $('picFindMsg').textContent = 'That picture could not be saved.'; }; fr.readAsDataURL(bl);
+          }).catch(function(){ $('picFindMsg').textContent = 'That picture could not be saved. Check the internet and try again.'; });
+        });
+      });
+      note();
+    });
+  }
+  $('picFindBtn').addEventListener('click', picFindRun);
+  $('picFind').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); picFindRun(); } });
   function saveLabels(){ idbSet('labels', labels).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail); idbSet('custom', custom).catch(function(){}); }
   $('nameSave').addEventListener('click', function(){
     var id = $('picWord').value, v = $('wordName').value.trim().replace(/\s+/g,' '); if(!id || !v || !LOOKUP[id]) return;
@@ -2867,7 +2963,8 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     custom.push(w); registerWords([w]); $('newWord').value='';
     idbSet('custom', custom).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
     renderPicList(); $('picWord').value = w.id; renderFavs(); renderAll();
-    $('picMsg').textContent = '"'+label+'" added. Choose a photo for it.';
+    $('picMsg').textContent = '"'+label+'" added. Choose a photo, or pick a picture below.';
+    $('picFind').value = label; picFindRun();
   });
   document.addEventListener('contextmenu', function(e){ if(!$('panel').classList.contains('open')) e.preventDefault(); });
 

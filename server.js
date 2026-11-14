@@ -383,6 +383,53 @@ async function voiceClip(text, voice, ip, warm) {
   return { buf, paid: (v.az && !AZ_PAID) ? 0 : text.length };
 }
 
+// ---------- picture library: free ARASAAC symbols (CC BY-NC-SA, credit shown in the app). Search words are sent from this server, so ARASAAC never sees a tablet. ----------
+const PICS_ON = process.env.PICS_OFF !== '1';
+const PICS_API = (process.env.ARASAAC_API || 'https://api.arasaac.org/v1').replace(/\/$/, '');
+const PICS_IMG = (process.env.ARASAAC_IMG || 'https://static.arasaac.org/pictograms').replace(/\/$/, '');
+const picSearches = new Map(), picImgs = new Map(), picHits = new Map();
+let picImgBytes = 0, picStats = { searches: 0, images: 0, failed: 0, lastError: '' };
+function picAllowed(ip, max) {                        // per tablet, per hour
+  const now = Date.now(), mine = (picHits.get(ip) || []).filter(t => now - t < 3600e3);
+  if (picHits.size > 5000) picHits.clear();
+  if (mine.length >= max) { picHits.set(ip, mine); return false; }
+  mine.push(now); picHits.set(ip, mine); return true;
+}
+function picWord(q) { return String(q || '').toLowerCase().replace(/[’]/g, "'").replace(/[^a-z0-9' -]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 30); }
+async function picSearch(q) {
+  if (picSearches.has(q)) return picSearches.get(q);
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 8000);
+  let list = [];
+  try {
+    const r = await fetch(PICS_API + '/pictograms/en/search/' + encodeURIComponent(q), { signal: ctl.signal, headers: { 'User-Agent': 'my-turn-aac' } });
+    if (r.ok) list = await r.json();
+    else if (r.status !== 404) throw new Error('symbol service answered ' + r.status);      // 404 is how it says "nothing found"
+  } finally { clearTimeout(t); }
+  picStats.searches++;
+  const out = (Array.isArray(list) ? list : []).filter(x => x && Number.isInteger(x._id) && !x.sex && !x.violence).slice(0, 30).map(x => {
+    const kw = (Array.isArray(x.keywords) ? x.keywords : []).map(k => String(k && k.keyword || '').toLowerCase()).filter(Boolean);
+    return { id: x._id, word: kw[0] || q, exact: kw.includes(q) };
+  });
+  if (picSearches.size > 800) picSearches.clear();
+  picSearches.set(q, out);
+  return out;
+}
+async function picImage(id) {
+  if (picImgs.has(id)) return picImgs.get(id);
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 8000);
+  let buf;
+  try {
+    const r = await fetch(PICS_IMG + '/' + id + '/' + id + '_300.png', { signal: ctl.signal, headers: { 'User-Agent': 'my-turn-aac' } });
+    if (!r.ok) throw new Error('symbol picture answered ' + r.status);
+    buf = Buffer.from(await r.arrayBuffer());
+  } finally { clearTimeout(t); }
+  if (buf.length < 100 || buf.length > 600000 || buf.readUInt32BE(0) !== 0x89504e47) throw new Error('symbol picture was not a PNG');
+  picStats.images++;
+  if (picImgBytes > 40 * 1024 * 1024) { picImgs.clear(); picImgBytes = 0; }
+  picImgs.set(id, buf); picImgBytes += buf.length;
+  return buf;
+}
+
 http.createServer((req, res) => {
   if (req.headers.origin && APP_ORIGINS.includes(req.headers.origin) && String(req.url).startsWith('/api/')) {   // let the tablet app call the API
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin); res.setHeader('Vary', 'Origin');
@@ -400,6 +447,35 @@ http.createServer((req, res) => {
     selftests.push(now);
     const tm = /model=sonnet/.test(req.url || '') ? 'claude-sonnet-5-5' : VISION_MODEL;
     return sceneWords(SELFTEST_IMG, 256, 192, tm).then(words => json(res, 200, { ok: true, model: tm, expected: 'ball near x31 y52, box near x74 y52', words }), e => json(res, 200, { ok: false, model: tm, error: e.message }));
+  }
+  if (p === '/api/pics/status') return json(res, 200, { enabled: PICS_ON, source: 'ARASAAC', searches: picStats.searches, images: picStats.images, failed: picStats.failed, lastError: picStats.lastError });
+  if (p === '/api/pics/selftest') {              // one fixed search and one picture (nothing from a user) so the live result can be read from outside
+    if (!PICS_ON) return json(res, 200, { ok: false, error: 'picture library is switched off' });
+    const now = Date.now(); selftests = selftests.filter(t => now - t < 3600e3);
+    if (selftests.length >= 24) return json(res, 429, { ok: false, error: 'self-test limit reached, try again in an hour' });
+    selftests.push(now); picSearches.delete('dog');
+    return picSearch('dog').then(l => { if (!l.length) throw new Error('search for "dog" found nothing'); picImgs.delete(l[0].id); return picImage(l[0].id).then(b => json(res, 200, { ok: true, found: l.length, first: l[0], exactMatches: l.filter(x => x.exact).length, pictureBytes: b.length })); })
+      .catch(e => json(res, 200, { ok: false, error: e.message }));
+  }
+  if (p === '/api/pics/search' || p === '/api/pics/best') {
+    if (!PICS_ON) return json(res, 503, { error: 'picture library is switched off' });
+    if (!sameSite(req)) return json(res, 403, { error: 'wrong site' });
+    const ipP = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    if (!picAllowed(ipP, 400)) return json(res, 429, { error: 'too many picture searches this hour, try again later' });
+    let q = ''; try { q = picWord(new URL(req.url, 'http://x').searchParams.get('q')); } catch (e) {}
+    if (q.length < 2) return json(res, 400, { error: 'type a word to search for' });
+    return picSearch(q).then(l => {
+      if (p === '/api/pics/best') { const hit = l.find(x => x.exact); return json(res, 200, { id: hit ? hit.id : null }); }   // only a symbol filed under exactly this word: the search itself is loose
+      json(res, 200, { results: l.slice(0, 24).map(x => ({ id: x.id, word: x.word })) });
+    }, e => { picStats.failed++; picStats.lastError = e.message; console.error('picture search failed:', e.message); json(res, 502, { error: 'the symbol library did not answer' }); });
+  }
+  if (p.startsWith('/api/pics/img/')) {
+    const id = Number(p.slice(14));
+    if (!PICS_ON || !Number.isInteger(id) || id < 1 || id > 9999999) return json(res, 404, { error: 'no such picture' });
+    const ipI = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    if (!picAllowed('img ' + ipI, 1500)) return json(res, 429, { error: 'too many pictures this hour' });
+    return picImage(id).then(b => { res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800' }); res.end(b); },
+      e => { picStats.failed++; picStats.lastError = e.message; json(res, 502, { error: 'the symbol library did not answer' }); });
   }
   if (p === '/api/ask/status') return json(res, 200, { enabled: !!VISION_KEY });
   if (p === '/api/ask/last') return json(res, 200, lastAsk || { note: 'no question has been sent to the AI since the server last restarted' });
