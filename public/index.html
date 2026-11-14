@@ -581,6 +581,19 @@ body.typing #tabs, body.typing #grid{display:none}
       </div>
     </div>
     <div class="diag" id="diag"></div>
+    <!-- TESTLOG-BEGIN: temporary test recording. To remove: delete every block between TESTLOG-BEGIN and TESTLOG-END (two blocks). -->
+    <h3>Test recording (temporary)</h3>
+    <div class="row">
+      <label><input type="checkbox" id="tlOn"> Record what is heard and what the app offers</label>
+      <small>For a short test run only. While this is on, what is heard IS saved, as words only, on this tablet. It is never sent anywhere. It turns itself off after 3 days.</small>
+      <div class="inline">
+        <button class="btn" id="tlCopy" type="button">Copy test log</button>
+        <button class="btn" id="tlClear" type="button">Erase test log</button>
+      </div>
+      <small id="tlMsg"></small>
+      <textarea id="tlOut" readonly rows="8" style="width:100%;font:12px/1.35 monospace;white-space:pre;overflow:auto" aria-label="Test log"></textarea>
+    </div>
+    <!-- TESTLOG-END -->
     <small>Nothing heard is saved. The last thing heard is forgotten after 30 seconds.</small>
     </details>
     <button class="btn primary" id="closeBtn" type="button">Lock and close</button>
@@ -1166,7 +1179,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v53) ---'+
+      dbgText = '\n--- Listening check (v54) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2894,6 +2907,100 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     if(NSP.TabletSpeech && NSP.TabletSpeech.speak) appVoiceNote();
     if(!NATIVE && 'serviceWorker' in navigator){ try{ navigator.serviceWorker.register('sw.js').catch(function(){}); }catch(e){} }
   }
+  /* TESTLOG-BEGIN: temporary test recording. Self-contained: nothing outside this block refers to it. */
+  (function(){
+    var KEY = 'talker-testlog', MAX = 400, DAYS3 = 72*3600*1000;
+    var tl = {on:false, since:0, items:[], echo:0, lastEcho:''}, cur = null, pendingAI = null, inMaybe = false, fromFinal = false, fromTest = false;
+    try{ var sv = JSON.parse(localStorage.getItem(KEY)||'null'); if(sv && sv.items){ tl = sv; } }catch(e){}
+    if(tl.on && Date.now()-tl.since > DAYS3) tl.on = false;
+    function keep(){ try{ if(tl.items.length > MAX) tl.items = tl.items.slice(-MAX); localStorage.setItem(KEY, JSON.stringify(tl)); }catch(e){} }
+    function where(){ return mode==='native' ? 'on this tablet'+(ns.engine ? ' ('+ns.engine+')' : '') : (mode==='cloud' ? 'listening service' : mode); }
+    function entry(text, how){ var e = {at:Date.now(), heard:String(text), how:how, by:where(), stage:state.stage}; tl.items.push(e); cur = e; return e; }
+    function find(text){ for(var i=tl.items.length-1; i>=0 && i>tl.items.length-6; i--){ if(tl.items[i].heard===String(text) && Date.now()-tl.items[i].at < 60000) return tl.items[i]; } return null; }
+    function labels(){ var out = [], k = $('askOpts').querySelectorAll('.lab'); for(var i=0;i<k.length;i++) out.push(k[i].textContent); return out; }
+    function offer(by){
+      if(!tl.on || $('ask').hidden) return;
+      var e = inMaybe ? cur : (pendingAI || cur); if(!e) return;
+      var opts = labels(), sig = opts.join('|'); if(e.off && e.off.sig===sig) return;
+      tl.items.forEach(function(o){ if(o!==e && o.off && !o.pick && o.closed==null){ o.closed = Date.now()-o.off.at; o.replaced = true; } });
+      e.off = {at:Date.now(), kind:askKind||'', by:(e.ai && by==='rules') ? 'rules, after the AI gave nothing' : by, opts:opts, sig:sig}; e.why = '';
+      if(!inMaybe) pendingAI = null;
+      keep();
+    }
+    function after(f, by){ return function(){ var r = f.apply(this, arguments); try{ offer(by); }catch(e){} return r; }; }
+
+    var _setHeard = setHeard; setHeard = function(text){ if(tl.on && text && String(text).trim()){ try{ entry(String(text).trim(), fromTest ? 'typed in the Test box' : (fromFinal ? 'finished sentence' : 'early, words stopped changing')); keep(); }catch(e){} } return _setHeard.apply(this, arguments); };
+    var _finalHeard = finalHeard; finalHeard = function(t){ fromFinal = true; try{ return _finalHeard.apply(this, arguments); } finally { fromFinal = false; } };
+    var _maybeAsk = maybeAsk; maybeAsk = function(text){
+      if(!tl.on) return _maybeAsk.apply(this, arguments);
+      var e = (cur && cur.heard===String(text)) ? cur : (find(text) || entry(text, 'asked again after a message')), why = '';
+      if(state.ask==='off') why = 'pop-ups are switched off';
+      else if($('panel').classList.contains('open')) why = 'the grown-up menu was open';
+      else if(askDone && !$('ask').hidden) why = 'an answer was still showing';
+      else if(!state.fresh && state.taps.length) why = 'held until the message in progress is finished';
+      else if(state.ask==='name' && state.name && !nameHeard(text, state.name)) why = 'the name was not heard (pop-ups set to name only)';
+      var keepCur = cur; cur = e; inMaybe = true;
+      try{ return _maybeAsk.apply(this, arguments); }
+      finally {
+        inMaybe = false; cur = keepCur || e;
+        if(!e.off){ if(why) e.why = why; else if(smartBusy && e.ai){ e.why = 'sent to the AI, waiting'; } else e.why = 'not understood as a question'; }
+        keep();
+      }
+    };
+    var _smartAsk = smartAsk; smartAsk = function(text, q){ if(tl.on && cur){ cur.ai = true; pendingAI = cur; } return _smartAsk.apply(this, arguments); };
+    showSmart = after(showSmart, 'AI'); showColors = after(showColors, 'rules (colors)'); showNumbers = after(showNumbers, 'rules (numbers)'); openPageFor = after(openPageFor, 'rules (word page)'); showAsk = after(showAsk, 'rules');
+    var _sayAnswer = sayAnswer; sayAnswer = function(sentence, ids, btn){
+      if(tl.on && !askDone){ try{ var e = null; for(var i=tl.items.length-1; i>=0 && !e; i--){ if(tl.items[i].off) e = tl.items[i]; }
+        if(e && !e.pick){ var l = btn && btn.querySelector('.lab'); e.pick = {label:l ? l.textContent : '', said:String(sentence||''), ms:Date.now()-e.off.at}; keep(); } }catch(x){} }
+      return _sayAnswer.apply(this, arguments);
+    };
+    var _hideAsk = hideAsk; hideAsk = function(){
+      if(tl.on && !$('ask').hidden){ try{ for(var i=tl.items.length-1; i>=0; i--){ var e = tl.items[i]; if(e.off){ if(!e.pick && !e.closed){ e.closed = Date.now()-e.off.at; keep(); } break; } } }catch(x){} }
+      return _hideAsk.apply(this, arguments);
+    };
+    var _isEcho = isEcho; isEcho = function(text){ var r = _isEcho.apply(this, arguments); if(r && tl.on){ var n = norm(text); if(n && n!==tl.lastEcho){ tl.lastEcho = n; tl.echo++; } } return r; };
+
+    $('testBtn').addEventListener('click', function(){ fromTest = true; setTimeout(function(){ fromTest = false; }, 0); }, true);
+    function hm(t){ var d = new Date(t), p = function(n){ return (n<10?'0':'')+n; }; return p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); }
+    function secs(ms){ return (ms/1000).toFixed(1)+' s'; }
+    function report(){
+      var n = tl.items.length, shown = 0, picked = 0, none = 0;
+      tl.items.forEach(function(e){ if(e.off){ shown++; if(e.pick) picked++; } else none++; });
+      var out = ['My Turn test log ('+((document.body.textContent.match(/Listening check \((v\d+)\)/)||[])[1] || 'v54')+')',
+        'Recording '+(tl.on ? 'ON' : 'off')+(tl.since ? ', started '+new Date(tl.since).toLocaleString() : ''),
+        'Now: listening '+where()+', Stage '+state.stage+', AI help '+(state.smart ? 'on' : 'off'),
+        n+' things heard: '+shown+' got a pop-up ('+picked+' answered), '+none+' got none. Ignored as the talker\'s own voice: '+tl.echo,
+        mode==='native' ? 'Tablet listener: '+ns.heard+' sentences heard, '+ns.quiet+' quiet time-outs, '+ns.errs+' errors'+(ns.lastErr ? ' (last: '+ns.lastErr+')' : '')+', '+ns.dog+' watchdog restarts' : '', ''];
+      tl.items.forEach(function(e, i){
+        var line = '#'+(i+1)+' '+hm(e.at)+' ['+e.by+', Stage '+e.stage+', '+e.how+']\n   HEARD: "'+e.heard+'"\n   ';
+        if(e.off){ line += 'OFFERED after '+secs(e.off.at-e.at)+' by '+e.off.by+' ('+(e.off.kind||'?')+'): '+e.off.opts.join(' | ')+'\n   ';
+          line += e.pick ? 'PICKED: '+e.pick.label+' -> said "'+e.pick.said+'" after '+secs(e.pick.ms) : (e.closed!=null ? 'NO ANSWER: '+(e.replaced ? 'replaced by the next question' : 'closed')+' after '+secs(e.closed) : 'still open'); }
+        else line += 'NO POP-UP: '+(e.why || 'unknown')+(e.ai ? ' (AI was asked)' : '');
+        out.push(line);
+      });
+      return out.filter(function(x){ return x!==''; }).join('\n');
+    }
+    function badge(){
+      var b = document.getElementById('tlBadge');
+      if(tl.on && !b){ b = document.createElement('div'); b.id = 'tlBadge'; b.textContent = 'TEST RECORDING ON'; b.style.cssText = 'position:fixed;left:50%;bottom:2px;transform:translateX(-50%);z-index:50;background:#b00020;color:#fff;font:700 11px/1 system-ui,sans-serif;padding:3px 8px;border-radius:8px;pointer-events:none;opacity:.9'; document.body.appendChild(b); }
+      if(!tl.on && b) b.remove();
+    }
+    function show(){ $('tlOn').checked = tl.on; $('tlOut').value = report(); badge(); }
+    $('tlOn').addEventListener('change', function(){ tl.on = this.checked; if(tl.on) tl.since = Date.now(); keep(); $('tlMsg').textContent = tl.on ? 'Recording. A red label shows on the board while it is on.' : 'Recording stopped. The log is kept until you erase it.'; show(); });
+    $('tlCopy').addEventListener('click', function(){
+      var text = report(), done = function(ok){ $('tlMsg').textContent = ok ? 'Copied. Paste it into the chat.' : 'Could not copy on this tablet. Press and hold the text below, choose Select all, then Copy.'; };
+      $('tlOut').value = text;
+      try{ navigator.clipboard.writeText(text).then(function(){ done(true); }, function(){ done(false); }); }catch(e){ done(false); }
+    });
+    var armed = false;
+    $('tlClear').addEventListener('click', function(){
+      if(!armed){ armed = true; this.textContent = 'Tap again to erase'; return; }
+      armed = false; this.textContent = 'Erase test log'; tl.items = []; tl.echo = 0; tl.lastEcho = ''; cur = null; pendingAI = null; keep(); $('tlMsg').textContent = 'Test log erased.'; show();
+    });
+    setInterval(function(){ if(tl.on && Date.now()-tl.since > DAYS3){ tl.on = false; keep(); badge(); } if($('panel').classList.contains('open') && document.activeElement!==$('tlOut')) show(); }, 2000);
+    show();
+  })();
+  /* TESTLOG-END */
 })();
 </script>
 </body>
