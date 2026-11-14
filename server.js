@@ -176,7 +176,8 @@ function askPrompt(level, words) {
     '- Every option needs a picture: one single standard emoji that shows what the label means (soccer gets the soccer ball, not sure gets the thinking or shrugging face). Never a flag, never text.',
     '- When the question asks for a favorite or a pick from a well-known group (sports, animals, seasons, school subjects and the like), use every choice you are allowed, with the most common answers for a person in the United States first. For sports that includes football.',
     '- Never answer with the word that was asked about: "restaurant" is not an answer to "what is your favorite restaurant".',
-    '- When the true answer would be a particular business or place you cannot know (a restaurant, a store, a park), first offer any matching names from their board words. Then fill the remaining choices with kinds a person that age would say (for restaurants: "pizza place", "burger place", "tacos", "chicken place", "ice cream shop"). Never invent or use a brand name that is not on their board.',
+    '- When the true answer would be a particular business (a restaurant, a fast food place, a store), first offer any matching names from their board words. Then fill the remaining choices with the names of real chains that nearly every child in the United States knows, most popular first, written the way people say them and with their normal capital letters (fast food: "McDonald\'s", "Chick-fil-A", "Taco Bell", "Wendy\'s", "Burger King", "Subway"; pizza: "Domino\'s", "Pizza Hut"; stores: "Walmart", "Target"). Never make a name up, never a local business you cannot know, and nothing meant for adults only. The emoji is a plain picture of what the place is known for (a burger, fries, a taco, a pizza slice, a shopping cart), never a logo. The sentence is like "I like McDonald\'s."',
+    '- When the true answer would be a place that is not a business (a park, a beach, a room), first offer matching board words, then kinds of places a person that age would say.',
     '- Never use the name of a real person. No slang. Nothing rude, scary, medical or grown-up for a young child.',
     words && words.length ? '- Words already on their board (prefer these as labels when they fit): ' + words.join(', ') + '.' : '',
     'Reply only by calling offer_answers.'
@@ -193,6 +194,13 @@ function askEmoji(v) {
   const e = String(v || '').trim();
   if (!e || e.length > 14 || [...new Intl.Segmenter('en', { granularity: 'grapheme' }).segment(e)].length !== 1 || /[\p{L}\p{N}<>&"']/u.test(e) || /\p{Regional_Indicator}/u.test(e) || !/\p{Extended_Pictographic}/u.test(e)) return '';
   return e;
+}
+// Ordinary words are shown lowercase like the board. The name of a business keeps its capitals (McDonald's, Chick-fil-A, Taco Bell).
+const KNOWN_NAMES = /^(mcdonald'?s|chick-fil-a|taco bell|wendy's|burger king|subway|domino's|pizza hut|walmart|target|kfc|dairy queen|dunkin'?|starbucks|sonic|arby's|popeyes|chipotle|panera|five guys|little caesars|papa john's|culver's|a&w|ihop|denny's|applebee's|olive garden|costco|dollar general|dollar tree|walgreens|cvs|home depot|lowe's|chuck e cheese|jack in the box|in-n-out|whataburger|panda express|chili's|red robin|cracker barrel|texas roadhouse|friendly's|ben & jerry's|shake shack|raising cane's|wingstop|jersey mike's|jimmy john's|panera bread|buffalo wild wings|mcdonalds)$/i;
+function askLabel(l) {
+  const t = String(l || '').replace(/[’]/g, "'").replace(/[^a-zA-Z0-9'& -]/g, '').replace(/\s+/g, ' ').trim().slice(0, 28);
+  const named = KNOWN_NAMES.test(t) || /^[A-Z][a-z]+[A-Z]/.test(t) || /^[A-Z][A-Za-z&' -]*'s$/.test(t);
+  return named ? t : t.toLowerCase();
 }
 const askCache = new Map();       // same question at the same level: answer once
 let lastAsk = null;
@@ -213,7 +221,7 @@ async function askHelp(heard, stage, words) {
           kind: { type: 'string', enum: ['yesno', 'choices', 'none'] },
           options: { type: 'array', items: { type: 'object', required: ['label', 'emoji', 'sentence'], properties: {
             emoji: { type: 'string', description: 'exactly one standard emoji picture for this label' },
-            label: { type: 'string', description: 'what is shown on the button, lowercase, 1 to 3 words' },
+            label: { type: 'string', description: 'what is shown on the button, 1 to 3 words, lowercase except that the name of a business keeps its normal capital letters' },
             sentence: { type: 'string', description: 'the full first-person sentence the tablet says' } } } } } } }],
       tool_choice: { type: 'tool', name: 'offer_answers' },
       messages: [{ role: 'user', content: askPrompt(level, board) + '\n\nWhat was said: "' + text + '"' }]
@@ -226,13 +234,13 @@ async function askHelp(heard, stage, words) {
   let kind = ['yesno', 'choices', 'none'].includes(inp.kind) ? inp.kind : 'none';
   const seen = new Set();
   let options = (Array.isArray(inp.options) ? inp.options : []).map(o => ({
-    label: String((o && o.label) || '').toLowerCase().replace(/[^a-z0-9' -]/g, '').trim().slice(0, 28),
+    label: askLabel(o && o.label),
     sentence: String((o && o.sentence) || '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 90),
     emoji: askEmoji(o && o.emoji)
-  })).filter(o => o.label && o.sentence && !seen.has(o.label) && seen.add(o.label));
+  })).filter(o => o.label && o.sentence && !seen.has(o.label.toLowerCase()) && seen.add(o.label.toLowerCase()));
   // The asked-about word is not an answer ("restaurant" to "favorite restaurant"), unless the speaker offered it as a choice ("X or Y").
   const asked = ' ' + text.toLowerCase().replace(/[^a-z0-9' ]/g, ' ').replace(/\s+/g, ' ') + ' ';
-  if (kind === 'choices' && !/ or /.test(asked)) options = options.filter(o => !asked.includes(' ' + o.label + ' ') && !asked.includes(' ' + o.label + 's '));
+  if (kind === 'choices' && !/ or /.test(asked)) options = options.filter(o => !asked.includes(' ' + o.label.toLowerCase() + ' ') && !asked.includes(' ' + o.label.toLowerCase() + 's '));
   if (kind === 'yesno') {
     const y = options.find(o => o.label === 'yes'), n = options.find(o => o.label === 'no');
     if (y && n) options = [y, n]; else kind = 'none';
@@ -400,7 +408,7 @@ http.createServer((req, res) => {
     const now = Date.now(); selftests = selftests.filter(t => now - t < 3600e3);
     if (selftests.length >= 24) return json(res, 429, { ok: false, error: 'self-test limit reached, try again in an hour' });
     selftests.push(now);
-    const samples = ['how was school today', 'is your tummy hurting', 'which one do you like better the red one or the blue one', 'what color do you want', 'it is raining outside'];
+    const samples = ['what is your favorite fast food restaurant', 'how was school today', 'is your tummy hurting', 'which one do you like better the red one or the blue one', 'what color do you want', 'it is raining outside'];
     const u = new URL(req.url, 'http://x'), st = Math.max(1, Math.min(6, +u.searchParams.get('stage') || 2));
     return Promise.all(samples.map(q => askHelp(q, st, ['yes', 'no', 'more', 'want', 'play', 'eat', 'drink', 'help', 'hurt', 'happy', 'sad', 'tired', 'good', 'bad']).then(a => ({ q, kind: a.kind, options: a.options, cost: a.cost }), e => ({ q, error: e.message }))))
       .then(out => json(res, 200, { ok: out.every(o => !o.error), stage: st, model: VISION_MODEL, priceInPerMillion: AI_PRICE_IN, priceOutPerMillion: AI_PRICE_OUT, totalUsd: +out.reduce((a, o) => a + ((o.cost && o.cost.usd) || 0), 0).toFixed(6), results: out }));
