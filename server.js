@@ -317,6 +317,29 @@ function signPolly(body, now, id, secret, region, host) {
     authorization: 'AWS4-HMAC-SHA256 Credential=' + id + '/' + scope + ', SignedHeaders=content-type;host;x-amz-date, Signature=' + hmac(key, toSign).toString('hex') };
 }
 const clips = new Map();          // "Voice|text" -> mp3, shared by every tablet until the server restarts
+// Kept for good: with VOICE_DIR set (a Railway volume), every clip is also written to disk, so a word is asked of the voice service once, ever, for all tablets.
+const VOICE_DIR = process.env.VOICE_DIR || (process.env.RAILWAY_VOLUME_MOUNT_PATH ? path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, 'voice') : '');
+const VOICE_DIR_MAX = (+process.env.VOICE_DIR_MAX_MB || 1500) * 1024 * 1024;
+let kept = { ok: false, files: 0, bytes: 0, hits: 0, error: '' };
+const clipFile = (voice, text) => path.join(VOICE_DIR, voice.replace(/\W/g, ''), crypto.createHash('sha1').update(text, 'utf8').digest('hex') + '.mp3');
+if (VOICE_DIR) {
+  try {
+    fs.mkdirSync(VOICE_DIR, { recursive: true });
+    for (const d of fs.readdirSync(VOICE_DIR, { withFileTypes: true })) { if (!d.isDirectory()) continue;
+      for (const f of fs.readdirSync(path.join(VOICE_DIR, d.name))) { if (!f.endsWith('.mp3')) continue; kept.files++; kept.bytes += fs.statSync(path.join(VOICE_DIR, d.name, f)).size; } }
+    kept.ok = true;
+  } catch (e) { kept.error = String(e.message).slice(0, 120); console.error('voice folder not usable:', e.message); }
+}
+async function keptRead(voice, text) {
+  if (!kept.ok) return null;
+  try { const b = await fs.promises.readFile(clipFile(voice, text)); if (b.length < 100) return null; kept.hits++; return b; } catch (e) { return null; }
+}
+async function keptWrite(voice, text, buf) {
+  if (!kept.ok || kept.bytes + buf.length > VOICE_DIR_MAX) return;
+  const f = clipFile(voice, text);
+  try { await fs.promises.mkdir(path.dirname(f), { recursive: true }); await fs.promises.writeFile(f + '.part', buf); await fs.promises.rename(f + '.part', f); kept.files++; kept.bytes += buf.length; }
+  catch (e) { kept.error = String(e.message).slice(0, 120); }
+}
 let clipBytes = 0, lastVoice = null;
 const voiceUse = new Map();       // ip -> [[time, characters]]
 let voiceDay = { day: '', chars: 0 };
@@ -344,10 +367,13 @@ function cleanSay(t) { return String(t || '').replace(/[^\p{L}\p{N} .,!?'’-]/g
 async function voiceClip(text, voice, ip, warm) {
   const k = voice + '|' + text;
   if (clips.has(k)) return { buf: clips.get(k), paid: 0 };
+  const onDisk = await keptRead(voice, text);
+  if (onDisk) { if (clipBytes < 60 * 1024 * 1024) { clips.set(k, onDisk); clipBytes += onDisk.length; } return { buf: onDisk, paid: 0 }; }
   if (!voiceBudget(ip, text.length)) { const e = new Error('voice limit reached for now, try again in an hour'); e.code = 429; throw e; }
   const v = VOICES.find(x => x.id === voice);
   const buf = v.az ? await azureSay(text, v, warm) : await pollySay(text, voice);
   if (clipBytes < 60 * 1024 * 1024) { clips.set(k, buf); clipBytes += buf.length; }
+  keptWrite(voice, text, buf);
   return { buf, paid: (v.az && !AZ_PAID) ? 0 : text.length };
 }
 
@@ -390,7 +416,7 @@ http.createServer((req, res) => {
     return readBody(req, 8192).then(b => { const q = JSON.parse(b); return askHelp(q.heard, +q.stage || 1, q.words); })
       .then(a => json(res, 200, a), e => { console.error('ask failed:', e.message); json(res, 502, { error: e.message }); });
   }
-  if (p === '/api/voice/status') return json(res, 200, { enabled: VOICE_ON, region: AZ_KEY ? AZ_REGION : AWS_REGION, voices: VOICES.map(v => ({ id: v.id, label: v.label, noSave: v.noSave || undefined })), month: AZ_KEY ? azMonth : undefined, slow: !!AZ_KEY && AZ_PACE > 0, free: !!AZ_KEY && !AZ_PAID, queue: azQueue.length, azure: AZ_KEY ? azStats : undefined });
+  if (p === '/api/voice/status') return json(res, 200, { enabled: VOICE_ON, region: AZ_KEY ? AZ_REGION : AWS_REGION, voices: VOICES.map(v => ({ id: v.id, label: v.label, noSave: v.noSave || undefined })), month: AZ_KEY ? azMonth : undefined, kept: { on: kept.ok, clips: kept.files, megabytes: Math.round(kept.bytes / 104857.6) / 10, servedFromDisk: kept.hits, error: kept.error || undefined }, slow: !!AZ_KEY && AZ_PACE > 0, free: !!AZ_KEY && !AZ_PAID, queue: azQueue.length, azure: AZ_KEY ? azStats : undefined });
   if (p === '/api/voice/last') return json(res, 200, lastVoice || { note: 'no child-voice request has run since the server last restarted' });
   if (p === '/api/voice/selftest') {           // says one short word so a key or region problem can be read from outside
     if (!VOICE_ON) return json(res, 200, { ok: false, error: 'no voice keys set' });
