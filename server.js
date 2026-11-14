@@ -250,7 +250,60 @@ const AWS_ID = process.env.AWS_ACCESS_KEY_ID, AWS_SECRET = process.env.AWS_SECRE
 const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 const POLLY_HOST = 'polly.' + AWS_REGION + '.amazonaws.com';
 const POLLY_URL = process.env.POLLY_ENDPOINT || ('https://' + POLLY_HOST);      // override is for local tests only
-const VOICES = [{ id: 'Ivy', label: 'Girl (Ivy)' }, { id: 'Kevin', label: 'Boy (Kevin)' }, { id: 'Justin', label: 'Boy (Justin)' }];
+const POLLY_VOICES = [{ id: 'Ivy', label: 'Girl (Ivy)' }, { id: 'Kevin', label: 'Boy (Kevin)' }, { id: 'Justin', label: 'Boy (Justin)' }];
+// ---- Child voice from Microsoft Azure Speech ("Ana"). The Free (F0) resource cannot be billed; it only slows or refuses when its monthly allowance is used. ----
+const AZ_KEY = process.env.AZURE_SPEECH_KEY, AZ_REGION = process.env.AZURE_SPEECH_REGION || 'eastus';
+const AZ_URL = process.env.AZURE_SPEECH_ENDPOINT || ('https://' + AZ_REGION + '.tts.speech.microsoft.com');   // override is for local tests only
+const AZ_PACE = process.env.AZURE_PACE_MS === undefined ? 3200 : Math.max(0, +process.env.AZURE_PACE_MS || 0);   // the free resource allows about 20 requests a minute
+const AZ_PAID = process.env.AZURE_PAID === '1';                                                                // set when the Speech resource is a paid one, so the cost tracker counts it
+const AZ_VOICES = [{ id: 'Ana', label: 'Girl (Ana)', az: 'en-US-AnaNeural' },
+  { id: 'AnaBoyA', label: 'Boy test A (Ana, a little lower)', az: 'en-US-AnaNeural', pitch: '-6%', noSave: true },
+  { id: 'AnaBoyB', label: 'Boy test B (Ana, lower)', az: 'en-US-AnaNeural', pitch: '-12%', noSave: true },
+  { id: 'AnaBoyC', label: 'Boy test C (Ana, lowest)', az: 'en-US-AnaNeural', pitch: '-20%', noSave: true }];
+const VOICES = (AZ_KEY ? AZ_VOICES : []).concat(AWS_ID && AWS_SECRET ? POLLY_VOICES : []);
+const VOICE_ON = VOICES.length > 0;
+const xml = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+function azureSsml(text, v) {
+  const inner = v.pitch ? "<prosody pitch='" + v.pitch + "'>" + xml(text) + '</prosody>' : xml(text);
+  return "<speak version='1.0' xml:lang='en-US'><voice name='" + v.az + "'>" + inner + '</voice></speak>';
+}
+async function azureOnce(text, v) {
+  const r = await fetch(AZ_URL + '/cognitiveservices/v1', { method: 'POST', body: azureSsml(text, v),
+    headers: { 'Ocp-Apim-Subscription-Key': AZ_KEY, 'Content-Type': 'application/ssml+xml', 'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3', 'User-Agent': 'my-turn-talker' } });
+  if (!r.ok) { const t = await r.text().catch(() => ''); const e = new Error('voice service ' + r.status + ' ' + t.replace(/\s+/g, ' ').slice(0, 140).trim()); e.status = r.status; throw e; }
+  const buf = Buffer.from(await r.arrayBuffer());
+  if (buf.length < 100) throw new Error('voice service sent no sound');
+  return buf;
+}
+// One request at a time. Words being saved for later are spaced out to stay under the free limit; a word a child is waiting to hear goes first and does not wait for a slot.
+const azQueue = []; let azBusy = false, azTimer = null, azLast = 0, azHold = 0, azStats = { sent: 0, waited: 0, refused: 0, longest: 0, longestLive: 0 };
+let azMonth = { month: '', chars: 0 };
+const AZ_MONTH_SAVE = +process.env.AZURE_MONTH_SAVE || 450000, AZ_MONTH_ALL = +process.env.AZURE_MONTH_ALL || 495000;   // characters; the free allowance is 500,000 a month. Counted since the server last restarted.
+function azureSay(text, v, warm) {
+  return new Promise((resolve, reject) => {
+    const m = new Date().toISOString().slice(0, 7); if (azMonth.month !== m) azMonth = { month: m, chars: 0 };
+    if (!AZ_PAID && azMonth.chars + text.length > (warm ? AZ_MONTH_SAVE : AZ_MONTH_ALL)) return reject(Object.assign(new Error("this month's free voice allowance is used up; saving starts again next month"), { code: 429 }));
+    azMonth.chars += text.length;
+    const job = { text, v, resolve, reject, at: Date.now(), tries: 0, warm: !!warm };
+    if (warm) azQueue.push(job); else { let i = 0; while (i < azQueue.length && !azQueue[i].warm) i++; azQueue.splice(i, 0, job); }
+    if (azQueue.length > 400) { const drop = azQueue.pop(); drop.reject(Object.assign(new Error('voice is busy, try again soon'), { code: 429 })); }
+    if (!warm && azTimer) { clearTimeout(azTimer); azTimer = null; azBusy = false; }      // do not make her wait behind a saving slot
+    azurePump();
+  });
+}
+function azurePump() {
+  if (azBusy || !azQueue.length) return;
+  azBusy = true;
+  const now = Date.now(), first = azQueue[0];
+  const wait = Math.max(0, azHold - now, first.warm ? azLast + AZ_PACE - now : 0);
+  azTimer = setTimeout(() => {
+    azTimer = null;
+    const job = azQueue.shift(); if (job.warm) azLast = Date.now(); job.tries++;
+    azureOnce(job.text, job.v).then(buf => { const took = Date.now() - job.at; azStats.sent++; azStats.longest = Math.max(azStats.longest, took); if (!job.warm) azStats.longestLive = Math.max(azStats.longestLive, took); job.resolve(buf); },
+      e => { if (e.status === 429 && job.tries < 3) { azStats.waited++; azQueue.unshift(job); azHold = Date.now() + 4000; } else { if (e.status === 429) azStats.refused++; job.reject(e); } })
+      .then(() => { azBusy = false; azurePump(); });
+  }, wait);
+}
 const hmac = (k, d) => crypto.createHmac('sha256', k).update(d, 'utf8').digest();
 const sha = d => crypto.createHash('sha256').update(d, 'utf8').digest('hex');
 // AWS Signature Version 4 for one JSON POST.
@@ -288,13 +341,14 @@ async function pollySay(text, voice) {
   return buf;
 }
 function cleanSay(t) { return String(t || '').replace(/[^\p{L}\p{N} .,!?'’-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 160); }
-async function voiceClip(text, voice, ip) {
+async function voiceClip(text, voice, ip, warm) {
   const k = voice + '|' + text;
   if (clips.has(k)) return { buf: clips.get(k), paid: 0 };
   if (!voiceBudget(ip, text.length)) { const e = new Error('voice limit reached for now, try again in an hour'); e.code = 429; throw e; }
-  const buf = await pollySay(text, voice);
+  const v = VOICES.find(x => x.id === voice);
+  const buf = v.az ? await azureSay(text, v, warm) : await pollySay(text, voice);
   if (clipBytes < 60 * 1024 * 1024) { clips.set(k, buf); clipBytes += buf.length; }
-  return { buf, paid: text.length };
+  return { buf, paid: (v.az && !AZ_PAID) ? 0 : text.length };
 }
 
 http.createServer((req, res) => {
@@ -336,25 +390,25 @@ http.createServer((req, res) => {
     return readBody(req, 8192).then(b => { const q = JSON.parse(b); return askHelp(q.heard, +q.stage || 1, q.words); })
       .then(a => json(res, 200, a), e => { console.error('ask failed:', e.message); json(res, 502, { error: e.message }); });
   }
-  if (p === '/api/voice/status') return json(res, 200, { enabled: !!(AWS_ID && AWS_SECRET), region: AWS_REGION, voices: VOICES });
+  if (p === '/api/voice/status') return json(res, 200, { enabled: VOICE_ON, region: AZ_KEY ? AZ_REGION : AWS_REGION, voices: VOICES.map(v => ({ id: v.id, label: v.label, noSave: v.noSave || undefined })), month: AZ_KEY ? azMonth : undefined, slow: !!AZ_KEY && AZ_PACE > 0, free: !!AZ_KEY && !AZ_PAID, queue: azQueue.length, azure: AZ_KEY ? azStats : undefined });
   if (p === '/api/voice/last') return json(res, 200, lastVoice || { note: 'no child-voice request has run since the server last restarted' });
   if (p === '/api/voice/selftest') {           // says one short word so a key or region problem can be read from outside
-    if (!(AWS_ID && AWS_SECRET)) return json(res, 200, { ok: false, error: 'no AWS keys set' });
+    if (!VOICE_ON) return json(res, 200, { ok: false, error: 'no voice keys set' });
     const now = Date.now(); selftests = selftests.filter(t => now - t < 3600e3);
     if (selftests.length >= 24) return json(res, 429, { ok: false, error: 'self-test limit reached, try again in an hour' });
     selftests.push(now);
-    return Promise.all(VOICES.map(v => pollySay('hi', v.id).then(b => v.id + ': ok, ' + b.length + ' bytes of sound', e => v.id + ': FAILED, ' + e.message)))
-      .then(out => json(res, 200, { ok: out.every(o => / ok,/.test(o)), region: AWS_REGION, results: out }));
+    return Promise.all(VOICES.map(v => (v.az ? azureSay('hi', v, false) : pollySay('hi', v.id)).then(b => v.id + ': ok, ' + b.length + ' bytes of sound', e => v.id + ': FAILED, ' + e.message)))
+      .then(out => json(res, 200, { ok: out.every(o => / ok,/.test(o)), region: AZ_KEY ? AZ_REGION : AWS_REGION, results: out }));
   }
   if (p === '/api/voice/say') {
     if (req.method !== 'POST') return json(res, 405, { error: 'POST only' });
-    if (!(AWS_ID && AWS_SECRET)) return json(res, 503, { error: 'no voice keys set' });
+    if (!VOICE_ON) return json(res, 503, { error: 'no voice keys set' });
     if (!sameSite(req)) return json(res, 403, { error: 'wrong site' });
     const ip3 = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
     return readBody(req, 4096).then(b => {
       const q = JSON.parse(b), text = cleanSay(q.text), voice = String(q.voice || '');
       if (!text || !VOICES.some(v => v.id === voice)) { const e = new Error('nothing to say or unknown voice'); e.code = 400; throw e; }
-      return voiceClip(text, voice, ip3);
+      return voiceClip(text, voice, ip3, !!q.warm);
     }).then(c => {
       lastVoice = { at: new Date().toISOString(), ok: true, bytes: c.buf.length, paidCharacters: c.paid };
       res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store', 'X-Paid-Characters': String(c.paid) }); res.end(c.buf);
@@ -392,4 +446,4 @@ http.createServer((req, res) => {
   });
 }).listen(PORT, () => console.log('My Turn listening on ' + PORT));
 
-if (process.env.TALKER_TEST) module.exports = { signPolly };
+if (process.env.TALKER_TEST) module.exports = { signPolly, azureSsml };

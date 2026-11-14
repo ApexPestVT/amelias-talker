@@ -1179,7 +1179,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v54) ---'+
+      dbgText = '\n--- Listening check (v55) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1227,13 +1227,14 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   function cvId(){ var m = /^polly:(\w+)$/.exec(state.voiceName||''); return (m && cv.on && cv.voices.some(function(v){ return v.id===m[1]; })) ? m[1] : ''; }
   function cvLabel(){ var id = cvId(), v = cv.voices.filter(function(x){ return x.id===id; })[0]; return v ? v.label : ''; }
   function cvKey(v, text){ return 'tts:'+v+':'+text; }
+  function cvNoSave(){ var id = cvId(), v = cv.voices.filter(function(x){ return x.id===id; })[0]; return !!(v && v.noSave); }
   function cvCtx(){ if(!cv.ctx){ var AC = window.AudioContext||window.webkitAudioContext; if(AC){ try{ cv.ctx = new AC(); }catch(e){} } } return cv.ctx; }
   function cvUnlock(){ if(!cvId()) return; var c = cvCtx(); if(c && c.state!=='running'){ try{ c.resume(); }catch(e){} } }
   ['pointerdown','pointerup','touchend','click','keydown'].forEach(function(ev){ document.addEventListener(ev, cvUnlock, true); });
   function cvPaid(n){ try{ if(n>0) localStorage.setItem('talker-voice-chars', String((+localStorage.getItem('talker-voice-chars')||0)+n)); }catch(e){} }
-  function cvFetch(v, text){
-    var ctl = ('AbortController' in window) ? new AbortController() : null, t = setTimeout(function(){ if(ctl) ctl.abort(); }, 12000);
-    return fetch(API+'api/voice/say', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text:text, voice:v}), signal:ctl?ctl.signal:undefined}).then(function(r){
+  function cvFetch(v, text, warm){
+    var ctl = ('AbortController' in window) ? new AbortController() : null, t = setTimeout(function(){ if(ctl) ctl.abort(); }, (warm && cv.slow) ? 45000 : 12000);
+    return fetch(API+'api/voice/say', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text:text, voice:v, warm:!!warm}), signal:ctl?ctl.signal:undefined}).then(function(r){
       if(!r.ok) return r.json().then(function(j){ return j.error; }, function(){ return ''; }).then(function(why){ var e = new Error(why || ('voice service '+r.status)); e.status = r.status; throw e; });
       cvPaid(+r.headers.get('X-Paid-Characters')||0);
       return r.arrayBuffer();
@@ -1285,6 +1286,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   }
   function cvWarm(){
     var v = cvId(); if(!v){ cvMsg(); return; }
+    if(cvNoSave()){ cv.total = 0; cv.stop = ''; cvMsg(); return; }      // a test voice: speak what is tapped, save nothing in bulk
     if(cv.busy) return;
     var all = cvList(), need = all.filter(function(t){ return !cv.clips[cvKey(v, t)]; }), i = 0;
     cv.total = all.length; cv.done = all.length - need.length; cv.stop = ''; cv.skipped = 0;
@@ -1293,20 +1295,21 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var next = function(){
       if(cv.stop || i >= need.length || cvId()!==v) return Promise.resolve();
       var t = need[i++];
-      return cvFetch(v, t).then(function(){ cv.done++; cvMsg(); }, function(e){ if(e.status===400) cv.skipped++; else cv.stop = (e.name==='AbortError') ? 'the internet was too slow' : String(e.message||e); }).then(next);
+      return cvFetch(v, t, true).then(function(){ cv.done++; cvMsg(); }, function(e){ if(e.status===400) cv.skipped++; else cv.stop = (e.name==='AbortError') ? 'the internet was too slow' : String(e.message||e); }).then(next);
     };
-    Promise.all([next(), next(), next(), next()]).then(function(){ cv.busy = false; cvMsg(); if(cvId() && cvId()!==v) cvWarm(); });
+    Promise.all(cv.slow ? [next()] : [next(), next(), next(), next()]).then(function(){ cv.busy = false; cvMsg(); if(cvId() && cvId()!==v) cvWarm(); });
   }
   function cvMsg(){
     var el = document.getElementById('voiceMsg'), id = cvId(), spent = 0;
     try{ spent = (+localStorage.getItem('talker-voice-chars')||0) * 16 / 1e6; }catch(e){}
     if(id){
       var saved = Object.keys(cv.clips).filter(function(k){ return k.indexOf('tts:'+id+':')===0; }).length;
-      diag.voice = cvLabel()+', child voice. '+saved+' words and sentences saved on this tablet'+(cv.busy?' (saving '+cv.done+' of '+cv.total+')':'')+(cv.stop?'. Saving stopped: '+cv.stop:'')+'. About $'+spent.toFixed(2)+' of voice bought from this tablet so far';
+      diag.voice = cvLabel()+', child voice. '+saved+' words and sentences saved on this tablet'+(cv.busy?' (saving '+cv.done+' of '+cv.total+')':'')+(cv.stop?'. Saving stopped: '+cv.stop:'')+(cv.free ? '. This voice is free' : '. About $'+spent.toFixed(2)+' of voice bought from this tablet so far');
     }
     if(el){
       el.textContent = !id ? (cv.on ? 'Girl and boy voices are at the top of the list. The others come from this tablet.' : "Voices come from this tablet. Add more in the tablet's own settings.")
-        : cv.busy ? 'Saving the words on this tablet: '+cv.done+' of '+cv.total+'. Keep this page open.'
+        : cvNoSave() ? 'This is a test voice. It speaks each word as it is tapped (needs internet) and does not save the whole board.'
+        : cv.busy ? 'Saving the words on this tablet: '+cv.done+' of '+cv.total+'. Keep this page open.'+(cv.slow ? ' The free voice saves one word about every 3 seconds, so this takes a while. Words she taps are spoken first.' : '')
         : cv.stop ? 'Saved '+cv.done+' of '+cv.total+'. Stopped: '+cv.stop+'. It tries again each time the app opens.'
         : cv.total ? 'All '+cv.done+' words and sentences are saved on this tablet in this voice: every picture word, and every sentence one or two pictures can make. They play right away, even with no internet. Answers to a question it hears, and typed words, need internet the first time. The speed slider does not change this voice.'
         : 'Checking saved words...';
@@ -2889,7 +2892,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       setEar(); srStart();
     };
     fetch(API+'api/voice/status').then(function(r){ return r.json(); }).then(function(v){
-      cv.on = !!(v && v.enabled && Array.isArray(v.voices) && v.voices.length); cv.voices = cv.on ? v.voices : [];
+      cv.on = !!(v && v.enabled && Array.isArray(v.voices) && v.voices.length); cv.voices = cv.on ? v.voices : []; cv.slow = !!(v && v.slow); cv.free = !!(v && v.free);
       try{ if(cv.on) localStorage.setItem('talker-cv', JSON.stringify(cv.voices)); else localStorage.removeItem('talker-cv'); }catch(e){}
       renderVoices(); cvMsg(); if(cv.loaded) cvWarm();
     }, function(){});
