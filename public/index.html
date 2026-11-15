@@ -647,7 +647,7 @@ body.typing #tabs, body.typing #grid{display:none}
     </div>
     <div id="wbEdit" hidden>
       <div class="inline"><button class="btn" id="wbBack1" type="button">Back</button><h2 id="wbEditT"></h2></div>
-      <div class="inline"><span class="wbdot" id="wbEditDot"></span><small>The symbol stays on the key. You choose what it says.</small></div>
+      <div class="inline"><span class="wbdot" id="wbEditDot"></span><small>The shape stays on the key. You choose what it says.</small></div>
       <label for="wbPhrase">What it says</label>
       <input type="text" id="wbPhrase" maxlength="60" autocomplete="off">
       <small id="wbCount"></small>
@@ -1262,7 +1262,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v59) ---'+
+      dbgText = '\n--- Listening check (v60) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -3009,10 +3009,10 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   }
   /* ---------- wristband setup (inside the grown-up menu; the radio link to a real wristband is not built yet) ---------- */
   var WB_KEYS = [
-    {id:'green', name:'Green key', where:'top left', bg:'#1f7a3d', fg:'#fff', say:'Yes', svg:'<path d="M4 12.5l5.2 5.2L20 6.5" fill="none" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>'},
+    {id:'green', name:'Green key', where:'top left', bg:'#1f7a3d', fg:'#fff', say:'Yes', svg:'<circle cx="12" cy="12" r="7.3" fill="none" stroke-width="3"/>'},
     {id:'red', name:'Red key', where:'top right', bg:'#b8321f', fg:'#fff', say:'No', svg:'<path d="M5.5 5.5l13 13M18.5 5.5l-13 13" fill="none" stroke-width="3.2" stroke-linecap="round"/>'},
-    {id:'yellow', name:'Yellow key', where:'bottom left', bg:'#f2c230', fg:'#16223a', say:'', svg:'<path d="M8 12V5.5a1.5 1.5 0 0 1 3 0V11M11 10V4a1.5 1.5 0 0 1 3 0v6M14 10.5V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7c-2.3 0-3.9-1-5.1-2.8L3.3 14.6a1.5 1.5 0 0 1 2.5-1.6L8 15.5" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'},
-    {id:'blue', name:'Blue key', where:'bottom right', bg:'#2460c8', fg:'#fff', say:'Want to play?', svg:'<path d="M12 3.2l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 17l-5.4 2.9 1.1-6.1L3.2 9.6l6.1-.8z" stroke-width="1.5" stroke-linejoin="round"/>'}
+    {id:'yellow', name:'Yellow key', where:'bottom left', bg:'#f2c230', fg:'#16223a', say:'', svg:'<path d="M12 4.6L20.4 18.8H3.6z" fill="none" stroke-width="2.8" stroke-linejoin="round"/>'},
+    {id:'blue', name:'Blue key', where:'bottom right', bg:'#2460c8', fg:'#fff', say:'Want to play?', svg:'<rect x="5.2" y="5.2" width="13.6" height="13.6" rx="1.2" fill="none" stroke-width="3"/>'}
   ];
   var WB_READY = ['Help, please.', 'More, please.', 'All done.', 'I need a break.', 'Can I have a turn?', 'Bathroom, please.'];
   var WB_START = {say:{}, say2:{}, vol:6, dbl:false, wait:400, hold:false, guard:true, sleep:true};

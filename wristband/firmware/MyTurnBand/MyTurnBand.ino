@@ -26,7 +26,7 @@
 #define FW_MINOR 1
 
 // ---- pins (GPIO number, board label) ----
-static const uint8_t KEY_PIN[4] = {1, 2, 4, 5};   // D0 green (tick), D1 red (X), D3 yellow (hand), D4 blue (star)
+static const uint8_t KEY_PIN[4] = {1, 2, 4, 5};   // D0 green (circle), D1 red (X), D3 yellow (triangle), D4 blue (square)
 #define PIN_BCLK 7                                 // D8  -> amplifier BCLK
 #define PIN_LRCLK 8                                // D9  -> amplifier LRCLK
 #define PIN_DIN 9                                  // D10 -> amplifier DIN
