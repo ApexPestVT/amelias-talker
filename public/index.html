@@ -270,6 +270,21 @@ body.typing #tabs, body.typing #grid{display:none}
 .picgrid button{aspect-ratio:1;border:2px solid var(--line,#c9c9c9);border-radius:12px;background:#fff;padding:4px;font-size:34px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .picgrid button img{width:100%;height:100%;object-fit:contain}
 .picgrid button:focus-visible{outline:3px solid #1a5fd0}
+.sheet.wb > div{display:flex;flex-direction:column;gap:14px}
+.sheet.wb > div[hidden]{display:none}
+.wbstat{display:flex;flex-direction:column;gap:4px;border:2px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--paper)}
+.wbstat span{font-size:14px}
+.wbkeys{display:flex;flex-direction:column;gap:10px}
+.wbkey{display:flex;align-items:center;gap:12px;border:2px solid var(--line);border-radius:14px;padding:10px 12px;background:var(--paper)}
+.wbkey .t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.wbkey .t small{font-size:13px}
+.wbkey .t b{font-size:18px;overflow-wrap:anywhere}
+.wbkey .t i{font-size:14px;font-style:normal;opacity:.8;overflow-wrap:anywhere}
+.wbdot{flex:none;width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.wbdot svg{width:30px;height:30px}
+.wbfoot{justify-content:flex-end}
+.sheet.wb .check{min-height:44px}
+.sheet.wb .check input{width:24px;height:24px;flex:none}
 .mine{display:flex;flex-direction:column;gap:6px}
 .mine div{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:15px;background:var(--paper);border-radius:10px;padding:6px 10px}
 .diag{font-size:13px;color:var(--ink-soft);background:var(--paper);border-radius:12px;padding:10px 12px;line-height:1.5;white-space:pre-wrap}
@@ -609,7 +624,60 @@ body.typing #tabs, body.typing #grid{display:none}
     <!-- TESTLOG-END -->
     <small>Nothing heard is saved. The last thing heard is forgotten after 30 seconds.</small>
     </details>
+    <details class="sec">
+      <summary><b>12. Wristband</b><span>Set what the four talking keys say</span></summary>
+    <div class="row">
+      <small>The wristband is a small band with four talking keys. Set it up here: no second app needed.</small>
+      <button class="btn" id="wbOpen" type="button">Open wristband setup</button>
+    </div>
+    </details>
     <button class="btn primary" id="closeBtn" type="button">Lock and close</button>
+  </div>
+</div>
+<div class="panel" id="wb" role="dialog" aria-label="Wristband setup">
+  <div class="sheet wb">
+    <div id="wbHome">
+      <h2>Wristband</h2>
+      <div class="wbstat" id="wbStat"><b>Not connected yet</b><span>You can set the phrases now. They are sent the first time a wristband is connected. Connecting is switched on when the wristband's own software is ready.</span></div>
+      <button class="btn" id="wbFind" type="button" disabled>Find wristband (coming with the wristband)</button>
+      <h3>What each key says</h3>
+      <div id="wbKeys" class="wbkeys"></div>
+      <small>The wristband uses the voice picked in section 3, Talking and voice.</small>
+      <div class="inline wbfoot"><button class="btn" id="wbSound" type="button">Sound and taps</button><button class="btn primary" id="wbDone" type="button">Done</button></div>
+    </div>
+    <div id="wbEdit" hidden>
+      <div class="inline"><button class="btn" id="wbBack1" type="button">Back</button><h2 id="wbEditT"></h2></div>
+      <div class="inline"><span class="wbdot" id="wbEditDot"></span><small>The symbol stays on the key. You choose what it says.</small></div>
+      <label for="wbPhrase">What it says</label>
+      <input type="text" id="wbPhrase" maxlength="60" autocomplete="off">
+      <small id="wbCount"></small>
+      <button class="btn" id="wbHear" type="button">Hear it on the tablet</button>
+      <span class="lbl">Or pick a ready phrase</span>
+      <div class="inline" id="wbReady"></div>
+      <div id="wbSecondBox">
+        <label for="wbPhrase2">Second phrase, on a double tap</label>
+        <div class="inline"><input type="text" id="wbPhrase2" maxlength="60" autocomplete="off" placeholder="Leave empty for none"><button class="btn" id="wbHear2" type="button">Hear it</button></div>
+      </div>
+      <small id="wbSecondOff">A second phrase on a double tap can be switched on in Sound and taps.</small>
+      <div class="inline wbfoot"><button class="btn" id="wbCancel" type="button">Cancel</button><button class="btn primary" id="wbSave" type="button">Save</button></div>
+      <small id="wbEditMsg"></small>
+    </div>
+    <div id="wbSet" hidden>
+      <div class="inline"><button class="btn" id="wbBack2" type="button">Back</button><h2>Sound and taps</h2></div>
+      <h3>Sound</h3>
+      <label for="wbVol">Loudness: <span id="wbVolN"></span> of 10</label>
+      <input type="range" id="wbVol" min="1" max="8" step="1">
+      <small>It stops at 8 to protect hearing. The real limit will be set after the finished wristband's speaker is measured.</small>
+      <h3>Taps</h3>
+      <label class="check"><input type="checkbox" id="wbDouble"> Double tap for a second phrase (8 phrases on 4 keys)</label>
+      <label for="wbWait">How long to wait for the second tap</label>
+      <select id="wbWait"><option value="300">Short, 0.3 seconds</option><option value="400">Medium, 0.4 seconds</option><option value="600">Long, 0.6 seconds</option></select>
+      <label class="check"><input type="checkbox" id="wbHold"> Use press and hold instead of two quick taps</label>
+      <label class="check"><input type="checkbox" id="wbGuard"> Ignore extra taps until the key has finished talking</label>
+      <label class="check"><input type="checkbox" id="wbSleep"> Sleep after 2 minutes of no taps (any key wakes it)</label>
+      <button class="btn" id="wbReset" type="button">Put all wristband settings back to the start</button>
+      <small id="wbSetMsg">Saved on this tablet. Sent to the wristband when one is connected.</small>
+    </div>
   </div>
 </div>
 
@@ -1193,7 +1261,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v57) ---'+
+      dbgText = '\n--- Listening check (v58) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2938,6 +3006,79 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       note();
     });
   }
+  /* ---------- wristband setup (inside the grown-up menu; the radio link to a real wristband is not built yet) ---------- */
+  var WB_KEYS = [
+    {id:'green', name:'Green key', where:'top left', bg:'#1f7a3d', fg:'#fff', say:'Yes', svg:'<path d="M4 12.5l5.2 5.2L20 6.5" fill="none" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>'},
+    {id:'red', name:'Red key', where:'top right', bg:'#b8321f', fg:'#fff', say:'No', svg:'<path d="M5.5 5.5l13 13M18.5 5.5l-13 13" fill="none" stroke-width="3.2" stroke-linecap="round"/>'},
+    {id:'yellow', name:'Yellow key', where:'bottom left', bg:'#f2c230', fg:'#16223a', say:'', svg:'<path d="M8 12V5.5a1.5 1.5 0 0 1 3 0V11M11 10V4a1.5 1.5 0 0 1 3 0v6M14 10.5V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7c-2.3 0-3.9-1-5.1-2.8L3.3 14.6a1.5 1.5 0 0 1 2.5-1.6L8 15.5" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'},
+    {id:'blue', name:'Blue key', where:'bottom right', bg:'#2460c8', fg:'#fff', say:'Want to play?', svg:'<path d="M12 3.2l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 17l-5.4 2.9 1.1-6.1L3.2 9.6l6.1-.8z" stroke-width="1.5" stroke-linejoin="round"/>'}
+  ];
+  var WB_READY = ['Help, please.', 'More, please.', 'All done.', 'I need a break.', 'Can I have a turn?', 'Bathroom, please.'];
+  var WB_START = {say:{}, say2:{}, vol:6, dbl:false, wait:400, hold:false, guard:true, sleep:true};
+  var wb = JSON.parse(JSON.stringify(WB_START)), wbKey = null;
+  try{ var wbSaved = JSON.parse(localStorage.getItem('talker-wristband') || 'null');
+    if(wbSaved && typeof wbSaved==='object'){
+      ['say','say2'].forEach(function(k){ if(wbSaved[k] && typeof wbSaved[k]==='object') WB_KEYS.forEach(function(x){ if(typeof wbSaved[k][x.id]==='string') wb[k][x.id] = wbSaved[k][x.id].slice(0, 60); }); });
+      if(wbSaved.vol >= 1 && wbSaved.vol <= 8) wb.vol = Math.round(wbSaved.vol);
+      if([300,400,600].indexOf(wbSaved.wait) >= 0) wb.wait = wbSaved.wait;
+      ['dbl','hold','guard','sleep'].forEach(function(k){ if(typeof wbSaved[k]==='boolean') wb[k] = wbSaved[k]; });
+    } }catch(e){}
+  function wbStore(){ try{ localStorage.setItem('talker-wristband', JSON.stringify(wb)); }catch(e){} }
+  function wbSay(k){ if(typeof wb.say[k.id]==='string') return wb.say[k.id]; return k.id==='yellow' ? (state.name ? 'Hi! My name is '+state.name+'.' : 'Hi!') : k.say; }   // the hello key follows the child's name until a grown-up types its own phrase
+  function wbDot(el, k){ el.style.background = k.bg; el.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="'+k.fg+'" stroke="'+k.fg+'">'+k.svg+'</svg>'; }
+  function wbShow(v){ ['wbHome','wbEdit','wbSet'].forEach(function(id){ $(id).hidden = id!==v; }); document.querySelector('#wb .sheet').scrollTop = 0; }
+  function wbHear(t){ t = String(t||'').trim(); if(t) speak(t); }
+  function wbRender(){
+    var box = $('wbKeys'); box.textContent = '';
+    WB_KEYS.forEach(function(k){
+      var r = document.createElement('div'); r.className = 'wbkey';
+      var d = document.createElement('span'); d.className = 'wbdot'; wbDot(d, k); r.appendChild(d);
+      var t = document.createElement('div'); t.className = 't';
+      var s1 = document.createElement('small'); s1.textContent = k.name+', '+k.where; t.appendChild(s1);
+      var b = document.createElement('b'); b.textContent = wbSay(k); t.appendChild(b);
+      if(wb.dbl && wb.say2[k.id]){ var i = document.createElement('i'); i.textContent = (wb.hold ? 'Hold: ' : 'Double tap: ')+wb.say2[k.id]; t.appendChild(i); }
+      r.appendChild(t);
+      var h = document.createElement('button'); h.type = 'button'; h.className = 'btn'; h.textContent = 'Hear'; h.setAttribute('aria-label', 'Hear '+wbSay(k)); h.addEventListener('click', function(){ wbHear(wbSay(k)); }); r.appendChild(h);
+      var c = document.createElement('button'); c.type = 'button'; c.className = 'btn'; c.textContent = 'Change'; c.setAttribute('aria-label', 'Change the '+k.name.toLowerCase()); c.addEventListener('click', function(){ wbEditOpen(k); }); r.appendChild(c);
+      box.appendChild(r);
+    });
+  }
+  function wbCount(){ $('wbCount').textContent = $('wbPhrase').value.length+' of 60 letters. Short phrases are easier to hear.'; }
+  function wbEditOpen(k){
+    wbKey = k; $('wbEditT').textContent = k.name; wbDot($('wbEditDot'), k);
+    $('wbPhrase').value = wbSay(k); $('wbPhrase2').value = wb.say2[k.id] || ''; wbCount(); $('wbEditMsg').textContent = '';
+    $('wbSecondBox').hidden = !wb.dbl; $('wbSecondOff').hidden = wb.dbl;
+    var rd = $('wbReady'); rd.textContent = '';
+    WB_READY.forEach(function(p){ var b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = p; b.addEventListener('click', function(){ $('wbPhrase').value = p; wbCount(); }); rd.appendChild(b); });
+    wbShow('wbEdit');
+  }
+  function wbSetFill(){ $('wbVol').value = wb.vol; $('wbVolN').textContent = wb.vol; $('wbDouble').checked = wb.dbl; $('wbWait').value = String(wb.wait); $('wbHold').checked = wb.hold; $('wbGuard').checked = wb.guard; $('wbSleep').checked = wb.sleep; $('wbWait').disabled = !wb.dbl || wb.hold; $('wbHold').disabled = !wb.dbl; }
+  $('wbOpen').addEventListener('click', function(){ wbRender(); wbShow('wbHome'); $('wb').classList.add('open'); });
+  $('wbDone').addEventListener('click', function(){ $('wb').classList.remove('open'); });
+  $('wbSound').addEventListener('click', function(){ wbSetFill(); $('wbSetMsg').textContent = 'Saved on this tablet. Sent to the wristband when one is connected.'; wbShow('wbSet'); });
+  $('wbBack1').addEventListener('click', function(){ wbShow('wbHome'); });
+  $('wbCancel').addEventListener('click', function(){ wbShow('wbHome'); });
+  $('wbBack2').addEventListener('click', function(){ wbRender(); wbShow('wbHome'); });
+  $('wbPhrase').addEventListener('input', wbCount);
+  $('wbHear').addEventListener('click', function(){ wbHear($('wbPhrase').value); });
+  $('wbHear2').addEventListener('click', function(){ wbHear($('wbPhrase2').value); });
+  $('wbSave').addEventListener('click', function(){
+    var v = $('wbPhrase').value.trim().replace(/\s+/g,' '); if(!wbKey) return;
+    if(!v){ $('wbEditMsg').textContent = 'Type what the key should say first.'; return; }
+    wb.say[wbKey.id] = v; var v2 = $('wbPhrase2').value.trim().replace(/\s+/g,' ');
+    if(wb.dbl){ if(v2) wb.say2[wbKey.id] = v2; else delete wb.say2[wbKey.id]; }
+    wbStore(); wbRender(); wbShow('wbHome');
+  });
+  ['wbVol','wbDouble','wbWait','wbHold','wbGuard','wbSleep'].forEach(function(id){ $(id).addEventListener(id==='wbVol' ? 'input' : 'change', function(){
+    wb.vol = Number($('wbVol').value); wb.dbl = $('wbDouble').checked; wb.wait = Number($('wbWait').value); wb.hold = $('wbHold').checked; wb.guard = $('wbGuard').checked; wb.sleep = $('wbSleep').checked;
+    wbStore(); wbSetFill();
+  }); });
+  $('wbReset').addEventListener('click', function(){
+    if(this.getAttribute('data-sure')!=='1'){ this.setAttribute('data-sure','1'); this.textContent = 'Tap again to clear the phrases and settings'; var me = this; setTimeout(function(){ me.removeAttribute('data-sure'); me.textContent = 'Put all wristband settings back to the start'; }, 4000); return; }
+    this.removeAttribute('data-sure'); this.textContent = 'Put all wristband settings back to the start';
+    wb = JSON.parse(JSON.stringify(WB_START)); wbStore(); wbSetFill(); $('wbSetMsg').textContent = 'Back to the starting phrases and settings.';
+  });
+
   $('picFindBtn').addEventListener('click', picFindRun);
   $('picFind').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); picFindRun(); } });
   function saveLabels(){ idbSet('labels', labels).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail); idbSet('custom', custom).catch(function(){}); }
