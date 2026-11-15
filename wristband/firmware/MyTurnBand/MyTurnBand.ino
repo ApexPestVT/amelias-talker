@@ -198,7 +198,9 @@ void bleStart() {
   BLECharacteristic *data = svc->createCharacteristic(UUID_DATA, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
   data->setCallbacks(new DataEvents());
   chStatus = svc->createCharacteristic(UUID_STATUS, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-  chStatus->addDescriptor(new BLE2902());
+#if defined(CONFIG_BLUEDROID_ENABLED)
+  chStatus->addDescriptor(new BLE2902());   // the newer Bluetooth library adds this by itself
+#endif
   svc->start();
   notify(0, 255, RES_OK);
   BLEAdvertising *adv = BLEDevice::getAdvertising(); adv->addServiceUUID(UUID_SVC); adv->setScanResponse(true);
