@@ -1,0 +1,44 @@
+name: Wristband software
+on:
+  push:
+    branches: [main]
+    paths: ['wristband/**', 'public/band-codec.js', '.github/workflows/band-firmware.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: band-firmware
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sound format test (tablet encoder against the wristband decoder)
+        run: node wristband/test/codec-test.js
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install the board files
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+          arduino-cli core list
+      - name: Compile for the Seeed XIAO ESP32-S3
+        run: |
+          arduino-cli board details -b esp32:esp32:XIAO_ESP32S3 | sed -n '1,80p'
+          arduino-cli compile --fqbn esp32:esp32:XIAO_ESP32S3:PSRAM=opi --warnings default --export-binaries wristband/firmware/MyTurnBand
+          ls -la wristband/firmware/MyTurnBand/build/*/
+      - name: Publish the wristband software
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp wristband/firmware/MyTurnBand/build/*/MyTurnBand.ino.merged.bin MyTurnBand-full.bin
+          cp wristband/firmware/MyTurnBand/build/*/MyTurnBand.ino.bin MyTurnBand-app.bin
+          gh release view band-firmware >/dev/null 2>&1 || gh release create band-firmware --title "Wristband software" --notes "Test build of the My Turn wristband software."
+          gh release edit band-firmware --notes "Test build of the My Turn wristband software for the Seeed XIAO ESP32-S3 (built $(date -u '+%Y-%m-%d %H:%M') UTC). MyTurnBand-full.bin is written at address 0. Not yet run on a real board."
+          gh release upload band-firmware MyTurnBand-full.bin MyTurnBand-app.bin --clobber
