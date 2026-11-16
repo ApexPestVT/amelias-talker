@@ -1,4 +1,4 @@
-// My Turn wristband, version 0.1
+// My Turn To-Go (the My Turn wristband), version 0.1
 // Board: Seeed XIAO ESP32-S3. Amplifier: SparkFun DEV-14809 (MAX98357A). Four keys to ground.
 // Wiring is the table in the Build Guide. Pin numbers below are the chip's GPIO numbers; the board's own labels are in the comments.
 //
@@ -189,7 +189,7 @@ class DataEvents : public BLECharacteristicCallbacks {
 void bleStart() {
   if (bleOn) { bleOpenedAt = millis(); return; }
   if (!rxBuf) rxBuf = (uint8_t *)(psramFound() ? ps_malloc(MAX_CLIP) : malloc(MAX_CLIP));
-  BLEDevice::init("My Turn band");
+  BLEDevice::init("My Turn To-Go");
   BLEDevice::setMTU(247);
   bleServer = BLEDevice::createServer(); bleServer->setCallbacks(new LinkEvents());
   BLEService *svc = bleServer->createService(UUID_SVC);
