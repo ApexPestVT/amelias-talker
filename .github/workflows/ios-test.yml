@@ -1,0 +1,49 @@
+name: iOS build check
+# Compiles the iPad/iPhone app on a Mac at GitHub, for the simulator, with no signing.
+# It proves the app builds. Putting it on a real iPad needs an Apple Developer account (see mobile/README.md).
+on:
+  push:
+    branches: [main]
+    paths: ['mobile/native/ios/**', 'mobile/patch-ios.py', 'mobile/package.json', '.github/workflows/ios-test.yml']
+  workflow_dispatch:
+concurrency:
+  group: ios-test
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Install the wrapper
+        working-directory: mobile
+        run: |
+          npm install --no-audit --no-fund
+          # The stock listening add-on is only used on Android; our own helper does the listening on iOS.
+          npm uninstall --no-audit --no-fund @capacitor-community/speech-recognition
+      - name: Copy the app pages in
+        working-directory: mobile
+        run: rm -rf www && cp -r ../public www
+      - name: Create the iOS project
+        working-directory: mobile
+        run: |
+          npx cap add ios
+          python3 patch-ios.py
+          npx cap sync ios
+          ls ios/App ios/App/App
+      - name: Build for the simulator
+        working-directory: mobile/ios/App
+        run: |
+          set -o pipefail
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log | grep -E "error|warning: unre|BUILD|TabletSpeech|AppDelegate" | tail -80
+      - name: Show the end of the build log if it failed
+        if: failure()
+        working-directory: mobile/ios/App
+        run: tail -120 build.log || true
