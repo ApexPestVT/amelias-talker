@@ -102,6 +102,7 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
 .tabs.many{gap:4px}
 .tabs.many .tab{min-width:0;padding:4px 3px;font-size:14px}
 .tabs.many .tab span[aria-hidden]{display:none}
+@media (orientation:portrait){.tabs{flex-wrap:wrap;overflow-x:visible}.tabs .tab{flex:1 0 21%}.tabs.many .tab{flex:1 0 18%;min-height:44px}}   /* held upright, every page tab stays on screen instead of sliding off the side */
 
 /* picture grid: positions never change (motor planning) */
 .grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(4,1fr);gap:10px}
@@ -849,8 +850,16 @@ function clean(text, name){
   if(arguments.length > 1) t = t.replace(/^(?!(what|where|who|whose|which|how|why|when|do|does|did|is|are|was|were|can|could|will|would|should|have|has|hey|hi|so|okay|ok|um|and|tell|say|show|but|now|then|well|please)\b)[a-z']+ (?=(what|where|who|whose|which|how|why|when)\b|(do|does|did|are|is|can|could|will|would|should) you\b)/, '');   // a name the listening got wrong, said first: "mary what do you want"
   return t;
 }
+var FLIP_JOIN = {when:1, 'if':1, because:1, that:1, what:1, where:1, before:1, after:1, until:1, 'while':1, since:1, once:1, unless:1, whenever:1, whatever:1, how:1, why:1, who:1, which:1};
+var FLIP_AUX = {can:1, will:1, would:1, could:1, should:1, are:1, were:1, have:1, had:1, 'do':1, did:1, "don't":1, "can't":1, "won't":1, want:1, need:1};
+var FLIP_SHORT = {"you're":"I'm", "you've":"I've", "you'll":"I'll", "you'd":"I'd"};
 function flip(rest){
-  return rest.split(' ').map(function(w){return Object.prototype.hasOwnProperty.call(FLIP,w)?FLIP[w]:w;}).join(' ');
+  var w = rest.split(' ');
+  return w.map(function(x, i){
+    if(FLIP_SHORT[x]) return FLIP_SHORT[x];
+    if(x==='you' && i<w.length-1 && (FLIP_JOIN[w[i-1]] || FLIP_AUX[w[i+1]])) return 'I';   // "when you wake up" is answered "when I wake up", not "when me wake up"
+    return Object.prototype.hasOwnProperty.call(FLIP,x)?FLIP[x]:x;
+  }).join(' ').replace(/\bI are\b/g,'I am').replace(/\bI were\b/g,'I was');
 }
 function tidy(rest){
   rest = rest.replace(/\b(please|right now|sweetie|honey|buddy|too)\s*$/,'').trim();
@@ -884,7 +893,7 @@ function answer(q, yes){
     case 'need': return yes ? 'Yes, I need '+r+'.'  : "No, I don't need "+r+'.';
     case 'like': return yes ? 'Yes, I like '+r+'.'  : "No, I don't like "+r+'.';
     case 'are':  return yes ? 'Yes, I am '+r+'.'    : 'No, I am not '+r+'.';
-    case 'can':  return yes ? 'Yes, I can '+r+'.'   : 'No thank you.';
+    case 'can':  return yes ? 'Yes, I can '+r+'.'   : (/^(hear|see|do|count|reach|read|find|feel|open)\b/.test(r) ? "No, I can't "+r+'.' : 'No thank you.');
     case 'lets': return yes ? "Okay, let's "+r+'.'  : "No thank you, I don't want to "+soft+'.';
   }
   return null;
@@ -1037,6 +1046,7 @@ var JUNK_L = {is:1, it:1, are:1, you:1, 'this':1, that:1, they:1, 'do':1, does:1
 var JUNK_R = {'do':1, you:1, want:1, would:1, like:1, to:1, maybe:1, wanna:1, is:1, it:1, are:1};
 var FILL = {please:1, today:1, instead:1, first:1, now:1, tonight:1, sweetie:1, honey:1, buddy:1, okay:1, ok:1};
 var CORE_OK = {play:1, eat:1, drink:1, potty:1};
+var WHEN_WHERE = {now:1, later:1, today:1, tomorrow:1, tonight:1, inside:1, outside:1, here:1, there:1, upstairs:1, downstairs:1, again:1, first:1, alone:1};
 function editDist(a, b){
   var m = [], i, j;
   for(i=0;i<=a.length;i++){ m[i]=[i]; }
@@ -1056,6 +1066,7 @@ function knownWord(tok){
   Object.keys(LOOKUP).forEach(function(id){
     var w = LOOKUP[id]; if(w.lit || (w.page==='core' && !CORE_OK[id])) return;
     var l = String(w.label).toLowerCase();
+    if(l!==tok && l===t1 && (w.page==='places' || w.page==='people')) return;   // "blocks or cars": toy cars, not a ride in the car
     if(l===tok || l===t1 || l.replace(/s$/,'')===t1) hit = hit || w;
   });
   return hit;
@@ -1090,10 +1101,20 @@ function choiceOptions(t){
   while(R.length && FILL[R[R.length-1]]) R.pop();
   L = L.slice(-4); R = R.slice(0, 4);
   if(!L.length || !R.length) return null;
+  var pj = L.length-2; while(pj>0 && ART[L[pj]]) pj--;
+  var place = WHEN_WHERE[R[0]] || R[0]==='home';
+  if(hadLead && R.length===1 && L.length>=2 && (place || (toFlag && ((/s$/.test(R[0]) && !knownWord(R[0])) || /^(with|to|in|on|at|for)$/.test(L[pj]))))){
+    var pre = flip(L.slice(0,-1).join(' ')), start = 'I want '+(toFlag?'to ':(artL?flip(artL)+' ':''));
+    if(place) pre = pre.replace(/ ?\b(to|at|in)( (the|a|my))?$/, '');                      // "go to the park or home" is "I want to go home."
+    if(!pre) return null;
+    return [L[L.length-1], R[0]].map(function(x){ var k = knownWord(x); x = flip(x); return {label:x, id:k?k.id:null, sentence:start+pre+' '+x+'.'}; });
+  }
   return [[L, artL], [R, artR]].map(function(pair){
     var seg = pair[0], art = (pair[1] && !toFlag) ? flip(pair[1])+' ' : '';
     var text = flip(seg.join(' ')), kw = knownWord(seg[seg.length-1]);
     var sentence = hadLead ? 'I want '+(toFlag?'to ':art)+text+'.' : capFirst(text)+'.';
+    if(toFlag && seg===R && L.length>1 && /^(at|in|on|with|by)$/.test(seg[0])) sentence = 'I want to '+L[0]+' '+text+'.';   // "eat at home or at school"
+
     if(kw && seg.length===1) sentence = wordSentence(kw);
     return {label:text, id: kw ? kw.id : null, sentence:sentence};
   });
@@ -1103,15 +1124,34 @@ function detectQuestion(text, name){
   var t = clean(text, name); if(!t) return null;
   t = t.replace(/^(hey|hi|so|okay|ok|um|and)\s+/, '');
   t = t.replace(/ or (not|no)$/, '');                       // "do you want to go or not" is a yes/no question
+  t = t.replace(/^(aren't|arent) you\b/, 'are you').replace(/^(isn't|isnt) (it|that|this)\b/, 'is $2').replace(/^(can't|cant) you\b/, 'can you').replace(/^(won't|wont) you\b/, 'will you').replace(/^(didn't|didnt) you\b/, 'did you').replace(/^(doesn't|doesnt) (it|that)\b/, 'does $2').replace(/^(wouldn't|wouldnt) you\b/, 'would you');
+  t = t.replace(/^you (okay|ok|alright|all right|good|ready|hungry|thirsty|tired|sleepy|hurt|done|all done|finished|sad|mad|happy|cold|hot|sick)$/, 'are you $1');   // "you okay?"
+  if(/\?\s*$/.test(String(text||''))){                     // one word said as a question, when the listening marks it with "?"
+    if(/^(hungry|thirsty|tired|sleepy|ready|done|all done|finished|hurt|okay|ok|cold|hot|sad|mad|sick)$/.test(t)) t = 'are you '+t;
+    else if(t==='more') t = 'do you want more';
+    else if(t==='potty' || t==='bathroom') t = 'do you need to go potty';
+    else if(t==='again' || t==='one more time') return {kind:'yesno', question:t, yes:'Yes, again.', no:'No thank you.'};
+  }
+  var whole = t;
+  t = t.replace(/( (or|and|the|a|an|to|with|your|my|for|of|but))+$/, '');   // the sentence was cut off: "do you want juice or"
+  if(t!==whole && /^(do you (want|need|like|wanna)|would you like|are you|can you|could you|will you|you want|you wanna|want|wanna|or|and)?$/.test(t)) return null;
   var wh = /^(what|where|who|whose|which|how|why|when)\b/.test(t) || /\b(what|where|who|which|how|why|when) (do|does|did|are|is|would|should|can|will) (you|we)\b/.test(t);   // also mid-sentence: "daddy asked what do you want"
   if(/ or /.test(t)){
     var opts = choiceOptions(t);
-    return opts ? {kind:'choice', question:t, options:opts} : null;
+    if(opts && opts.length>1 && opts.every(function(o){ return o.label===opts[0].label; })) t = t.replace(/ or .*$/, '');   // "juice or juice": the listening stuttered, so it is a yes/no question
+    else return opts ? {kind:'choice', question:t, options:opts} : null;
+  }
+  if(name && /^(what's|whats|what is) your name$|^who are you$/.test(t)){   // the question other children ask first; the second answer asks it back (partner-focused questions)
+    var nm = String(name).trim();
+    return {kind:'choice', question:t, options:[{label:nm, id:null, sentence:'My name is '+nm+'.'}, {label:'and you?', id:null, sentence:"What's your name?"}]};
   }
   if(wh) return null;                                       // open questions get no pop-up yet
   var q = parseHeard(t, '');
   if(q && q.type && q.rest) return {kind:'yesno', question:t, yes:answer(q,true), no:answer(q,false)};
-  if(/^(do|does|did|is|are|was|were|can|could|will|would|should|have|has|shall|may)\s+(you|we|i|it|this|that|she|he|they)\b/.test(t))
+  var hm = /^is (your|it) ?([a-z ]*?) ?(hurting|sore)$/.exec(t) || /^does (your|it) ?([a-z ]*?) ?hurt$/.exec(t);
+  if(hm && (hm[1]==='it') === !hm[2]){ var part = hm[1]==='it' ? 'it' : 'my '+hm[2]; return {kind:'yesno', question:t, yes:'Yes, '+part+' hurts.', no:'No, '+part+' does not hurt.'}; }
+  if(/^(do|have) (it|this|that)\b/.test(t)) return null;      // "do it again" and "have this" are not questions
+  if(/^(do|does|did|is|are|was|were|can|could|will|would|should|have|has|shall|may)\s+(you|we|i|it|this|that|she|he|they)\b/.test(t) || /^(does|did|is|are|was|were)\s+(your|the|my|there|mommy|daddy|mom|dad)\b/.test(t))
     return {kind:'yesno', question:t, yes:'Yes.', no:'No.'};
   return null;
 }
@@ -1148,7 +1188,7 @@ function numberSentence(frame, label){
 }
 function detectOpenQuestion(text, name){
   var t = clean(text, name); if(!t) return null;
-  if(/\bhow\b.*\b(feel|feeling)\b/.test(t) || /\bhow are you\b/.test(t) || /\b(what's|whats|what is) (wrong|the matter)\b/.test(t)) return 'feelings';
+  if(/\bhow\b.*\b(feel|feeling)\b/.test(t) || /\bhow are you\b/.test(t) || /\b(what's|whats|what is) (wrong|the matter)\b/.test(t) || /\bwhy are you (crying|sad|mad|upset|angry)\b/.test(t)) return 'feelings';
   if(/\b(restaurants?|fast food|places? to eat|drive ?thru|drive through|diner|cafe)\b/.test(t)) return null;   // asking WHERE to eat, not what: the food words would be wrong answers. Left for the AI help (kinds of places, or the family's own places).
   if(/\b(what|which)\b.*\b(eat|eating|drink|drinking|drinks?|snacks?|lunch|dinner|breakfast|hungry|thirsty|foods?|meal|treat|fruit)\b/.test(t)) return 'food';
   if(/\b(what|which|where)\b.*\bfavou?rite place\b/.test(t)) return 'places';
@@ -1201,9 +1241,9 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(typeof saved.name==='string') state.name=saved.name;
       if(typeof saved.sentences==='boolean') state.sentences=saved.sentences;
       if(typeof saved.listen==='boolean') state.listen=saved.listen;
-      if(saved.rate) state.rate=+saved.rate;
+      if(+saved.rate >= 0.6 && +saved.rate <= 1.2) state.rate=+saved.rate;
       if(typeof saved.voiceName==='string') state.voiceName=saved.voiceName;
-      if(saved.stage>=1) state.stage=Math.min(6, +saved.stage);
+      if(saved.stage>=1) state.stage=Math.min(6, Math.floor(+saved.stage));
       if(Array.isArray(saved.questions)) state.questions = saved.questions.filter(function(q){ return typeof q==='string' && q.trim(); }).slice(0, 12);
       state.smart = saved.smart===true;
       state.hc = saved.hc===true; state.seeTalk = saved.seeTalk===true; state.buzz = saved.buzz===true;
@@ -1217,12 +1257,13 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(typeof saved.words==='boolean') state.words=saved.words;
       if(typeof saved.modelBtn==='boolean') state.modelBtn=saved.modelBtn;
       if(typeof saved.log==='boolean') state.log=saved.log;
-      if(typeof saved.repeat==='number') state.repeat=saved.repeat;
+      if(typeof saved.repeat==='number' && saved.repeat >= 0 && saved.repeat <= 3) state.repeat=saved.repeat;
       if(typeof saved.names==='boolean') state.names=saved.names;
       if(typeof saved.onDevice==='boolean') state.onDevice=saved.onDevice;
-      if(typeof saved.hold==='number') state.hold=saved.hold;
-      if(typeof saved.edge==='number') state.edge=saved.edge;
-      if(saved.favs && typeof saved.favs==='object') state.favs=saved.favs;
+      if(typeof saved.hold==='number' && saved.hold >= 0 && saved.hold <= 1) state.hold=saved.hold;
+      if(typeof saved.edge==='number' && saved.edge >= 0 && saved.edge <= 0.15) state.edge=saved.edge;
+      if(saved.favs && typeof saved.favs==='object' && !Array.isArray(saved.favs)) state.favs=saved.favs;
+      Object.keys(state.favs).forEach(function(k){ if(!Array.isArray(state.favs[k])) delete state.favs[k]; else state.favs[k] = state.favs[k].filter(function(x){ return typeof x==='string'; }); });
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
@@ -1262,7 +1303,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v61) ---'+
+      dbgText = '\n--- Listening check (v62) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1278,7 +1319,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
 
   /* ---------- voice ---------- */
   var cv = { on:false, voices:[], clips:{}, bufs:{}, ctx:null, src:null, busy:false, done:0, total:0, stop:'', skipped:0 };
-  try{ var cvSaved = JSON.parse(localStorage.getItem('talker-cv')||'null'); if(Array.isArray(cvSaved) && cvSaved.length){ cv.on = true; cv.voices = cvSaved; } }catch(e){}
+  try{ var cvSaved = JSON.parse(localStorage.getItem('talker-cv')||'null'); if(Array.isArray(cvSaved)) cvSaved = cvSaved.filter(function(v){ return v && typeof v==='object' && typeof v.id==='string'; }); if(Array.isArray(cvSaved) && cvSaved.length){ cv.on = true; cv.voices = cvSaved; } }catch(e){}
   var synth = ('speechSynthesis' in window) ? window.speechSynthesis : null;
   var appVoice = {said:0, fails:0, last:''};       // the tablet app's own voice (Android app only)
   var voice = null, tts = null;
@@ -2115,6 +2156,22 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     setTimeout(function(){ fitScene(box, wrap, sc); }, 60);
   }
   window.addEventListener('resize', function(){ if(state.page==='photos') renderGrid(); if(ed) drawEd(); });
+  /* A long word ("bathroom") must never be cut off at the sides of its picture: shrink just that label until it fits. */
+  function fitLabels(){
+    var labs = document.querySelectorAll('#grid .key .lab, #askOpts .key .lab');
+    for(var i=0;i<labs.length;i++){
+      var el = labs[i], key = el.parentNode; if(!key || !key.clientWidth) continue;
+      el.style.fontSize = '';
+      var avail = key.clientWidth - 12, w = el.offsetWidth;
+      if(w > avail && key.classList.contains('key') && !key.classList.contains('sent')){
+        var fs = parseFloat(getComputedStyle(el).fontSize) || 16;
+        el.style.fontSize = Math.max(11, Math.floor(fs*avail/w)) + 'px';
+      }
+    }
+  }
+  var fitT = null, fitSoon = function(){ clearTimeout(fitT); fitT = setTimeout(fitLabels, 30); };
+  try{ var fitMo = new MutationObserver(fitSoon); fitMo.observe($('grid'), {childList:true}); fitMo.observe($('askOpts'), {childList:true}); }catch(e){}
+  window.addEventListener('resize', fitSoon); window.addEventListener('orientationchange', fitSoon); fitSoon();
 
   /* ---------- photo scene editor (grown-ups) ---------- */
   var ed = null, delArmed = false;
@@ -2289,7 +2346,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     ]],
     ['Which words, and building sentences', [
       ['What Are Core Words Anyway? (PRC-Saltillo handout)', 'https://saltillo.com/uploads/What_Are_Core_Words_Anyway_Handout_Part_1.pdf', 'A small set of words covers most of what toddlers say. Basis for the main board.'],
-      ['Tracking early sentence-building in graphic symbol communication', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC7225017', 'Children need to learn to build sentences word by word. Why a sentence-growth path is on the to-do list.'],
+      ['Tracking early sentence-building in graphic symbol communication', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC7225017', 'Children need to learn to build sentences word by word. Basis for Stages 4 and 5, where sentences are built word by word.'],
       ['AAC Generative Language Intervention with young children with Down syndrome (2025)', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC12303605', 'Model sentences only a little longer than what the child uses now.'],
       ['Applying a Developmental Model to Preliterate Aided Language Learning (2024)', 'https://pubs.asha.org/doi/10.1044/2023_AJSLP-23-00098', 'Use typical language development as the map for what to add next.']
     ]],
@@ -2325,12 +2382,12 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       ['QuickPic: topic boards from photographs', 'https://escholarship.mcgill.ca/downloads/jq085r838', 'Therapists rated AI-suggested words from photos as more fitting than older methods.']
     ]],
     ['Early reading', [
-      ['Transition to Literacy feature and sight words', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC9214510', 'A written word that appears as the picture is spoken taught sight words in small studies. Used on photo spots; planned for the main board.'],
+      ['Transition to Literacy feature and sight words', 'https://pmc.ncbi.nlm.nih.gov/articles/PMC9214510', 'A written word that appears as the picture is spoken taught sight words in small studies. Used on photo spots and on the main board (the Written words switch).'],
       ['Transition to Literacy software features (RESNA)', 'https://www.resna.org/sites/default/files/conference/2018/cac/Mandak.html', 'Small static labels on pictures have no evidence of teaching reading.']
     ]],
     ['Touch and access', [
       ['Proloquo2Go access method settings', 'https://assistiveware.com/support/proloquo2go/alternative-access/access-method', 'Hold time and ignoring repeat taps are standard in leading talkers.'],
-      ['Aided AAC for people with visual impairments, a meta-analysis (2025)', 'https://pubs.asha.org/doi/10.1044/2024_AJSLP-24-00242', 'Adjusting the display for vision was largely effective. Seeing options are on the to-do list.']
+      ['Aided AAC for people with visual impairments, a meta-analysis (2025)', 'https://pubs.asha.org/doi/10.1044/2024_AJSLP-24-00242', 'Adjusting the display for vision was largely effective. Basis for the Seeing and hearing settings.']
     ]],
     ['Cautions about AI in talkers', [
       ['A thoughtful approach to AI and AAC (AssistiveWare)', 'https://download.assistiveware.com/assistiveware/files/let%27s-look-before-we-leap-a-thoughtful-approach-to-ai-and-aac.pdf', 'Risks: whose words are they, privacy, and getting in the way of learning. Why answers are choices the child picks, not text written for them.'],
@@ -2366,6 +2423,8 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   /* ---------- progress log: counts only, kept on this tablet. Nothing that was heard is stored. ---------- */
   var plog = {}, plogT = null, askKind = null, openAskUntil = 0;
   try{ plog = JSON.parse(localStorage.getItem('talker-log')||'{}') || {}; }catch(e){ plog = {}; }
+  if(typeof plog!=='object' || Array.isArray(plog)) plog = {};                       // a damaged record must never stop the talker
+  Object.keys(plog).forEach(function(k){ var d = plog[k]; if(!d || typeof d!=='object' || typeof d.words!=='object' || !d.words || typeof d.pairs!=='object' || !d.pairs || typeof d.asked!=='object' || !d.asked || typeof d.answered!=='object' || !d.answered) delete plog[k]; });
   function plogDay(){
     var k = dayKey(new Date());
     if(!plog[k]) plog[k] = { words:{}, taps:0, msgs:0, combos:0, pairs:{}, asked:{yesno:0,choice:0,open:0}, answered:{yesno:0,choice:0,open:0}, skipped:0, shown:0, photo:0, typed:0 };
@@ -3282,7 +3341,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   (function(){
     var KEY = 'talker-testlog', MAX = 400, DAYS3 = 72*3600*1000;
     var tl = {on:false, since:0, items:[], echo:0, lastEcho:''}, cur = null, pendingAI = null, inMaybe = false, fromFinal = false, fromTest = false;
-    try{ var sv = JSON.parse(localStorage.getItem(KEY)||'null'); if(sv && sv.items){ tl = sv; } }catch(e){}
+    try{ var sv = JSON.parse(localStorage.getItem(KEY)||'null'); if(sv && Array.isArray(sv.items)){ sv.items = sv.items.filter(function(x){ return x && typeof x==='object'; }); tl = sv; } }catch(e){}
     if(tl.on && Date.now()-tl.since > DAYS3) tl.on = false;
     function keep(){ try{ if(tl.items.length > MAX) tl.items = tl.items.slice(-MAX); localStorage.setItem(KEY, JSON.stringify(tl)); }catch(e){} }
     function where(){ return mode==='native' ? 'on this tablet'+(ns.engine ? ' ('+ns.engine+')' : '') : (mode==='cloud' ? 'listening service' : mode); }

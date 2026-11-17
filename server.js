@@ -430,7 +430,8 @@ async function picImage(id) {
   return buf;
 }
 
-http.createServer((req, res) => {
+/* One bad request must never take the server down for every tablet. */
+const handle = (req, res) => {
   if (req.headers.origin && APP_ORIGINS.includes(req.headers.origin) && String(req.url).startsWith('/api/')) {   // let the tablet app call the API
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin); res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -541,8 +542,9 @@ http.createServer((req, res) => {
   }
   if (p === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end('{"ok":true}'); }
   if (p === '/') p = '/index.html';
+  if (p.indexOf('\0') >= 0) { res.writeHead(400); return res.end('Bad request'); }
   const file = path.normalize(path.join(ROOT, p));
-  if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end('Forbidden'); }
+  if (file !== ROOT && !file.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end('Forbidden'); }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Not found'); }
     res.writeHead(200, {
@@ -552,6 +554,15 @@ http.createServer((req, res) => {
     });
     res.end(data);
   });
+};
+http.createServer((req, res) => {
+  try { handle(req, res); }
+  catch (e) {
+    console.error('request failed:', req.method, String(req.url).slice(0, 80), e.message);
+    try { if (!res.headersSent) json(res, 400, { error: 'bad request' }); else res.end(); } catch (e2) {}
+  }
 }).listen(PORT, () => console.log('My Turn listening on ' + PORT));
+process.on('uncaughtException', e => console.error('uncaught error (server kept running):', e && e.stack || e));
+process.on('unhandledRejection', e => console.error('unhandled promise (server kept running):', e && e.message || e));
 
 if (process.env.TALKER_TEST) module.exports = { signPolly, azureSsml };
