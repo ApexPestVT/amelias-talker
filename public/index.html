@@ -1143,7 +1143,7 @@ function detectQuestion(text, name){
   }
   if(name && /^(what's|whats|what is) your name$|^who are you$/.test(t)){   // the question other children ask first; the second answer asks it back (partner-focused questions)
     var nm = String(name).trim();
-    return {kind:'choice', question:t, options:[{label:nm, id:null, sentence:'My name is '+nm+'.'}, {label:'and you?', id:null, sentence:"What's your name?"}]};
+    return {kind:'choice', question:t, options:[{label:nm, id:null, sentence:'My name is '+nm+'.'}, {label:nm+', and you?', id:null, sentence:'My name is '+nm+". What's your name?"}]};   // a pop-up takes one answer, so the second button says the name AND asks back
   }
   if(wh) return null;                                       // open questions get no pop-up yet
   var q = parseHeard(t, '');
@@ -1303,7 +1303,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v62) ---'+
+      dbgText = '\n--- Listening check (v63) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
