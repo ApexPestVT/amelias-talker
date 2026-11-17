@@ -1124,6 +1124,10 @@ function detectQuestion(text, name){
   var t = clean(text, name); if(!t) return null;
   t = t.replace(/^(hey|hi|so|okay|ok|um|and)\s+/, '');
   t = t.replace(/ or (not|no)$/, '');                       // "do you want to go or not" is a yes/no question
+  if(name && (/\b(what's|whats|what is|what) (your|ur) (first |real )?name\b/.test(t) || /\b(tell me|say) your name\b/.test(t) || /^who are you$/.test(t) || /\bwhat (are you called|do they call you|should i call you)\b/.test(t))){   // the question other children ask first; the second answer asks it back (partner-focused questions)
+    var nm = String(name).trim();
+    return {kind:'choice', question:t, options:[{label:nm, id:null, sentence:'My name is '+nm+'.'}, {label:nm+', and you?', id:null, sentence:'My name is '+nm+". What's your name?"}]};   // a pop-up takes one answer, so the second button says the name AND asks back
+  }
   t = t.replace(/^(aren't|arent) you\b/, 'are you').replace(/^(isn't|isnt) (it|that|this)\b/, 'is $2').replace(/^(can't|cant) you\b/, 'can you').replace(/^(won't|wont) you\b/, 'will you').replace(/^(didn't|didnt) you\b/, 'did you').replace(/^(doesn't|doesnt) (it|that)\b/, 'does $2').replace(/^(wouldn't|wouldnt) you\b/, 'would you');
   t = t.replace(/^you (okay|ok|alright|all right|good|ready|hungry|thirsty|tired|sleepy|hurt|done|all done|finished|sad|mad|happy|cold|hot|sick)$/, 'are you $1');   // "you okay?"
   if(/\?\s*$/.test(String(text||''))){                     // one word said as a question, when the listening marks it with "?"
@@ -1140,10 +1144,6 @@ function detectQuestion(text, name){
     var opts = choiceOptions(t);
     if(opts && opts.length>1 && opts.every(function(o){ return o.label===opts[0].label; })) t = t.replace(/ or .*$/, '');   // "juice or juice": the listening stuttered, so it is a yes/no question
     else return opts ? {kind:'choice', question:t, options:opts} : null;
-  }
-  if(name && /^(what's|whats|what is) your name$|^who are you$/.test(t)){   // the question other children ask first; the second answer asks it back (partner-focused questions)
-    var nm = String(name).trim();
-    return {kind:'choice', question:t, options:[{label:nm, id:null, sentence:'My name is '+nm+'.'}, {label:nm+', and you?', id:null, sentence:'My name is '+nm+". What's your name?"}]};   // a pop-up takes one answer, so the second button says the name AND asks back
   }
   if(wh) return null;                                       // open questions get no pop-up yet
   var q = parseHeard(t, '');
@@ -1303,7 +1303,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v63) ---'+
+      dbgText = '\n--- Listening check (v64) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
