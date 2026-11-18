@@ -1378,7 +1378,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v72) ---'+
+      dbgText = '\n--- Listening check (v73) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1628,7 +1628,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   }
   /* Speed: the listener only says "finished" after a stretch of silence. When the words so far already make a question
      the built-in rules understand, and they have stopped changing for a moment, the answers go up right away. */
-  var early = {t:null, text:'', norm:'', at:0, n:0};
+  var early = {t:null, text:'', norm:'', at:0, n:0}, heardEarly = false;
   function partialHeard(t){
     showHeard(t, true);
     clearTimeout(early.t);
@@ -1639,7 +1639,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(!(q || detectColorQuestion(t, state.name) || detectNumberQuestion(t, state.name) || openQ(t))) return;   // leave the rest for the finished sentence (and the AI)
       if(isEcho(t)) return;
       early.norm = norm(t); early.at = Date.now(); early.n++;
-      setHeard(t);
+      heardEarly = true; try{ setHeard(t); } finally { heardEarly = false; }
     }, 700);
   }
   function finalHeard(t){
@@ -1696,7 +1696,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
      time and stops, so it is started again each time. A watchdog restarts it if it goes quiet without saying so. */
   var ns = {streak:0, noDevice:false, dead:false, on:false, t:null, last:'', subs:false, starts:0, errs:0, lastErr:'', beat:0, engine:'', heard:0, echo:0, dog:0, quiet:0, codes:{}, endAt:0, gapMax:0, gapSum:0, gapN:0, since:Date.now()};
   function nsNote(){ diag.mic = (listening ? 'listening on this tablet' : 'on this tablet, between sentences')+' ('+(ns.engine ? 'engine: '+ns.engine+', ' : '')+'started '+ns.starts+' times, '+ns.errs+' errors'+(ns.lastErr ? ', last: '+ns.lastErr : '')+(ns.noDevice ? ', built-in listener given up' : '')+')'+
-      '\nOn-tablet listening, last '+Math.round((Date.now()-ns.since)/60000)+' min: '+ns.heard+' sentences heard, '+ns.echo+' ignored as the talker\'s own voice, '+ns.quiet+' quiet time-outs, '+ns.dog+' watchdog restarts, '+early.n+' answered early'+
+      '\nOn-tablet listening, last '+Math.round((Date.now()-ns.since)/60000)+' min: '+ns.heard+' sentences heard, '+ns.echo+' ignored as the talker\'s own voice, '+ns.quiet+' quiet time-outs, '+ns.dog+' watchdog restarts, '+early.n+' answered early, '+askKept+' ignored while answers were on screen'+
       '\nDeaf gaps between sessions: '+ns.gapN+' gaps, average '+(ns.gapN ? Math.round(ns.gapSum/ns.gapN) : 0)+' ms, longest '+ns.gapMax+' ms'+
       (Object.keys(ns.codes).length ? '\nStop codes: '+Object.keys(ns.codes).map(function(k){ return k+' x'+ns.codes[k]; }).join(', ') : ''); showDiag(); }
   function nsEnded(err){
@@ -2775,6 +2775,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var done = false, finish = function(a){
       if(done) return; done = true; smartBusy = false; clearTimeout(slow);
       if(askDone && !$('ask').hidden) return;                          // an answer is already showing
+      if(!$('ask').hidden && askSrc.norm !== norm(text)){ askKept++; return; }   // another question's answers went up while the AI was thinking: leave them
       if(!state.fresh && state.taps.length) return;                    // a message was started while we waited: leave it alone
       if(a && a.kind==='yesno' && a.options && a.options.length===2) showSmart(text, a, 'yesno');
       else if(a && a.kind==='choices' && a.options && a.options.length>=2) showSmart(text, a, 'choice');
@@ -2842,11 +2843,23 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     onPress(b, function(){ sayAnswer(sentence, ids, b); });
     return b;
   }
+  /* A pop-up stays until it is answered, closed with its button, or times out. The one exception: answers put up early,
+     from the first words of a sentence, are redone when the rest of that same sentence arrives a moment later. */
+  var askSrc = {norm:'', at:0, early:false}, askKept = 0;
+  function sameSentence(text){
+    if(!askSrc.early || Date.now()-askSrc.at > 6000) return false;
+    var now = norm(text), was = askSrc.norm.split(' ').filter(Boolean), have = ' '+now+' ', hit = 0;
+    if(!was.length || now===askSrc.norm) return false;
+    was.forEach(function(w){ if(have.indexOf(' '+w+' ') >= 0) hit++; });
+    return hit/was.length >= 0.7;
+  }
   function maybeAsk(text){
     if(state.ask==='off' || $('panel').classList.contains('open')) return;
     if(askDone && !$('ask').hidden) return;                        // her answer is still showing
+    if(!$('ask').hidden && !sameSentence(text)){ askKept++; return; }   // a pop-up is up: more talk (a grown-up going through the choices) must not swap it for a different one
     if(!state.fresh && state.taps.length){ pendingQ = {text:text, at:Date.now()}; return; }   // mid-message: ask right after
     if(state.ask==='name' && state.name && !nameHeard(text, state.name)) return;
+    askSrc = {norm:norm(text), at:Date.now(), early:heardEarly};
     var q = detectQuestion(text, state.name);
     var col = (!q || q.kind!=='choice') ? detectColorQuestion(text, state.name) : null;   // named choices ("red or blue?") win over the standard three
     if(col){ showColors(text, col); return; }
