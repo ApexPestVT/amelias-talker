@@ -143,10 +143,10 @@ body.typing #tabs, body.typing #grid{display:none}
 /* Scrolling pages switched off (the default): every word on a page stays on one screen, and the rows shrink to fit */
 .grid.fringe.fit{grid-auto-rows:minmax(0,1fr);overflow:hidden;touch-action:none}
 .grid.fringe:not(.fit){grid-auto-rows:calc((100% - 3*var(--g))/4);scroll-snap-type:y mandatory}   /* exactly four rows fill the screen */ .grid.fringe:not(.fit) > *{scroll-snap-align:start}   /* a swipe always stops on whole rows, never half a button */
-.morebar{flex:none;min-height:52px;margin-bottom:max(0px,calc(var(--edge,0px) - 12px));   /* sits clear of the ignored strip along the bottom edge, or presses on it would be thrown away */
-  border-radius:16px;border:3px solid var(--line);background:var(--bar);color:var(--ink);font-size:20px;font-weight:700}
-.morebar[hidden]{display:none}
-body.typing .morebar{display:none}
+.scrollcue{position:fixed;width:6px;border-radius:3px;background:var(--line);pointer-events:none;z-index:2}   /* sits in the page margin beside the board: shows there is more, and how far down the page is. Takes no room from the buttons */
+.scrollcue i{position:absolute;left:0;width:6px;border-radius:3px;background:var(--ink);opacity:.75}
+.scrollcue[hidden]{display:none}
+body.typing .scrollcue{display:none}
 .key{
   border-radius:22px;border:4px solid;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
   padding:4px;min-width:0;min-height:0;cursor:pointer;transition:transform .08s;overflow:hidden;
@@ -366,7 +366,7 @@ body.typing .morebar{display:none}
 
 <div class="tabs" id="tabs" hidden></div>
 <div class="grid" id="grid"></div>
-<button type="button" class="morebar" id="moreBar" hidden>▼ More words</button>
+<div class="scrollcue" id="scrollCue" hidden aria-hidden="true"><i></i></div>
 
 <div class="ends" id="ends" hidden></div>
 <div class="ask" id="ask" hidden>
@@ -1481,7 +1481,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v84) ---'+
+      dbgText = '\n--- Listening check (v85) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2200,11 +2200,12 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   var scrollHomeT = null;
   function gridScrolls(){ var g = $('grid'); return state.scrollPages && g.classList.contains('fringe') && g.scrollHeight - g.clientHeight > 8; }
   function moreCue(){
-    var g = $('grid'), bar = $('moreBar'), on = gridScrolls() && $('ask').hidden !== false;
-    bar.hidden = !on; if(!on) return;
-    var atEnd = g.scrollHeight - g.scrollTop - g.clientHeight <= 8;
-    bar.textContent = atEnd ? '▲ Back to the top' : '▼ More words';
-    bar.setAttribute('aria-label', atEnd ? 'Back to the top of the page' : 'More words on this page');
+    var g = $('grid'), cue = $('scrollCue'), on = gridScrolls();
+    cue.hidden = !on; if(!on) return;
+    var r = g.getBoundingClientRect(), th = cue.firstChild, room = (window.innerWidth - r.right);
+    cue.style.top = r.top+'px'; cue.style.height = r.height+'px'; cue.style.left = (r.right + Math.max(2, (room - 6)/2))+'px';
+    var part = g.clientHeight / g.scrollHeight, at = g.scrollTop / g.scrollHeight;
+    th.style.height = Math.max(24, r.height*part)+'px'; th.style.top = Math.min(r.height - Math.max(24, r.height*part), r.height*at)+'px';
   }
   function scrollHome(){
     clearTimeout(scrollHomeT);
@@ -2212,7 +2213,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     scrollHomeT = setTimeout(function(){ var g = $('grid'); if(g.scrollTop > 0){ g.scrollTop = 0; moreCue(); } }, 400);   // long enough to see the button light up first
   }
   function scrollNote(){ $('scrollOn').checked = !!state.scrollPages; $('scrollNote').textContent = state.scrollPages
-    ? 'On: buttons stay full size. Swipe up, or press More words under the page, to reach the rest. The page goes back to the top after a word is chosen. In-their-place answers use big buttons on pages longer than one screen.'
+    ? 'On: buttons stay full size. Swipe up to reach the rest; a thin marker beside the page shows how far down you are. The page goes back to the top after a word is chosen. In-their-place answers use big buttons on pages longer than one screen.'
     : 'Off: every word on a page fits on one screen, so the buttons get smaller as you add words.'; }
   function keyFor(w, cat){
     var b = document.createElement('button');
@@ -3565,10 +3566,6 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   $('scrollOn').addEventListener('change', function(){ state.scrollPages = this.checked; save(); scrollNote(); renderGrid(); });
   $('grid').addEventListener('scroll', function(){ moreCue(); }, {passive:true});
   window.addEventListener('resize', function(){ setTimeout(moreCue, 80); });
-  onPress($('moreBar'), function(){ var g = $('grid'); if(g.scrollHeight - g.scrollTop - g.clientHeight <= 8){ g.scrollTop = 0; moreCue(); return; }
-    var k = g.querySelector('.key'), gap = parseFloat(getComputedStyle(g).rowGap) || 0, pitch = k ? k.offsetHeight + gap : g.clientHeight;      // move by whole rows
-    var rows = Math.max(1, Math.floor((g.clientHeight + gap) / pitch + 0.1));
-    g.scrollTop = Math.round((g.scrollTop + rows*pitch) / pitch) * pitch; moreCue(); }, {noRepeatGuard:true});
   $('seeTalkOn').addEventListener('change', function(){ state.seeTalk = this.checked; save(); applyLook(); });
   $('sizeSel').addEventListener('change', function(){ state.size = this.value; save(); applyLook(); });
   $('gapSel').addEventListener('change', function(){ state.gap = this.value; save(); applyLook(); });
