@@ -459,6 +459,8 @@ body.typing #tabs, body.typing #grid{display:none}
     <h3>Photo scenes</h3>
     <div class="row">
       <small>A real photo from your child's life with spots to touch. Each spot says its word.</small>
+      <label class="check"><input type="checkbox" id="photosOn"> Show the Photos page on the board</label>
+      <small id="photosNote"></small>
       <div class="inline">
         <button class="btn" id="scNew" type="button">New photo scene</button>
       </div>
@@ -1249,7 +1251,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving your own'},
     {n:6, name:'6. Teen and adult words', note:'Adds 96 of the most used everyday words on four pages. Sentences are said word for word'}
   ];
-  var state = { onDevice:true, names:true, name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { photosOn:true, onDevice:true, names:true, name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
@@ -1266,7 +1268,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(saved.stage>=1) state.stage=Math.min(6, Math.floor(+saved.stage));
       if(Array.isArray(saved.questions)) state.questions = saved.questions.filter(function(q){ return typeof q==='string' && q.trim(); }).slice(0, 12);
       state.smart = saved.smart===true;
-      state.hc = saved.hc===true; state.seeTalk = saved.seeTalk===true; state.buzz = saved.buzz===true;
+      state.photosOn = saved.photosOn!==false; state.hc = saved.hc===true; state.seeTalk = saved.seeTalk===true; state.buzz = saved.buzz===true;
       if(saved.size==='pic' || saved.size==='word') state.size = saved.size;
       if(saved.gap==='wide' || saved.gap==='xwide') state.gap = saved.gap;
       state.older = typeof saved.older==='boolean' ? saved.older : state.stage >= 5;
@@ -1287,7 +1289,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,names:state.names,onDevice:state.onDevice,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,names:state.names,onDevice:state.onDevice,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz,photosOn:state.photosOn})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -1324,7 +1326,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v68) ---'+
+      dbgText = '\n--- Listening check (v69) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2048,7 +2050,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   }
   function renderGrid(){
     var g = $('grid'); g.textContent = '';
-    if(state.page==='photos' && !scenes.length) state.page = 'core';
+    if(state.page==='photos' && !photosShown()) state.page = 'core';
     if(state.stage < 3 && state.page!=='photos') state.page = 'core';
     g.classList.toggle('photos', state.page==='photos');
     g.classList.toggle('six', state.stage >= 4 && state.page==='core');
@@ -2112,10 +2114,12 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var t = starText(), has = state.mine.indexOf(t) >= 0;
     b.textContent = has ? '✕ Unsave' : '⭐ Save'; b.disabled = !t;
   }
+  /* A grown-up can hide the Photos page without deleting anything: the scenes stay saved and come back when it is switched on again. */
+  function photosShown(){ return scenes.length > 0 && state.photosOn !== false; }
   function renderTabs(){
-    var t = $('tabs'); t.hidden = state.stage < 3 && !scenes.length; t.textContent = '';
+    var t = $('tabs'); t.hidden = state.stage < 3 && !photosShown(); t.textContent = '';
     if(t.hidden) return;
-    var list = (state.stage >= 3 ? PAGES.concat([{id:'questions', label:'Questions', pic:'❔'}, NUMPAGE]) : [PAGES[0]]).concat(state.stage >= 5 ? [{id:'mine', label:'My own', pic:'⭐'}] : [], state.stage >= 6 ? PAGES6 : [], scenes.length ? [{id:'photos', label:'Photos', pic:'\uD83D\uDCF7'}] : []);
+    var list = (state.stage >= 3 ? PAGES.concat([{id:'questions', label:'Questions', pic:'❔'}, NUMPAGE]) : [PAGES[0]]).concat(state.stage >= 5 ? [{id:'mine', label:'My own', pic:'⭐'}] : [], state.stage >= 6 ? PAGES6 : [], photosShown() ? [{id:'photos', label:'Photos', pic:'\uD83D\uDCF7'}] : []);
     t.classList.toggle('many', list.length > 9);
     list.forEach(function(p){
       var b = document.createElement('button');
@@ -2212,6 +2216,8 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   }
   function renderSceneList(){
     var box = $('scList'); box.textContent = '';
+    $('photosOn').checked = state.photosOn !== false;
+    $('photosNote').textContent = !scenes.length ? 'No photo scenes yet.' : (state.photosOn !== false ? '' : 'Hidden from the board. Your '+scenes.length+' photo scene'+(scenes.length===1?' is':'s are')+' still saved here and can still be edited.');
     scenes.forEach(function(sc){
       var d = document.createElement('div'), n = document.createElement('span'), b = document.createElement('button');
       n.textContent = (sc.name||'photo')+' ('+sc.spots.length+' words)'; b.type='button'; b.className='btn'; b.textContent='Edit';
@@ -3015,6 +3021,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   }
   applyLook();
   $('hcOn').addEventListener('change', function(){ state.hc = this.checked; save(); applyLook(); renderAll(); });
+  $('photosOn').addEventListener('change', function(){ state.photosOn = this.checked; save(); renderSceneList(); renderTabs(); renderGrid(); });
   $('seeTalkOn').addEventListener('change', function(){ state.seeTalk = this.checked; save(); applyLook(); });
   $('sizeSel').addEventListener('change', function(){ state.size = this.value; save(); applyLook(); });
   $('gapSel').addEventListener('change', function(){ state.gap = this.value; save(); applyLook(); });
