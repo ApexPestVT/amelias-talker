@@ -288,6 +288,10 @@ body.typing #tabs, body.typing #grid{display:none}
 .wbdot{flex:none;width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center}
 .wbdot svg{width:30px;height:30px}
 .wbfoot{justify-content:flex-end}
+.qzchips{display:flex;flex-wrap:wrap;gap:8px}
+.qzchips .btn{min-height:44px}
+.qzchips .btn b{margin-left:8px;color:#b8321f}
+#qzIn,#qzName{flex:1;min-width:0}
 .sheet.wb .check{min-height:44px}
 .sheet.wb .check input{width:24px;height:24px;flex:none}
 .mine{display:flex;flex-direction:column;gap:6px}
@@ -365,6 +369,10 @@ body.typing #tabs, body.typing #grid{display:none}
     <div class="row">
       <label for="nameIn">Child's name</label>
       <input type="text" id="nameIn" autocomplete="off">
+    </div>
+    <div class="row">
+      <small>A short list of questions about your child's people, favorite foods, the places you eat and go. The answers become your child's own words and answer choices.</small>
+      <button class="btn" id="qzOpen" type="button">About your child: favorites</button>
     </div>
     </details>
     <details class="sec">
@@ -587,6 +595,7 @@ body.typing #tabs, body.typing #grid{display:none}
 
       <b>Things you set up</b>
       <ol class="coach">
+        <li><b>About your child.</b> In section 1, a short set of questions adds your child's own people, pets, foods, drinks, places and favorite things, and the places your family eats. Those answers come up first when someone asks a question.</li>
         <li><b>Photo scenes.</b> Add a real photo from your child's life and put word spots on it. "Suggest words" finds things in the photo for you.</li>
         <li><b>Personal words.</b> "Add a word" for names, favorite foods and places. "Change a word" swaps any picture or name.</li>
         <li><b>Choices offered.</b> Pick up to six words per group for open questions like "what do you want to eat?"</li>
@@ -704,6 +713,35 @@ body.typing #tabs, body.typing #grid{display:none}
       <label class="check"><input type="checkbox" id="wbSleep"> Sleep after 2 minutes of no taps (any key wakes it)</label>
       <button class="btn" id="wbReset" type="button">Put all wristband settings back to the start</button>
       <small id="wbSetMsg">Saved on this tablet. Sent to the wristband when one is connected.</small>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="qz" role="dialog" aria-label="About your child">
+  <div class="sheet wb">
+    <div id="qzHello">
+      <h2>Welcome to My Turn</h2>
+      <p>A few quick questions for a grown-up, or for the person who will use the talker if they can read and type. The answers become their own words and answer choices: their people, their foods, the places they really go.</p>
+      <small>About 2 minutes. Skip anything. Everything can be changed later from the lock menu. The answers stay on this device.</small>
+      <div class="inline wbfoot"><button class="btn" id="qzNotNow" type="button">Not now</button><button class="btn primary" id="qzStart" type="button">Start</button></div>
+    </div>
+    <div id="qzStep" hidden>
+      <small id="qzN"></small>
+      <h2 id="qzT"></h2>
+      <small id="qzHint"></small>
+      <div id="qzNameBox"><input type="text" id="qzName" maxlength="30" autocomplete="off" aria-labelledby="qzT"></div>
+      <div id="qzAddBox">
+        <div class="inline"><input type="text" id="qzIn" maxlength="30" autocomplete="off" aria-labelledby="qzT"><button class="btn primary" id="qzAdd" type="button">Add</button></div>
+        <div class="qzchips" id="qzList"></div>
+      </div>
+      <small id="qzMsg"></small>
+      <div class="inline wbfoot"><button class="btn" id="qzBack" type="button">Back</button><button class="btn" id="qzLater" type="button">Finish later</button><button class="btn primary" id="qzNext" type="button">Next</button></div>
+    </div>
+    <div id="qzEnd" hidden>
+      <h2>All set</h2>
+      <p id="qzSum"></p>
+      <small>To use a real photo for a person or a place: lock menu, 4. Words and pictures. To change these answers: lock menu, 1. Stage and name, About your child.</small>
+      <div class="inline wbfoot"><button class="btn primary" id="qzDone" type="button">Done</button></div>
     </div>
   </div>
 </div>
@@ -1225,6 +1263,12 @@ function detectOpenQuestion(text, name){
   if(/\b(what|which)\b.*\b(play|toys?|read|watch|wear|games?|favou?rite thing)\b/.test(t)) return 'things';
   return null;
 }
+/* "Where should we go eat?" / "what restaurant?": asking for a place to eat. Answered from the family's own places when a grown-up has listed them. */
+function eatOutQuestion(text, name){
+  var t = clean(text, name); if(!t) return false;
+  if(/\b(restaurants?|fast food|places? to eat|drive ?thru|drive through|diner|cafe|take ?out)\b/.test(t)) return true;
+  return /\bwhere\b.*\b(eat|eating|lunch|dinner|breakfast|supper|brunch)\b/.test(t);
+}
 /* "What do you want to drink?" should offer drinks only, and "to eat?" food only. */
 function likeQuestion(text, name){ return /\b(favou?rite|like best|like the most|love|you like)\b/.test(clean(text, name)); }   // "what's your favorite food?" is answered "I like pizza."
 function openKind(text, name){
@@ -1237,7 +1281,7 @@ function isDrink(w){
   var re = /^(milk|juice|water|soda|pop|tea|lemonade|smoothie|shake|milkshake|cocoa|hot chocolate|formula|bottle|drink|cider|punch|coffee)$|\b(milk|juice|water|tea|soda|smoothie|shake)$/;
   return re.test(l) || re.test(b);
 }
-if(typeof module!=='undefined') module.exports = {likeQuestion:likeQuestion, NUM6:NUM6, detectNumberQuestion:detectNumberQuestion, numberSentence:numberSentence, NUMBERS:NUMBERS, detectColorQuestion:detectColorQuestion, colorSentence:colorSentence, COLORS:COLORS, setOlder:setOlder, BUILD:BUILD, literal:literal, MORE6:MORE6, QUESTIONS_DEFAULT:QUESTIONS_DEFAULT, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
+if(typeof module!=='undefined') module.exports = {eatOutQuestion:eatOutQuestion, likeQuestion:likeQuestion, NUM6:NUM6, detectNumberQuestion:detectNumberQuestion, numberSentence:numberSentence, NUMBERS:NUMBERS, detectColorQuestion:detectColorQuestion, colorSentence:colorSentence, COLORS:COLORS, setOlder:setOlder, BUILD:BUILD, literal:literal, MORE6:MORE6, QUESTIONS_DEFAULT:QUESTIONS_DEFAULT, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
 </script>
 
 <script>
@@ -1256,12 +1300,13 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving your own'},
     {n:6, name:'6. Teen and adult words', note:'Adds 96 of the most used everyday words on four pages. Sentences are said word for word'}
   ];
-  var state = { photosOn:true, onDevice:true, names:true, name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { about:{}, aboutSeen:false, photosOn:true, onDevice:true, names:true, name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
 
   /* ---------- settings (small) and pictures (IndexedDB), both on this device only ---------- */
+  var firstUse = false; try{ firstUse = localStorage.getItem('talker-settings')===null; }catch(e){}
   try{
     var saved = JSON.parse(localStorage.getItem('talker-settings')||'null');
     if(saved){
@@ -1273,7 +1318,8 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(saved.stage>=1) state.stage=Math.min(6, Math.floor(+saved.stage));
       if(Array.isArray(saved.questions)) state.questions = saved.questions.filter(function(q){ return typeof q==='string' && q.trim(); }).slice(0, 12);
       state.smart = saved.smart===true;
-      state.photosOn = saved.photosOn!==false; state.hc = saved.hc===true; state.seeTalk = saved.seeTalk===true; state.buzz = saved.buzz===true;
+      state.photosOn = saved.photosOn!==false; state.aboutSeen = saved.aboutSeen===true;
+      if(saved.about && typeof saved.about==='object' && !Array.isArray(saved.about)) Object.keys(saved.about).forEach(function(k){ if(Array.isArray(saved.about[k])) state.about[k] = saved.about[k].filter(function(x){ return typeof x==='string'; }).slice(0, 12); }); state.hc = saved.hc===true; state.seeTalk = saved.seeTalk===true; state.buzz = saved.buzz===true;
       if(saved.size==='pic' || saved.size==='word') state.size = saved.size;
       if(saved.gap==='wide' || saved.gap==='xwide') state.gap = saved.gap;
       state.older = typeof saved.older==='boolean' ? saved.older : state.stage >= 5;
@@ -1294,7 +1340,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,names:state.names,onDevice:state.onDevice,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz,photosOn:state.photosOn})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,names:state.names,onDevice:state.onDevice,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz,photosOn:state.photosOn,about:state.about,aboutSeen:state.aboutSeen})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -1331,7 +1377,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v70) ---'+
+      dbgText = '\n--- Listening check (v71) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1589,7 +1635,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       var c = clean(t, state.name);
       if(c.split(' ').length < 3 || /\b(or|to|the|a|an|your|you|want|and|is|of|with|some|do|does|what|which|like|go|for|in|on|at)$/.test(c)) return;   // probably still talking
       var q = detectQuestion(t, state.name);
-      if(!(q || detectColorQuestion(t, state.name) || detectNumberQuestion(t, state.name) || detectOpenQuestion(t, state.name))) return;   // leave the rest for the finished sentence (and the AI)
+      if(!(q || detectColorQuestion(t, state.name) || detectNumberQuestion(t, state.name) || openQ(t))) return;   // leave the rest for the finished sentence (and the AI)
       if(isEcho(t)) return;
       early.norm = norm(t); early.at = Date.now(); early.n++;
       setHeard(t);
@@ -2720,7 +2766,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     if(q){                                                              // a this-or-that the rules cut up badly ("better the red one")
       return q.options.some(function(o){ return !o.id && String(o.label).split(' ').length >= 3; });
     }
-    if(detectOpenQuestion(text, state.name)) return false;             // the rules already know which page to open
+    if(openQ(text)) return false;                                      // the rules already know which page to open
     return looksAsked(t);
   }
   function smartAsk(text, q){
@@ -2842,9 +2888,18 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     state.favs['food:drink'] = dr.concat((state.favs['food:drink']||[]).filter(function(id){ return dr.indexOf(id) < 0; })).slice(0, 6);
     save();
   }
+  /* The family's own places to eat, from the "About your child" questions. With any listed, "where should we eat?" is answered from them. */
+  function eatPlaces(){                              // in the order the grown-up listed them
+    var all = custom.filter(function(w){ return w.page==='places' && w.eat; }), order = state.about.eats || [];
+    return all.slice().sort(function(a, b){ var i = order.indexOf(a.id), j = order.indexOf(b.id); return (i < 0 ? 99 : i) - (j < 0 ? 99 : j); });
+  }
+  function eatAsked(text){ return eatOutQuestion(text, state.name) && eatPlaces().length > 0; }
+  function openQ(text){ return eatAsked(text) ? 'places' : detectOpenQuestion(text, state.name); }
   function offered(page, kind){
     var all = custom.concat(FRINGE).filter(function(w){ return w.page===page; });
-    if(page!=='food'){ var picks = favPicks(page); return picks.length ? picks : all; }
+    if(page==='places' && kind==='eat') return eatPlaces();
+    if(page==='places') all = all.filter(function(w){ return !w.eat; }).concat(all.filter(function(w){ return w.eat; }));   // "where do you want to go?": ordinary places before restaurants
+    if(page!=='food'){ var picks = favPicks(page); return picks.length===1 ? picks.concat(all.filter(function(w){ return w!==picks[0]; })) : (picks.length ? picks : all); }   // one pick alone is not a choice: the rest follow it
     favSplit();
     var foods = favPicks('food'), drinks = favPicks('food:drink');
     var pad = function(list, key){ return list.length===1 ? list.concat(all.filter(favFits(key)).filter(function(w){ return w!==list[0]; })) : list; };   // one pick alone is not a choice: the rest follow it
@@ -2856,6 +2911,10 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       return foods.slice(0, drinks.length ? 4 : 6).concat(drinks.slice(0, 2));
     }
     return all;
+  }
+  function dropCustom(w){
+    custom = custom.filter(function(x){ return x.id!==w.id; }); delete LOOKUP[w.id]; delete pics[w.id];
+    idbSet('custom', custom).catch(storeFail); idbDel('pic:'+w.id).catch(function(){}); idbDel('picsrc:'+w.id).catch(function(){});
   }
   function renderFavs(){
     var sel = $('favPage');
@@ -2888,7 +2947,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     });
   }
   function openPageFor(text){
-    var page = detectOpenQuestion(text, state.name); if(!page) return;
+    var page = openQ(text); if(!page) return;
     if(page==='do'){                             // "what do you want to do?": the doing words she has at this stage
       var acts = ['play','eat','drink','go','look','help'].map(function(id){ return LOOKUP[id]; }).filter(function(w){ return w && (w.s||1) <= state.stage; });
       if(!acts.length) return;
@@ -2899,8 +2958,9 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       $('ask').hidden = false; clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
       return;
     }
-    var kind = page==='food' ? openKind(text, state.name) : null, words = offered(page, kind);
-    var fits = function(w){ return isDrink(w) === (kind==='drink'); };      // drinks for a drink question, food for a food question
+    var kind = page==='food' ? openKind(text, state.name) : (page==='places' && eatAsked(text) ? 'eat' : null), words = offered(page, kind);
+    var fits = page==='places' ? function(w){ return !!w.eat; } : function(w){ return isDrink(w) === (kind==='drink'); };      // drinks for a drink question, food for a food question, the family's eating places for "where should we eat"
+
     if(!words.length) return;
     var showPage = function(){
       openOnly = null;
@@ -2974,9 +3034,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       var d = document.createElement('div'), s = document.createElement('span'), b = document.createElement('button');
       s.textContent = w.label+' ('+(w.page==='food' ? (isDrink(w) ? 'drinks' : 'food') : w.page)+')'; b.type='button'; b.className='btn'; b.textContent='Remove';
       b.addEventListener('click', function(){
-        custom = custom.filter(function(x){ return x.id!==w.id; }); delete LOOKUP[w.id]; delete pics[w.id];
-        idbSet('custom', custom).catch(storeFail); idbDel('pic:'+w.id).catch(function(){}); idbDel('picsrc:'+w.id).catch(function(){});
-        renderPicList(); renderFavs(); renderAll();
+        dropCustom(w); renderPicList(); renderFavs(); renderAll();
       });
       d.appendChild(s); d.appendChild(b); m.appendChild(d);
     });
@@ -3221,6 +3279,93 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       note();
     });
   }
+  /* ---------- "About your child": first-use questions. Each answer becomes one of the child's own words, and is offered first when someone asks. ---------- */
+  var QZ = [
+    {id:'name', t:'What is your child\'s name?', hint:'The talker says it in "My name is ...". It also helps the listening notice when someone is talking to your child. If you are setting this up for yourself, type your own name.'},
+    {id:'people', page:'people', fav:'people', pic:'🧑', t:'Who are the important people?', hint:'Family, friends, teachers. Type each one the way your child would say it, like Mommy, Grandpa or Sam. Tap Add after each.', ex:'Grandma'},
+    {id:'pets', page:'people', fav:'people', pic:'🐾', t:'Any pets?', hint:'Type each pet\'s name. Skip this if there are none.', ex:'Buddy'},
+    {id:'foods', page:'food', drink:false, fav:'food', find:true, pic:'🍽️', t:'Favorite foods', hint:'What does your child really eat and ask for?', ex:'chicken nuggets'},
+    {id:'drinks', page:'food', drink:true, fav:'food:drink', find:true, pic:'🥤', t:'Favorite drinks', hint:'', ex:'chocolate milk'},
+    {id:'eats', page:'places', eat:true, pic:'🍴', t:'Where do you go out to eat?', hint:'Restaurants and take-out places your family really uses. They are offered when someone asks "Where should we eat?"', ex:'the pizza place'},
+    {id:'places', page:'places', fav:'places', find:true, pic:'📍', t:'Places you go', hint:'The park, a grandparent\'s house, school, the pool, church.', ex:'Grandma\'s house'},
+    {id:'fun', page:'things', fav:'things', find:true, pic:'⭐', t:'Favorite toys, shows and things to do', hint:'', ex:'trampoline'}
+  ];
+  var QZ_MAX = 8, qzAt = 0;
+  function qzShow(v){ ['qzHello','qzStep','qzEnd'].forEach(function(id){ $(id).hidden = id!==v; }); document.querySelector('#qz .sheet').scrollTop = 0; }
+  function qzIds(st){ return (state.about[st.id]||[]).filter(function(id){ return LOOKUP[id] && LOOKUP[id].page===st.page; }); }
+  function qzNp(st, label){                                  // a name ("Grandma's house", "Bluey") is said plainly; an ordinary word gets the page's usual lead-in
+    var named = /^[A-Z]/.test(label) || /^(the|my|our|a|an) /i.test(label);
+    if(st.page==='places') return named ? 'to '+label : 'to the '+label;
+    if(st.page==='things') return named ? label : 'my '+label;
+    return defaultNp(st.page, label);
+  }
+  function qzPicture(w, label){                              // best effort: a library symbol filed under exactly this word, kept on the device; else the plain picture stays
+    fetch(API+'api/pics/best?q='+encodeURIComponent(label.toLowerCase())).then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
+      if(!j || !j.id || !LOOKUP[w.id]) return null;
+      return fetch(API+'api/pics/img/'+j.id).then(function(r){ if(!r.ok) throw new Error('failed'); return r.blob(); }).then(function(bl){
+        var fr = new FileReader(); fr.onload = function(){ if(!LOOKUP[w.id] || pics[w.id]) return; pics[w.id] = String(fr.result); idbSet('pic:'+w.id, pics[w.id]).catch(function(){}); renderAll(); }; fr.readAsDataURL(bl);
+      });
+    }).catch(function(){});
+  }
+  function qzAdd(){
+    var st = QZ[qzAt], label = $('qzIn').value.trim().replace(/\s+/g,' ').slice(0, 30), list = qzIds(st);
+    if(!st.page || !label) return;
+    if(list.length >= QZ_MAX){ $('qzMsg').textContent = QZ_MAX+' is the most here. Remove one first, or add more later in Words and pictures.'; return; }
+    var low = label.toLowerCase();
+    var w = custom.concat(FRINGE).filter(function(x){ return x.page===st.page && String(x.label).toLowerCase()===low && (st.page!=='food' || isDrink(x)===!!st.drink); })[0];   // already on the board: use that word, do not make a second one
+    if(w && list.indexOf(w.id) >= 0){ $('qzMsg').textContent = '"'+w.label+'" is already on the list.'; $('qzIn').value = ''; return; }
+    if(!w){
+      w = {id:'custom:'+Date.now(), label:label, pic:st.pic, page:st.page, np:qzNp(st, label), q:st.id};
+      if(st.page==='food') w.drink = !!st.drink;
+      if(st.eat) w.eat = true;
+      custom.unshift(w); registerWords([w]);
+      idbSet('custom', custom).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
+      if(st.find) qzPicture(w, label);
+    } else if(st.eat && w.id.indexOf('custom:')===0){ w.eat = true; idbSet('custom', custom).catch(function(){}); }
+    list.push(w.id); state.about[st.id] = list;
+    if(st.fav){ var f = state.favs[st.fav] || []; if(f.indexOf(w.id) < 0 && f.length < 6) f.push(w.id); state.favs[st.fav] = f; }
+    save(); $('qzIn').value = ''; $('qzMsg').textContent = ''; qzList(); renderAll(); $('qzIn').focus();
+  }
+  function qzDrop(st, id){
+    var w = LOOKUP[id]; state.about[st.id] = (state.about[st.id]||[]).filter(function(x){ return x!==id; });
+    if(st.fav && state.favs[st.fav]) state.favs[st.fav] = state.favs[st.fav].filter(function(x){ return x!==id; });
+    if(w && w.q===st.id) dropCustom(w);                      // a word these questions made goes away again; a word that was already on the board stays
+    save(); qzList(); renderAll();
+  }
+  function qzList(){
+    var st = QZ[qzAt], box = $('qzList'); box.textContent = '';
+    qzIds(st).forEach(function(id){
+      var b = document.createElement('button'), x = document.createElement('b'); b.type = 'button'; b.className = 'btn'; b.textContent = LOOKUP[id].label; x.textContent = '✕'; b.appendChild(x);
+      b.setAttribute('aria-label', 'Remove '+LOOKUP[id].label); b.addEventListener('click', function(){ qzDrop(st, id); });
+      box.appendChild(b);
+    });
+  }
+  function qzStep(n){
+    qzAt = Math.max(0, Math.min(QZ.length - 1, n)); var st = QZ[qzAt];
+    $('qzN').textContent = 'Question '+(qzAt + 1)+' of '+QZ.length; $('qzT').textContent = st.t; $('qzHint').textContent = st.hint || ''; $('qzHint').hidden = !st.hint; $('qzMsg').textContent = '';
+    $('qzNameBox').hidden = !!st.page; $('qzAddBox').hidden = !st.page; $('qzBack').hidden = qzAt===0; $('qzNext').textContent = qzAt===QZ.length - 1 ? 'Finish' : 'Next';
+    if(st.page){ $('qzIn').value = ''; $('qzIn').placeholder = 'For example: '+st.ex; qzList(); } else $('qzName').value = state.name;
+    qzShow('qzStep');
+  }
+  function qzName(){ if(QZ[qzAt].id!=='name') return; state.name = $('qzName').value.trim(); $('nameIn').value = state.name; save(); }
+  function qzLeave(){ if(!$('qzStep').hidden){ qzName(); if($('qzIn').value.trim() && QZ[qzAt].page) qzAdd(); } state.aboutSeen = true; save(); $('qz').classList.remove('open'); renderPicList(); renderFavs(); renderAll(); }
+  function qzOpen(hello){ $('qz').classList.add('open'); if(hello) qzShow('qzHello'); else qzStep(0); }
+  $('qzOpen').addEventListener('click', function(){ qzOpen(false); });
+  $('qzStart').addEventListener('click', function(){ qzStep(0); });
+  $('qzNotNow').addEventListener('click', qzLeave);
+  $('qzLater').addEventListener('click', qzLeave);
+  $('qzDone').addEventListener('click', qzLeave);
+  $('qzBack').addEventListener('click', function(){ qzName(); qzStep(qzAt - 1); });
+  $('qzAdd').addEventListener('click', qzAdd);
+  $('qzIn').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); qzAdd(); } });
+  $('qzName').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); $('qzNext').click(); } });
+  $('qzNext').addEventListener('click', function(){
+    qzName(); if(QZ[qzAt].page && $('qzIn').value.trim()){ qzAdd(); if($('qzIn').value.trim()) return; }   // a word typed but not yet added still counts
+    if(qzAt < QZ.length - 1){ qzStep(qzAt + 1); return; }
+    var n = 0; QZ.forEach(function(st){ if(st.page) n += qzIds(st).length; });
+    $('qzSum').textContent = (n ? n+' of your child\'s own word'+(n===1?' is':'s are')+' now on the talker. They are offered first when someone asks a question like "What do you want to eat?" or "Who do you want to play with?"' : 'No words were added. You can come back to these questions any time.')+(eatPlaces().length ? ' "Where should we eat?" now offers your '+eatPlaces().length+' place'+(eatPlaces().length===1?'':'s')+'.' : '');
+    state.aboutSeen = true; save(); qzShow('qzEnd');
+  });
   /* ---------- wristband setup (inside the grown-up menu; the radio link to a real wristband is not built yet) ---------- */
   var WB_KEYS = [
     {id:'green', name:'Green key', where:'top left', bg:'#1f7a3d', fg:'#fff', say:'Yes', svg:'<circle cx="12" cy="12" r="7.3" fill="none" stroke-width="3"/>'},
@@ -3478,6 +3623,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     if(all.labels && typeof all.labels==='object'){ labels = all.labels; setOlder(state.older, labels); Object.keys(labels).forEach(function(id){ if(LOOKUP[id]) LOOKUP[id].label = labels[id]; }); }
     diag.store = 'kept on this device ('+Object.keys(pics).length+' photos, '+custom.length+' added words)';
     renderAll(); showDiag(); cvWarm();
+    if(firstUse && !state.aboutSeen && !custom.length) qzOpen(true);   // a brand-new device: ask the grown-up the starting questions once
   }, function(){ cv.loaded = true; diag.store = 'not available in this view. Photos last until the page closes.'; showDiag(); cvWarm(); });
 
   if(hosted) wireHosted();
