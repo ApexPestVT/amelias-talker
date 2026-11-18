@@ -271,6 +271,9 @@ body.typing #tabs, body.typing #grid{display:none}
 .picgrid button{aspect-ratio:1;border:2px solid var(--line,#c9c9c9);border-radius:12px;background:#fff;padding:4px;font-size:34px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .picgrid button img{width:100%;height:100%;object-fit:contain}
 .picgrid button:focus-visible{outline:3px solid #1a5fd0}
+#crop{z-index:12}
+.sheet.crop{max-width:560px;gap:12px}
+#cropCv{width:min(100%,48vh);aspect-ratio:1;align-self:center;border-radius:14px;border:3px solid var(--ink);background:#fff;touch-action:none;cursor:grab}
 .sheet.wb > div{display:flex;flex-direction:column;gap:14px}
 .sheet.wb > div[hidden]{display:none}
 .wbstat{display:flex;flex-direction:column;gap:4px;border:2px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--paper)}
@@ -428,6 +431,7 @@ body.typing #tabs, body.typing #grid{display:none}
       <span class="lbl">Picture</span>
       <div class="inline">
         <button class="btn" id="picBtn" type="button">Choose photo</button>
+        <button class="btn" id="picCrop" type="button" disabled>Adjust crop</button>
         <button class="btn" id="picReset" type="button">Use the drawing</button>
       </div>
       <input type="file" id="picFile" accept="image/*" hidden>
@@ -633,6 +637,20 @@ body.typing #tabs, body.typing #grid{display:none}
     </div>
     </details>
     <button class="btn primary" id="closeBtn" type="button">Lock and close</button>
+  </div>
+</div>
+<div class="panel" id="crop" role="dialog" aria-label="Crop the photo">
+  <div class="sheet crop">
+    <h2 id="cropTitle">Crop the photo</h2>
+    <small>Drag the photo to move it. Pinch, or use the slider, to make it bigger or smaller. What is inside the square is what shows on the button.</small>
+    <canvas id="cropCv" width="640" height="640" aria-label="Photo crop area. Drag to move."></canvas>
+    <label for="cropZoom">Size</label>
+    <input type="range" id="cropZoom" min="0" max="100" value="0" step="1">
+    <div class="inline">
+      <button class="btn primary" id="cropSave" type="button">Use this picture</button>
+      <button class="btn" id="cropFit" type="button">Start over</button>
+      <button class="btn" id="cropCancel" type="button">Cancel</button>
+    </div>
   </div>
 </div>
 <div class="panel" id="wb" role="dialog" aria-label="My Turn To-Go wristband setup">
@@ -1291,6 +1309,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   }
   function idbSet(k, v){ return idb('readwrite', function(s){ return s.put(v, k); }); }
   function idbDel(k){ return idb('readwrite', function(s){ return s.delete(k); }); }
+  function idbGet(k){ return idb('readonly', function(s){ return s.get(k); }); }
   function idbLoad(){
     return db().then(function(d){ return new Promise(function(res, rej){
       var out = {}, c = d.transaction('kv').objectStore('kv').openCursor();
@@ -1303,7 +1322,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v64) ---'+
+      dbgText = '\n--- Listening check (v65) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2894,6 +2913,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       sel.appendChild(og);
     });
     if(keep && LOOKUP[keep]) sel.value = keep;
+    if(typeof cropBtn==='function') cropBtn();
     $('wordName').value = sel.value && LOOKUP[sel.value] ? LOOKUP[sel.value].label : '';
     var np = $('newPage'); if(!np.options.length){
       PAGES.filter(function(p){ return p.id!=='core'; }).forEach(function(p){ var o=document.createElement('option'); o.value=p.id; o.textContent=p.label; np.appendChild(o); });
@@ -2904,7 +2924,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       s.textContent = w.label+' ('+w.page+')'; b.type='button'; b.className='btn'; b.textContent='Remove';
       b.addEventListener('click', function(){
         custom = custom.filter(function(x){ return x.id!==w.id; }); delete LOOKUP[w.id]; delete pics[w.id];
-        idbSet('custom', custom).catch(storeFail); idbDel('pic:'+w.id).catch(function(){});
+        idbSet('custom', custom).catch(storeFail); idbDel('pic:'+w.id).catch(function(){}); idbDel('picsrc:'+w.id).catch(function(){});
         renderPicList(); renderFavs(); renderAll();
       });
       d.appendChild(s); d.appendChild(b); m.appendChild(d);
@@ -2984,20 +3004,102 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var url = URL.createObjectURL(f), img = new Image();
     img.onload = function(){
       try{
-        var S = 320, c = document.createElement('canvas'); c.width = S; c.height = S;
-        var side = Math.min(img.naturalWidth, img.naturalHeight);
-        c.getContext('2d').drawImage(img, (img.naturalWidth-side)/2, (img.naturalHeight-side)/2, side, side, 0, 0, S, S);
-        var data = c.toDataURL('image/jpeg', 0.85);
+        /* Keep a copy of the whole photo (made smaller) so the crop can be changed later. */
+        var M = 1280, k = Math.min(1, M/Math.max(img.naturalWidth, img.naturalHeight));
+        var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(img.naturalWidth*k)); c.height = Math.max(1, Math.round(img.naturalHeight*k));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        var whole = c.toDataURL('image/jpeg', 0.85);
         URL.revokeObjectURL(url);
-        pics[id] = data; renderPicList(); renderFavs(); renderAll();
-        $('picMsg').textContent = 'Photo set for "'+word(id).label+'".';
-        idbSet('pic:'+id, data).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
-      }catch(e){ $('picMsg').textContent = 'That photo could not be used. Try another one.'; }
+        cropOpen(id, whole, null, true);
+      }catch(e){ URL.revokeObjectURL(url); $('picMsg').textContent = 'That photo could not be used. Try another one.'; }
     };
     img.onerror = function(){ URL.revokeObjectURL(url); $('picMsg').textContent = 'That file is not a photo this tablet can open.'; };
     img.src = url;
   });
-  $('picWord').addEventListener('change', function(){ $('wordName').value = LOOKUP[this.value] ? LOOKUP[this.value].label : ''; $('picFind').value = LOOKUP[this.value] ? LOOKUP[this.value].label : ''; $('picGrid').textContent = ''; });
+
+  /* ---------- crop a photo: drag to move, pinch or slider to change the size ---------- */
+  var crop = null;                                  // {id, src, img, z, x, y, fresh}  x,y = centre of the square, in photo pixels; z = how many times bigger than "just fills the square"
+  var CROP_MAX = 5;
+  function cropSide(){ return Math.min(crop.img.naturalWidth, crop.img.naturalHeight) / crop.z; }     // side of the square, in photo pixels
+  function cropClamp(){
+    var w = crop.img.naturalWidth, h = crop.img.naturalHeight;
+    crop.z = Math.min(CROP_MAX, Math.max(1, crop.z));
+    var half = cropSide()/2;
+    crop.x = Math.min(w-half, Math.max(half, crop.x)); crop.y = Math.min(h-half, Math.max(half, crop.y));
+  }
+  function cropDraw(){
+    if(!crop || !crop.img) return;
+    cropClamp();
+    var cv = $('cropCv'), side = cropSide(), g = cv.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+    g.drawImage(crop.img, crop.x-side/2, crop.y-side/2, side, side, 0, 0, cv.width, cv.height);
+    $('cropZoom').value = String(Math.round(Math.log(crop.z)/Math.log(CROP_MAX)*100));
+  }
+  function cropOpen(id, src, at, fresh){
+    var img = new Image();
+    img.onload = function(){
+      crop = {id:id, src:src, img:img, fresh:!!fresh, z:1, x:img.naturalWidth/2, y:img.naturalHeight/2};
+      if(at && at.z >= 1 && isFinite(at.x) && isFinite(at.y)){ crop.z = at.z; crop.x = at.x; crop.y = at.y; }
+      $('cropTitle').textContent = 'Crop the photo for "'+word(id).label+'"';
+      cropDraw(); $('crop').classList.add('open'); $('picMsg').textContent = '';
+    };
+    img.onerror = function(){ $('picMsg').textContent = 'That photo could not be opened for cropping.'; };
+    img.src = src;
+  }
+  function cropClose(){ $('crop').classList.remove('open'); crop = null; cropPts = {}; }
+  var cropPts = {}, cropLast = null;                // fingers on the photo
+  function cropGeom(){
+    var ids = Object.keys(cropPts); if(!ids.length) return null;
+    var a = cropPts[ids[0]], b = ids.length > 1 ? cropPts[ids[1]] : null;
+    return b ? {x:(a.x+b.x)/2, y:(a.y+b.y)/2, d:Math.max(1, Math.hypot(a.x-b.x, a.y-b.y)), n:2} : {x:a.x, y:a.y, d:0, n:1};
+  }
+  function cropMove(){
+    var now = cropGeom(); if(!crop || !now || !cropLast){ cropLast = now; return; }
+    var shown = $('cropCv').getBoundingClientRect().width || 1, per = cropSide()/shown;      // photo pixels per screen pixel
+    if(now.n === 2 && cropLast.n === 2) crop.z *= now.d/cropLast.d;
+    if(now.n === cropLast.n){ crop.x -= (now.x-cropLast.x)*per; crop.y -= (now.y-cropLast.y)*per; }
+    cropLast = now; cropDraw();
+  }
+  (function(){
+    var cv = $('cropCv');
+    cv.addEventListener('pointerdown', function(e){ e.preventDefault(); try{ cv.setPointerCapture(e.pointerId); }catch(x){} cropPts[e.pointerId] = {x:e.clientX, y:e.clientY}; cropLast = cropGeom(); });
+    cv.addEventListener('pointermove', function(e){ if(!cropPts[e.pointerId]) return; e.preventDefault(); cropPts[e.pointerId] = {x:e.clientX, y:e.clientY}; cropMove(); });
+    var up = function(e){ delete cropPts[e.pointerId]; cropLast = cropGeom(); };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    cv.addEventListener('wheel', function(e){ if(!crop) return; e.preventDefault(); crop.z *= e.deltaY < 0 ? 1.1 : 1/1.1; cropDraw(); }, {passive:false});
+    cv.addEventListener('keydown', function(e){ if(!crop) return; var st = cropSide()/20, k = e.key;
+      if(k==='ArrowLeft') crop.x -= st; else if(k==='ArrowRight') crop.x += st; else if(k==='ArrowUp') crop.y -= st; else if(k==='ArrowDown') crop.y += st; else if(k==='+' || k==='=') crop.z *= 1.1; else if(k==='-') crop.z /= 1.1; else return;
+      e.preventDefault(); cropDraw(); });
+    cv.tabIndex = 0;
+  })();
+  $('cropZoom').addEventListener('input', function(){ if(!crop) return; crop.z = Math.pow(CROP_MAX, (+this.value||0)/100); cropDraw(); });
+  $('cropFit').addEventListener('click', function(){ if(!crop) return; crop.z = 1; crop.x = crop.img.naturalWidth/2; crop.y = crop.img.naturalHeight/2; cropDraw(); });
+  $('cropCancel').addEventListener('click', function(){ var fresh = crop && crop.fresh; cropClose(); $('picMsg').textContent = fresh ? 'No photo was added.' : 'The picture was left as it was.'; });
+  $('cropSave').addEventListener('click', function(){
+    if(!crop) return;
+    try{
+      cropClamp();
+      var S = 320, c = document.createElement('canvas'), side = cropSide(), id = crop.id; c.width = S; c.height = S;
+      var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, S, S);
+      g.drawImage(crop.img, crop.x-side/2, crop.y-side/2, side, side, 0, 0, S, S);
+      var data = c.toDataURL('image/jpeg', 0.85), keep = {src:crop.src, z:crop.z, x:crop.x, y:crop.y};
+      cropClose();
+      pics[id] = data; renderPicList(); $('picWord').value = id; renderFavs(); renderAll(); cropBtn();
+      $('picMsg').textContent = 'Photo set for "'+word(id).label+'".';
+      idbSet('pic:'+id, data).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
+      idbSet('picsrc:'+id, keep).catch(function(){});       // the whole photo and where the square sits, for "Adjust crop" later
+    }catch(e){ cropClose(); $('picMsg').textContent = 'That photo could not be used. Try another one.'; }
+  });
+  function cropBtn(){ var id = $('picWord').value; $('picCrop').disabled = !(id && pics[id]); }
+  $('picCrop').addEventListener('click', function(){
+    var id = $('picWord').value; if(!id || !pics[id]) return;
+    $('picMsg').textContent = 'Opening the photo';
+    idbGet('picsrc:'+id).then(function(k){
+      if(k && typeof k.src === 'string') cropOpen(id, k.src, k, false);
+      else cropOpen(id, pics[id], null, false);          // added before crops were kept, or a library picture: only what is in the square is left
+    }, function(){ cropOpen(id, pics[id], null, false); });
+  });
+  $('picWord').addEventListener('change', function(){ $('wordName').value = LOOKUP[this.value] ? LOOKUP[this.value].label : ''; $('picFind').value = LOOKUP[this.value] ? LOOKUP[this.value].label : ''; $('picGrid').textContent = ''; cropBtn(); });
 
   /* ---------- picture library: emoji (on the tablet) and ARASAAC symbols (through our server) ---------- */
   var emojiWords = null, picFindN = 0;
@@ -3022,6 +3124,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     pics[id] = data; renderPicList(); $('picWord').value = id; renderFavs(); renderAll();
     $('picMsg').textContent = what+' set for "'+word(id).label+'".';
     idbSet('pic:'+id, data).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
+    idbDel('picsrc:'+id).catch(function(){}); cropBtn();
   }
   function emojiData(e){
     var S = 320, c = document.createElement('canvas'); c.width = S; c.height = S;
@@ -3282,7 +3385,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   });
   $('picReset').addEventListener('click', function(){
     var id = $('picWord').value; if(!id) return;
-    delete pics[id]; idbDel('pic:'+id).catch(function(){}); renderPicList(); renderFavs(); renderAll();
+    delete pics[id]; idbDel('pic:'+id).catch(function(){}); idbDel('picsrc:'+id).catch(function(){}); renderPicList(); $('picWord').value = id; renderFavs(); renderAll(); cropBtn();
     $('picMsg').textContent = 'Back to the drawing for "'+word(id).label+'".';
   });
   $('addWord').addEventListener('click', function(){
