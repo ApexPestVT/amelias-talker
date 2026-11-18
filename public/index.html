@@ -37,7 +37,7 @@ html,body{height:100%;margin:0;overscroll-behavior:none}
 body{
   background:var(--paper);color:var(--ink);font-family:var(--font);
   display:flex;flex-direction:column;gap:8px;padding:8px 16px 12px;
-  overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:none;
+  overflow:hidden;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;
 }
 button,select,input{font-family:inherit;color:inherit}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--describe-edge);outline-offset:2px}
@@ -147,6 +147,7 @@ body.typing #tabs, body.typing #grid{display:none}
 .key.blank{visibility:hidden}
 .key .pic{font-size:min(8vh,10vw);line-height:1}
 .key span.pic{padding-bottom:.16em}   /* emoji are drawn a little lower than their own box; without this room the word underneath touches the picture */
+.key img{pointer-events:none;-webkit-user-drag:none;-webkit-touch-callout:none}   /* a long press on a picture must reach the key, not start the tablet's own save-image or drag gesture */
 .key img.pic{height:62%;max-width:92%;aspect-ratio:1;object-fit:cover;border-radius:14px;font-size:0}
 .key img.pic[data-drawn]{height:min(10.5vh,12vw);object-fit:contain;border-radius:0}
 .chips img[data-drawn]{height:1.15em;vertical-align:middle}
@@ -417,8 +418,13 @@ body.typing #tabs, body.typing #grid{display:none}
     </div>
     <label class="check"><input type="checkbox" id="namesOn"> Help it hear names correctly</label>
     <small id="namesMsg"></small>
-    <label class="check"><input type="checkbox" id="placeOn"> Show answers in their board place</label>
-    <small>Off: answers pop up as a few very big buttons. On: each answer appears exactly where that word sits on its own page, at the size of a board picture, so your child's hand always finds a word in the same spot. Answers that are not board words still use the big buttons.</small>
+    <label for="ansMode">How answers are shown when a question is heard</label>
+    <select id="ansMode">
+      <option value="big">Big buttons: a few very big answers pop up</option>
+      <option value="place">In their board place: answers pop up where each word sits on its page</option>
+      <option value="page">Whole page: no pop-up, the page with the answers opens</option>
+    </select>
+    <small id="ansNote"></small>
     <label class="check"><input type="checkbox" id="buildOn"> Let your child build the answer, word by word</label>
     <small>Off: one tap on an answer says a whole sentence ("I want some pizza."). On: the pop-up adds the words I, not, want and like. Your child taps words in order and the talker says exactly those words ("I want pizza."). It speaks after a short pause, or at once with Say it. Yes or no questions do not change.</small>
     <label class="check"><input type="checkbox" id="smartOn"> Use AI for harder questions</label>
@@ -511,6 +517,7 @@ body.typing #tabs, body.typing #grid{display:none}
     <label class="check"><input type="checkbox" id="glowOn"> Light up the pictures as people talk to your child</label>
     <label class="check"><input type="checkbox" id="modelOn"> Show the Show me button on the child's screen</label>
     <label class="check"><input type="checkbox" id="endsOn"> Word endings: hold a word to choose another form</label>
+    <small id="endsNote"></small>
     <small>Hold a word for about a second and its other forms pop out: play, plays, playing, played; cookie, cookies; mom, mom's; big, bigger. A sentence with one of these is said word for word, in your child's order. A hand that keeps resting on the screen closes it again.</small>
     </details>
     <details class="sec">
@@ -625,7 +632,7 @@ body.typing #tabs, body.typing #grid{display:none}
 
       <b>Things you set up</b>
       <ol class="coach">
-        <li><b>Answers in their board place</b> (section 2). Each pop-up answer appears where that word sits on its own page, so your child's hand learns one spot per word.</li>
+        <li><b>How answers are shown</b> (section 2). Three choices: a few very big buttons; each answer in the spot where that word sits on its own page, so your child's hand learns one place per word; or no pop-up at all, where the page with the answers opens and your child finds the word.</li>
         <li><b>Build the answer</b> (section 2). The pop-up adds I, not, want and like. Your child taps words in order and the talker says just those words. Say the full sentence back yourself as the model.</li>
         <li><b>Word endings</b> (section 5). Hold a word for about a second to choose play, plays, playing or played; cookie or cookies; mom or mom's.</li>
         <li><b>About your child.</b> In section 1, a short set of questions adds your child's own people, pets, foods, drinks, places and favorite things, and the places your family eats. Those answers come up first when someone asks a question.</li>
@@ -1374,7 +1381,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving your own'},
     {n:6, name:'6. Teen and adult words', note:'Adds 96 of the most used everyday words on four pages. Sentences are said word for word'}
   ];
-  var state = { placeAns:false, buildAns:false, endings:false, about:{}, aboutSeen:false, photosOn:true, onDevice:true, names:true, name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { ansMode:'big', placeAns:false, buildAns:false, endings:false, about:{}, aboutSeen:false, photosOn:true, onDevice:true, names:true, name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
@@ -1392,7 +1399,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(saved.stage>=1) state.stage=Math.min(6, Math.floor(+saved.stage));
       if(Array.isArray(saved.questions)) state.questions = saved.questions.filter(function(q){ return typeof q==='string' && q.trim(); }).slice(0, 12);
       state.smart = saved.smart===true;
-      state.placeAns = saved.placeAns===true; state.buildAns = saved.buildAns===true; state.endings = saved.endings===true;
+      state.ansMode = /^(big|place|page)$/.test(saved.ansMode) ? saved.ansMode : (saved.placeAns===true ? 'place' : 'big'); state.placeAns = state.ansMode==='place'; state.buildAns = saved.buildAns===true; state.endings = saved.endings===true;
       state.photosOn = saved.photosOn!==false; state.aboutSeen = saved.aboutSeen===true;
       if(saved.about && typeof saved.about==='object' && !Array.isArray(saved.about)) Object.keys(saved.about).forEach(function(k){ if(Array.isArray(saved.about[k])) state.about[k] = saved.about[k].filter(function(x){ return typeof x==='string'; }).slice(0, 12); }); state.hc = saved.hc===true; state.seeTalk = saved.seeTalk===true; state.buzz = saved.buzz===true;
       if(saved.size==='pic' || saved.size==='word') state.size = saved.size;
@@ -1415,7 +1422,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,names:state.names,onDevice:state.onDevice,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz,photosOn:state.photosOn,about:state.about,aboutSeen:state.aboutSeen,placeAns:state.placeAns,buildAns:state.buildAns,endings:state.endings})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,names:state.names,onDevice:state.onDevice,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz,photosOn:state.photosOn,about:state.about,aboutSeen:state.aboutSeen,ansMode:state.ansMode,buildAns:state.buildAns,endings:state.endings})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -1452,7 +1459,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v75) ---'+
+      dbgText = '\n--- Listening check (v76) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2178,7 +2185,8 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   /* ----- Word endings (a grown-up switch): hold a word and its other forms pop out next to it -----
      A press that is still down after ENDS_MS opens the choices; lifting then leaves them up to pick from.
      A press that goes on past the resting-hand time is a hand lying on the screen: the choices close again. */
-  var endsSkip = null, endsT = null, endsRestT = null, endsHideT = null, endsFor = null;
+  var endsSkip = null, endsT = null, endsRestT = null, endsHideT = null, endsFor = null, endsLast = '';
+  function endsNote(){ $('endsNote').textContent = !state.endings ? '' : ('Check: '+(endsLast || 'no word has been held yet since this page opened.')); }
   function endsMs(){ return Math.max(650, state.hold*1000 + 450); }
   function endsClose(){ clearTimeout(endsHideT); endsFor = null; var box = $('ends'); box.hidden = true; box.textContent = ''; }
   function formWord(w, f){
@@ -2207,16 +2215,16 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var stop = function(){ clearTimeout(endsT); clearTimeout(endsRestT); pid = null; };
     b.addEventListener('pointerdown', function(e){
       if(!state.endings || (e.pointerType==='mouse' && e.button!==0) || inEdge(e) || pid!==null) return;
-      var ms = endsMs(); if(ms > REST_MS - 250) return;                 // a very long "hold time" setting leaves no room for it
-      var forms = wordForms(w); if(!forms.length) return;
-      pid = e.pointerId;
+      var ms = endsMs(); if(ms > REST_MS - 250){ endsLast = 'the "hold time" touch setting is too long for endings to fit. Lower it in section 7.'; return; }
+      var forms = wordForms(w); if(!forms.length){ endsLast = '"'+w.label+'" has no other forms, so nothing pops out for it.'; return; }
+      pid = e.pointerId; var t0 = Date.now(); b._endT0 = t0; endsLast = '"'+w.label+'" was pressed.';
       clearTimeout(endsT); endsT = setTimeout(function(){
         if(pid===null || !b.isConnected || Date.now() < tapBlockUntil) return;
-        endsSkip = b; endsOpen(b, w, forms); buzz();
+        endsSkip = b; endsOpen(b, w, forms); buzz(); endsLast = 'the endings opened for "'+w.label+'".';
       }, ms);
       clearTimeout(endsRestT); endsRestT = setTimeout(function(){ if(pid!==null && endsFor===b) endsClose(); }, REST_MS + 30);   // still down: a resting hand
     });
-    var up = function(e){ if(e.pointerId!==pid) return; stop(); setTimeout(function(){ if(endsSkip===b) endsSkip = null; }, 0); };
+    var up = function(e){ if(e.pointerId!==pid) return; if(endsFor!==b) endsLast = '"'+w.label+'": '+(e.type==='pointercancel' ? 'the tablet itself cancelled the touch' : 'the finger lifted')+' after '+((Date.now()-(b._endT0||Date.now()))/1000).toFixed(1)+' seconds, before the '+(endsMs()/1000).toFixed(1)+' seconds needed.'; stop(); setTimeout(function(){ if(endsSkip===b) endsSkip = null; }, 0); };
     b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
     b.addEventListener('pointerleave', function(e){ if(e.pointerId===pid && endsFor!==b) stop(); });
   }
@@ -2305,7 +2313,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       var l = document.createElement('span'); l.textContent = p.label;
       b.appendChild(i); b.appendChild(l);
       onPress(b, function(){
-        state.page = p.id; openOnly = null; if(p.id==='photos' && scenes.length!==1) openScene = null; renderTabs(); renderGrid();   // pressing a tab always shows the whole page
+        state.page = p.id; openOnly = null; pageAskUntil = 0; if(p.id==='photos' && scenes.length!==1) openScene = null; renderTabs(); renderGrid();   // pressing a tab always shows the whole page
         if(!state.fresh && state.taps.length){ clearTimeout(state.timer); state.timer = setTimeout(finish, PAGE_WAIT); }
       }, {noRepeatGuard:true});
       t.appendChild(b);
@@ -2757,7 +2765,8 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     speak(w.label);                               // her own word, right away
     showWord(el, w.label);                        // and the written word, paired with the sound
     plogWord(w.root || id);                       // an ending counts toward its own word in the progress log
-    if(openAskUntil && Date.now() < openAskUntil && w.page!=='core'){ openAskUntil = 0; plogAdd('answered','open'); }   // answered an open question from its page
+    if(pageAskUntil && Date.now() < pageAskUntil){ pageAskUntil = 0; openAskUntil = 0; plogAdd('answered', askKind || 'open'); }   // answered straight from the page
+    else if(openAskUntil && Date.now() < openAskUntil && w.page!=='core'){ openAskUntil = 0; plogAdd('answered','open'); }   // answered an open question from its page
     clearTimeout(state.timer);
     state.timer = setTimeout(finish, Math.max(COMPOSE_WAIT, state.repeat*1000 + 1500));
     if(!stay && w.page!=='core' && state.page!=='core'){   // back to the home words after a page word
@@ -3064,7 +3073,8 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   function maybeAsk(text){
     if(state.ask==='off' || $('panel').classList.contains('open')) return;
     if(askDone && !$('ask').hidden) return;                        // her answer is still showing
-    if(!$('ask').hidden && !sameSentence(text)){ askKept++; return; }   // a pop-up is up: more talk (a grown-up going through the choices) must not swap it for a different one
+    if(!$('ask').hidden && !sameSentence(text)){ askKept++; return; }
+    if(pageAskUntil > Date.now() && !sameSentence(text)){ askKept++; return; }   // "whole page" answers: the page is open and waiting for her   // a pop-up is up: more talk (a grown-up going through the choices) must not swap it for a different one
     if(!state.fresh && state.taps.length){ pendingQ = {text:text, at:Date.now()}; return; }   // mid-message: ask right after
     if(state.ask==='name' && state.name && !nameHeard(text, state.name)) return;
     askSrc = {norm:norm(text), at:Date.now(), early:heardEarly};
@@ -3078,6 +3088,10 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   }
   function showAsk(text, q){
     if(!q){ openPageFor(text); return; }
+    if(state.ansMode==='page'){                    // no pop-up: open the page the answers are on
+      var pgs = q.kind==='yesno' ? ['core'] : q.options.map(function(o){ var ow = o.id && LOOKUP[o.id]; return ow ? (ow.page || 'core') : null; });
+      if(pgs.length && pgs.every(function(x){ return x && x===pgs[0]; }) && pageAnswer(pgs[0], q.kind==='yesno' ? 'yesno' : 'choice')) return;
+    }
     askReset(); var box = $('askOpts'); box.textContent = '';
     box.classList.remove('many', 'eight', 'ten');
     $('askQ').textContent = q.question+'?';
@@ -3092,6 +3106,20 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     askArrange(q.kind!=='yesno');
     $('ask').hidden = false;
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
+  }
+  /* The third way to show answers (a grown-up choice): nothing pops up. The page that holds the answers opens, whole,
+     and she finds the word herself. While it waits for her, more talk does not flip the page again. */
+  var pageAskUntil = 0;
+  function pageAnswer(page, kindLog){
+    if(page!=='core' && (state.stage < 3 || !PAGES.some(function(x){ return x.id===page; }))) return false;   // no such page on the board at this stage: use the pop-up
+    hideAsk();
+    openOnly = null; state.page = page; renderTabs(); renderGrid();
+    if(page!=='core') glowOne($('tabs').querySelector('[data-page="'+page+'"]'));
+    askKind = kindLog; plogAdd('asked', kindLog);
+    openAskUntil = Date.now()+25000; pageAskUntil = Date.now()+25000;
+    clearTimeout(pageT);
+    pageT = setTimeout(function(){ pageAskUntil = 0; if(page!=='core' && state.page===page && (state.fresh || !state.taps.length)){ state.page='core'; renderTabs(); renderGrid(); } }, 25000);
+    return true;
   }
   /* "What do you want to eat?" -> the Food words. At Stage 3 her board flips to that page.
      Up to six of those words pop up as big choices at every stage; from Stage 3 "More choices" opens the whole page. */
@@ -3174,6 +3202,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     if(page==='do'){                             // "what do you want to do?": the doing words she has at this stage
       var acts = ['play','eat','drink','go','look','help'].map(function(id){ return LOOKUP[id]; }).filter(function(w){ return w && (w.s||1) <= state.stage; });
       if(!acts.length) return;
+      if(state.ansMode==='page' && pageAnswer('core', 'open')) return;
       askReset(); var bx = $('askOpts'); bx.textContent = ''; bx.classList.remove('eight', 'ten'); bx.classList.add('many');
       $('askQ').textContent = clean(text, state.name)+'?';
       acts.forEach(function(w){ bx.appendChild(askKey(w, w.label, 'action', compose(['want', w.id], '', state.name).sentence || wordSentence(w), [w.id])); });
@@ -3186,6 +3215,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var fits = page==='places' ? function(w){ return !!w.eat; } : function(w){ return isDrink(w) === (kind==='drink'); };      // drinks for a drink question, food for a food question, the family's eating places for "where should we eat"
 
     if(!words.length) return;
+    if(state.ansMode==='page' && pageAnswer(page, 'open')) return;
     var showPage = function(){
       openOnly = null;
       if(kind){ openOnly = {page:page, until:Date.now()+25000, ids:{}}; custom.concat(FRINGE).filter(function(w){ return w.page===page && fits(w); }).forEach(function(w){ openOnly.ids[w.id] = 1; }); }
@@ -3266,7 +3296,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   }
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
-    $('qList').value = state.questions.join('\n'); $('olderOn').checked = state.older; $('smartOn').checked = state.smart; $('placeOn').checked = state.placeAns; $('buildOn').checked = state.buildAns; $('endsOn').checked = state.endings; smartNote(); $('namesOn').checked = state.names; namesNote(); $('deviceRow').hidden = !NS; $('deviceOn').checked = state.onDevice;
+    $('qList').value = state.questions.join('\n'); $('olderOn').checked = state.older; $('smartOn').checked = state.smart; $('ansMode').value = state.ansMode; ansNote(); $('buildOn').checked = state.buildAns; $('endsOn').checked = state.endings; endsNote(); smartNote(); $('namesOn').checked = state.names; namesNote(); $('deviceRow').hidden = !NS; $('deviceOn').checked = state.onDevice;
     $('hcOn').checked = state.hc; $('seeTalkOn').checked = state.seeTalk; $('buzzOn').checked = state.buzz; $('sizeSel').value = state.size; $('gapSel').value = state.gap;
     $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('wordsOn').checked = state.words; $('modelOn').checked = state.modelBtn; $('logOn').checked = state.log !== false; renderReport(); clearArmed = false; $('reportClear').textContent = 'Clear the log'; $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
     hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderResearch(); renderVoices(); showDiag(); $('picGrid').textContent = ''; $('picFind').value = LOOKUP[$('picWord').value] ? LOOKUP[$('picWord').value].label : ''; $('panel').classList.add('open');
@@ -3318,9 +3348,10 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   $('deviceOn').addEventListener('change', function(){ state.onDevice = this.checked; ns.streak = 0; ns.noDevice = false; ns.dead = false; ns.errs = 0; ns.lastErr = ''; $('deviceMsg').textContent = ''; save(); pickListening(); });
   $('namesOn').addEventListener('change', function(){ state.names = this.checked; cloud.namesRefused = false; save(); namesNote(); });
   $('smartOn').addEventListener('change', function(){ state.smart = this.checked; save(); smartNote(); });
-  $('placeOn').addEventListener('change', function(){ state.placeAns = this.checked; save(); });
+  function ansNote(){ $('ansNote').textContent = state.ansMode==='big' ? 'A few answers as very big buttons. Easiest to hit.' : state.ansMode==='place' ? 'Each answer appears exactly where that word sits on its own page, at the size of a board picture, so your child\'s hand always finds a word in the same spot. Answers that are not board words (colors, numbers, AI answers) still use the big buttons.' : 'Nothing pops up. The page that holds the answers opens and your child finds the word. Yes or no questions go to the home words. At Stages 1 and 2 there are no word pages yet, so food, people and places questions still use the big buttons, as do colors, numbers and AI answers.'; }
+  $('ansMode').addEventListener('change', function(){ state.ansMode = this.value; state.placeAns = state.ansMode==='place'; save(); ansNote(); hideAsk(); });
   $('buildOn').addEventListener('change', function(){ state.buildAns = this.checked; save(); });
-  $('endsOn').addEventListener('change', function(){ state.endings = this.checked; save(); endsClose(); });
+  $('endsOn').addEventListener('change', function(){ state.endings = this.checked; save(); endsClose(); endsNote(); });
   $('olderOn').addEventListener('change', function(){ state.older = this.checked; setOlder(state.older, labels); save(); renderPicList(); renderFavs(); renderAll(); });
   $('qList').addEventListener('change', function(){ state.questions = this.value.split('\n').map(function(q){ return q.trim().slice(0, 80); }).filter(Boolean).slice(0, 12); this.value = state.questions.join('\n'); save(); if(state.page==='questions') renderGrid(); });
   $('voiceSel').addEventListener('change', function(){ state.voiceName = this.value; save(); pickVoice(); cvUnlock(); cvWarm(); });
