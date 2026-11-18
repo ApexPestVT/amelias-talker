@@ -1322,7 +1322,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v65) ---'+
+      dbgText = '\n--- Listening check (v66) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2804,21 +2804,50 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
      Up to six of those words pop up as big choices at every stage; from Stage 3 "More choices" opens the whole page. */
   var pageT = null, openOnly = null;
   /* The words offered for an open question: the grown-up's picks in their order, else her added words, then the built-in ones. */
-  function offered(page){
+  /* Food and drinks are picked separately: "food" holds the six foods, "food:drink" the six drinks. */
+  function favFits(key){
+    var page = key.split(':')[0], drinks = key.indexOf(':drink') > 0;
+    return function(w){ return !!w && w.page===page && (page!=='food' || isDrink(w)===drinks); };
+  }
+  function favPicks(key){ return (state.favs[key]||[]).map(function(id){ return LOOKUP[id]; }).filter(favFits(key)); }
+  function favSplit(){                              // picks saved before food and drinks were separate lists: move the drinks to their own list
+    var old = state.favs.food; if(!Array.isArray(old)) return;
+    var dr = old.filter(function(id){ return LOOKUP[id] && LOOKUP[id].page==='food' && isDrink(LOOKUP[id]); });
+    if(!dr.length) return;
+    state.favs.food = old.filter(function(id){ return dr.indexOf(id) < 0; });
+    state.favs['food:drink'] = dr.concat((state.favs['food:drink']||[]).filter(function(id){ return dr.indexOf(id) < 0; })).slice(0, 6);
+    save();
+  }
+  function offered(page, kind){
     var all = custom.concat(FRINGE).filter(function(w){ return w.page===page; });
-    var picks = (state.favs[page]||[]).map(function(id){ return LOOKUP[id]; }).filter(function(w){ return w && w.page===page; });
-    return picks.length ? picks : all;
+    if(page!=='food'){ var picks = favPicks(page); return picks.length ? picks : all; }
+    favSplit();
+    var foods = favPicks('food'), drinks = favPicks('food:drink');
+    var pad = function(list, key){ return list.length===1 ? list.concat(all.filter(favFits(key)).filter(function(w){ return w!==list[0]; })) : list; };   // one pick alone is not a choice: the rest follow it
+    foods = pad(foods, 'food'); drinks = pad(drinks, 'food:drink');
+    if(kind==='drink') return drinks.length ? drinks : all.filter(favFits('food:drink'));
+    if(kind==='eat') return foods.length ? foods : all.filter(favFits('food'));
+    if(foods.length || drinks.length){               // a question about both, or about neither in particular: some of each
+      if(!foods.length) foods = all.filter(favFits('food')); if(!drinks.length) drinks = all.filter(favFits('food:drink'));
+      return foods.slice(0, drinks.length ? 4 : 6).concat(drinks.slice(0, 2));
+    }
+    return all;
   }
   function renderFavs(){
     var sel = $('favPage');
     if(!sel.options.length){
-      PAGES.filter(function(x){ return x.id!=='core'; }).forEach(function(x){ var o=document.createElement('option'); o.value=x.id; o.textContent=x.label; sel.appendChild(o); });
+      PAGES.filter(function(x){ return x.id!=='core'; }).forEach(function(x){
+        var o=document.createElement('option'); o.value=x.id; o.textContent=x.label; sel.appendChild(o);
+        if(x.id==='food'){ var d=document.createElement('option'); d.value='food:drink'; d.textContent='Drinks'; sel.appendChild(d); }
+      });
       sel.addEventListener('change', renderFavs);
     }
-    var page = sel.value, picks = (state.favs[page]||[]).filter(function(id){ return LOOKUP[id] && LOOKUP[id].page===page; });
+    favSplit();
+    var page = sel.value, fits = favFits(page), picks = (state.favs[page]||[]).filter(function(id){ return fits(LOOKUP[id]); });
     state.favs[page] = picks;
+    $('favMsg').textContent = picks.length ? 'These '+picks.length+' will be offered, in this order.' : 'None picked: the first six on the list are offered. Tap up to six; they pop up in the order you pick them.';
     var box = $('favList'); box.textContent = '';
-    custom.concat(FRINGE).filter(function(w){ return w.page===page; }).forEach(function(w){
+    custom.concat(FRINGE).filter(fits).forEach(function(w){
       var b = document.createElement('button'), at = picks.indexOf(w.id);
       b.type = 'button'; b.className = 'fav'+(at>=0?' sel':''); b.setAttribute('aria-pressed', at>=0 ? 'true' : 'false');
       if(at>=0){ var n = document.createElement('b'); n.textContent = String(at+1); b.appendChild(n); }
@@ -2846,13 +2875,8 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       $('ask').hidden = false; clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
       return;
     }
-    var words = offered(page), kind = page==='food' ? openKind(text, state.name) : null;
-    if(kind){                                    // drinks for a drink question, food for a food question
-      var fits = function(w){ return isDrink(w) === (kind==='drink'); };
-      var some = words.filter(fits);
-      if(!some.length) some = custom.concat(FRINGE).filter(function(w){ return w.page===page; }).filter(fits);
-      if(some.length) words = some;
-    }
+    var kind = page==='food' ? openKind(text, state.name) : null, words = offered(page, kind);
+    var fits = function(w){ return isDrink(w) === (kind==='drink'); };      // drinks for a drink question, food for a food question
     if(!words.length) return;
     var showPage = function(){
       openOnly = null;
