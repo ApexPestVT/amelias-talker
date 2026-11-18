@@ -1,9 +1,12 @@
-// My Turn To-Go (the My Turn wristband), version 0.1
+// My Turn To-Go (the My Turn wristband), version 0.2
 // Board: Seeed XIAO ESP32-S3. Amplifier: SparkFun DEV-14809 (MAX98357A). Four keys to ground.
 // Wiring is the table in the Build Guide. Pin numbers below are the chip's GPIO numbers; the board's own labels are in the comments.
 //
 // What it does
 //  - A key press says that key's phrase from a clip stored on the wristband. No tablet is needed to talk.
+//  - Up to 12 phrases on the 4 keys, in three levels a grown-up picks in the app:
+//      Level 1: tap (4 phrases).  Level 2: tap, and press and hold (8).  Level 3: tap, press and hold, and double tap (12).
+//    The key logic is in keys.h and is tested on a computer by wristband/test/keys-test.js.
 //  - Hold GREEN and RED together for 3 seconds: two rising beeps, and Bluetooth is open for 3 minutes so the My Turn app can send phrases and settings.
 //    Bluetooth is off at all other times.
 //  - After 2 minutes with no key it sleeps (if "sleep" is on). Any key wakes it and is spoken.
@@ -21,9 +24,10 @@
 #include "driver/rtc_io.h"
 #include "esp_sleep.h"
 #include "codec.h"
+#include "keys.h"
 
 #define FW_MAJOR 0
-#define FW_MINOR 1
+#define FW_MINOR 2
 
 // ---- pins (GPIO number, board label) ----
 static const uint8_t KEY_PIN[4] = {1, 2, 4, 5};   // D0 green (circle), D1 red (X), D3 yellow (triangle), D4 blue (square)
@@ -33,11 +37,10 @@ static const uint8_t KEY_PIN[4] = {1, 2, 4, 5};   // D0 green (circle), D1 red (
 #define PIN_AMP 6                                  // D5  -> amplifier SD (high = on)
 
 // ---- timings ----
-#define DEBOUNCE_MS 25
 #define PAIR_HOLD_MS 3000
 #define PAIR_OPEN_MS 180000UL
 #define SLEEP_AFTER_MS 120000UL
-#define HOLD_MS 700                                // press-and-hold time for the second phrase
+#define HOLD_MS 700                                // press-and-hold time for the hold phrase
 #define MAX_CLIP 98304                             // bytes, about 12 seconds
 
 // ---- Bluetooth names (the app uses the same) ----
@@ -49,7 +52,7 @@ enum { CMD_BEGIN = 1, CMD_END = 2, CMD_SETTINGS = 3, CMD_PLAY = 4, CMD_DELETE = 
 enum { RES_OK = 0, RES_SIZE = 1, RES_CRC = 2, RES_STORE = 3, RES_FORMAT = 4 };
 
 // ---- settings (kept when the battery is flat) ----
-struct Settings { uint8_t vol; bool dbl, hold, guard, sleep; uint16_t waitMs; } cfg = {6, false, false, true, true, 400};
+struct Settings { uint8_t vol; bool dbl, hold, guard, sleep; uint16_t waitMs; } cfg = {6, false, false, true, true, 400};   // hold = hold phrases on (Level 2 and 3), dbl = double-tap phrases on (Level 3)
 Preferences prefs;
 I2SClass i2s;
 bool i2sOn = false;
@@ -66,12 +69,9 @@ volatile bool rxOverflow = false, doEnd = false, doSettings = false;
 volatile int8_t doPlay = -1, doDelete = -1;
 Settings newCfg;
 
-// ---- keys ----
-bool down[4] = {false, false, false, false};
-uint32_t changedAt[4] = {0, 0, 0, 0}, pressedAt[4] = {0, 0, 0, 0};
-bool heldSpoken[4] = {false, false, false, false};
-int8_t waitingKey = -1;                            // a first tap waiting to see if a second one follows
-uint32_t waitingSince = 0, lastActive = 0, comboSince = 0;
+// ---- keys (the logic is in keys.h) ----
+MtKeyState ks;
+uint32_t lastActive = 0, comboSince = 0;
 bool comboDone = false;
 
 String slotPath(uint8_t slot) { return String("/s") + String(slot) + ".adp"; }
@@ -118,7 +118,7 @@ void beep(uint8_t kind) {                            // 0 = nothing stored on th
   if (kind == 3) tone2(880, 70);
   ampOff();
 }
-bool anyNewPress() { for (int k = 0; k < 4; k++) if (!down[k] && digitalRead(KEY_PIN[k]) == LOW) return true; return false; }
+bool anyNewPress() { for (int k = 0; k < 4; k++) if (!ks.down[k] && digitalRead(KEY_PIN[k]) == LOW) return true; return false; }
 
 // Plays one stored clip. Returns false if there is none (or it is damaged).
 bool playSlot(uint8_t slot) {
@@ -143,20 +143,27 @@ bool playSlot(uint8_t slot) {
   f.close(); ampOff();
   return true;
 }
-void speak(uint8_t key, bool second) {
-  uint8_t slot = key + (second ? 4 : 0);
-  if (second && !slotHas(slot)) slot = key;
+bool hostHas(uint8_t slot) { return slot < MT_SLOTS && slotHas(slot); }
+bool hostDown(uint8_t k) { return digitalRead(KEY_PIN[k]) == LOW; }
+uint32_t hostNow() { return millis(); }
+void speak(uint8_t key, uint8_t kind);
+const MtKeyHost keyHost = {hostHas, speak, hostDown, hostNow};
+MtKeyCfg keyCfg() { MtKeyCfg c = {cfg.hold, cfg.dbl, cfg.waitMs, HOLD_MS}; return c; }
+void speak(uint8_t key, uint8_t kind) {              // kind: MT_TAP, MT_HOLD or MT_DOUBLE
+  uint8_t slot = mtSlot(key, kind);
+  if (kind != MT_TAP && !slotHas(slot)) slot = key;
   if (!playSlot(slot)) beep(0);
   lastActive = millis();
-  if (cfg.guard) { uint32_t now = millis(); for (uint8_t k = 0; k < 4; k++) { bool d = digitalRead(KEY_PIN[k]) == LOW; if (d && !down[k]) heldSpoken[k] = true; down[k] = d; changedAt[k] = now; } }   // presses made while it was talking are dropped
+  if (cfg.guard) mtKeysResync(ks, keyHost);          // presses made while it was talking are dropped
 }
 
 // ---------- Bluetooth ----------
 void notify(uint8_t what, uint8_t slot, uint8_t result) {
   if (!chStatus) return;
-  uint8_t have = 0; for (uint8_t s = 0; s < 8; s++) if (slotHas(s)) have |= (1 << s);
-  uint8_t v[10] = {what, slot, result, FW_MAJOR, FW_MINOR, have, cfg.vol,
-                   (uint8_t)((cfg.dbl ? 1 : 0) | (cfg.hold ? 2 : 0) | (cfg.guard ? 4 : 0) | (cfg.sleep ? 8 : 0)), (uint8_t)(cfg.waitMs & 255), (uint8_t)(cfg.waitMs >> 8)};
+  uint16_t have = 0; for (uint8_t s = 0; s < MT_SLOTS; s++) if (slotHas(s)) have |= (uint16_t)(1 << s);
+  uint8_t v[11] = {what, slot, result, FW_MAJOR, FW_MINOR, (uint8_t)(have & 255), cfg.vol,
+                   (uint8_t)((cfg.dbl ? 1 : 0) | (cfg.hold ? 2 : 0) | (cfg.guard ? 4 : 0) | (cfg.sleep ? 8 : 0)), (uint8_t)(cfg.waitMs & 255), (uint8_t)(cfg.waitMs >> 8),
+                   (uint8_t)(have >> 8)};   // byte 10 (new in 0.2): slots 8 to 11
   chStatus->setValue(v, sizeof(v));
   if (bleLinked) chStatus->notify();
 }
@@ -167,21 +174,21 @@ class LinkEvents : public BLEServerCallbacks {
 class CtrlEvents : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *c) override {
     uint8_t *p = c->getData(); size_t n = c->getLength(); if (!p || !n) return;
-    if (p[0] == CMD_BEGIN && n >= 10 && p[1] < 8) {
+    if (p[0] == CMD_BEGIN && n >= 10 && p[1] < MT_SLOTS) {
       rxWant = (uint32_t)p[2] | ((uint32_t)p[3] << 8) | ((uint32_t)p[4] << 16) | ((uint32_t)p[5] << 24);
       rxCrc = (uint32_t)p[6] | ((uint32_t)p[7] << 8) | ((uint32_t)p[8] << 16) | ((uint32_t)p[9] << 24);
       rxLen = 0; rxOverflow = false; rxSlot = p[1];
     } else if (p[0] == CMD_END) { doEnd = true; }
     else if (p[0] == CMD_SETTINGS && n >= 5) {
       newCfg.vol = p[1]; newCfg.dbl = p[2] & 1; newCfg.hold = p[2] & 2; newCfg.guard = p[2] & 4; newCfg.sleep = p[2] & 8; newCfg.waitMs = (uint16_t)(p[3] | (p[4] << 8)); doSettings = true;
-    } else if (p[0] == CMD_PLAY && n >= 2 && p[1] < 8) { doPlay = p[1]; }
-    else if (p[0] == CMD_DELETE && n >= 2 && p[1] < 8) { doDelete = p[1]; }
+    } else if (p[0] == CMD_PLAY && n >= 2 && p[1] < MT_SLOTS) { doPlay = p[1]; }
+    else if (p[0] == CMD_DELETE && n >= 2 && p[1] < MT_SLOTS) { doDelete = p[1]; }
   }
 };
 class DataEvents : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *c) override {
     uint8_t *p = c->getData(); size_t n = c->getLength();
-    if (!p || !n || rxSlot > 7 || !rxBuf) return;
+    if (!p || !n || rxSlot >= MT_SLOTS || !rxBuf) return;
     if (rxLen + n > MAX_CLIP || rxLen + n > rxWant) { rxOverflow = true; return; }
     memcpy(rxBuf + rxLen, p, n); rxLen += n;
   }
@@ -218,7 +225,7 @@ void bleWork() {
   if (doEnd) {
     doEnd = false; uint8_t slot = rxSlot, res = RES_OK; rxSlot = 255;
     uint16_t rate; uint32_t samples;
-    if (slot > 7 || rxOverflow || rxLen != rxWant || rxLen < MT_HEADER) res = RES_SIZE;
+    if (slot >= MT_SLOTS || rxOverflow || rxLen != rxWant || rxLen < MT_HEADER) res = RES_SIZE;
     else if (mtCrc(rxBuf, rxLen) != rxCrc) res = RES_CRC;
     else if (!mtHeader(rxBuf, rxLen, rate, samples)) res = RES_FORMAT;
     else {
@@ -255,28 +262,13 @@ void goToSleep() {
 }
 
 // ---------- keys ----------
-void keyPressed(uint8_t k, uint32_t now) {
-  lastActive = now; pressedAt[k] = now; heldSpoken[k] = false;
-  bool hasSecond = cfg.dbl && slotHas(k + 4);
-  if (!hasSecond) { waitingKey = -1; speak(k, false); return; }
-  if (cfg.hold) return;                                    // decided on release, or when the hold time passes
-  if (waitingKey == (int8_t)k && now - waitingSince <= cfg.waitMs) { waitingKey = -1; speak(k, true); return; }   // second tap in time
-  if (waitingKey >= 0) { uint8_t w = waitingKey; waitingKey = -1; speak(w, false); }                               // a different key: say the one that was waiting first
-  waitingKey = k; waitingSince = now;
-}
-void keyReleased(uint8_t k, uint32_t now) {
-  if (cfg.dbl && cfg.hold && slotHas(k + 4) && !heldSpoken[k]) speak(k, false);   // let go before the hold time: first phrase
-}
 void scanKeys() {
-  uint32_t now = millis();
-  for (uint8_t k = 0; k < 4; k++) {
-    bool d = digitalRead(KEY_PIN[k]) == LOW;
-    if (d != down[k] && now - changedAt[k] >= DEBOUNCE_MS) { down[k] = d; changedAt[k] = now; if (d) keyPressed(k, now); else keyReleased(k, now); }
-    if (down[k] && cfg.dbl && cfg.hold && !heldSpoken[k] && slotHas(k + 4) && now - pressedAt[k] >= HOLD_MS) { heldSpoken[k] = true; speak(k, true); }
-  }
-  if (waitingKey >= 0 && millis() - waitingSince > cfg.waitMs) { uint8_t w = waitingKey; waitingKey = -1; speak(w, false); }   // no second tap came
+  bool wasDown = false; for (uint8_t k = 0; k < 4; k++) if (ks.down[k]) wasDown = true;
+  bool pair = mtKeysScan(ks, keyCfg(), keyHost);
+  bool isDown = false; for (uint8_t k = 0; k < 4; k++) if (ks.down[k]) isDown = true;
+  if (wasDown || isDown) lastActive = millis();
   // green + red held together opens Bluetooth
-  if (down[0] && down[1]) {
+  if (pair) {
     if (!comboSince) comboSince = millis();
     if (!comboDone && millis() - comboSince >= PAIR_HOLD_MS) { comboDone = true; bleStart(); }
   } else { comboSince = 0; comboDone = false; }
@@ -288,18 +280,19 @@ void setup() {
   for (int k = 0; k < 4; k++) { rtc_gpio_deinit((gpio_num_t)KEY_PIN[k]); pinMode(KEY_PIN[k], INPUT_PULLUP); }
   LittleFS.begin(true);
   loadSettings();
+  mtKeysReset(ks);
   lastActive = millis();
   if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1) {      // woken by a key: say it straight away
     uint64_t which = esp_sleep_get_ext1_wakeup_status();
-    for (uint8_t k = 0; k < 4; k++) if (which & (1ULL << KEY_PIN[k])) { down[k] = true; changedAt[k] = millis(); keyPressed(k, millis()); break; }
+    for (uint8_t k = 0; k < 4; k++) if (which & (1ULL << KEY_PIN[k])) { ks.down[k] = true; ks.changedAt[k] = millis(); mtKeyPressed(ks, keyCfg(), keyHost, k); break; }
   }
 }
 
 void loop() {
   scanKeys();
   bleWork();
-  if (cfg.sleep && !bleOn && waitingKey < 0 && millis() - lastActive > SLEEP_AFTER_MS) {
-    bool anyDown = false; for (int k = 0; k < 4; k++) if (down[k]) anyDown = true;
+  if (cfg.sleep && !bleOn && ks.waitingKey < 0 && millis() - lastActive > SLEEP_AFTER_MS) {
+    bool anyDown = false; for (int k = 0; k < 4; k++) if (ks.down[k]) anyDown = true;
     if (!anyDown) goToSleep();
   }
   delay(4);

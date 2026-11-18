@@ -20,6 +20,8 @@ jobs:
           node-version: 22
       - name: Sound format test (tablet encoder against the wristband decoder)
         run: node wristband/test/codec-test.js
+      - name: Key test (tap, press and hold, double tap)
+        run: node wristband/test/keys-test.js
       - uses: arduino/setup-arduino-cli@v2
       - name: Install the board files
         run: |

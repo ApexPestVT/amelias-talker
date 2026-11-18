@@ -677,10 +677,14 @@ body.typing #tabs, body.typing #grid{display:none}
       <span class="lbl">Or pick a ready phrase</span>
       <div class="inline" id="wbReady"></div>
       <div id="wbSecondBox">
-        <label for="wbPhrase2">Second phrase, on a double tap</label>
+        <label for="wbPhrase2">Press and hold says</label>
         <div class="inline"><input type="text" id="wbPhrase2" maxlength="60" autocomplete="off" placeholder="Leave empty for none"><button class="btn" id="wbHear2" type="button">Hear it</button></div>
       </div>
-      <small id="wbSecondOff">A second phrase on a double tap can be switched on in Sound and taps.</small>
+      <div id="wbThirdBox">
+        <label for="wbPhrase3">Double tap says</label>
+        <div class="inline"><input type="text" id="wbPhrase3" maxlength="60" autocomplete="off" placeholder="Leave empty for none"><button class="btn" id="wbHear3" type="button">Hear it</button></div>
+      </div>
+      <small id="wbSecondOff"></small>
       <div class="inline wbfoot"><button class="btn" id="wbCancel" type="button">Cancel</button><button class="btn primary" id="wbSave" type="button">Save</button></div>
       <small id="wbEditMsg"></small>
     </div>
@@ -691,10 +695,11 @@ body.typing #tabs, body.typing #grid{display:none}
       <input type="range" id="wbVol" min="1" max="8" step="1">
       <small>It stops at 8 to protect hearing. The real limit will be set after the finished wristband's speaker is measured.</small>
       <h3>Taps</h3>
-      <label class="check"><input type="checkbox" id="wbDouble"> Double tap for a second phrase (8 phrases on 4 keys)</label>
+      <label for="wbLevel">How many phrases</label>
+      <select id="wbLevel"><option value="1">Level 1: tap only (4 phrases)</option><option value="2">Level 2: tap, and press and hold (up to 8)</option><option value="3">Level 3: tap, press and hold, and double tap (up to 12)</option></select>
+      <small id="wbLevelNote"></small>
       <label for="wbWait">How long to wait for the second tap</label>
       <select id="wbWait"><option value="300">Short, 0.3 seconds</option><option value="400">Medium, 0.4 seconds</option><option value="600">Long, 0.6 seconds</option></select>
-      <label class="check"><input type="checkbox" id="wbHold"> Use press and hold instead of two quick taps</label>
       <label class="check"><input type="checkbox" id="wbGuard"> Ignore extra taps until the key has finished talking</label>
       <label class="check"><input type="checkbox" id="wbSleep"> Sleep after 2 minutes of no taps (any key wakes it)</label>
       <button class="btn" id="wbReset" type="button">Put all wristband settings back to the start</button>
@@ -1326,7 +1331,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v69) ---'+
+      dbgText = '\n--- Listening check (v70) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -3224,14 +3229,18 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     {id:'blue', name:'Blue key', where:'bottom right', bg:'#2460c8', fg:'#fff', say:'Want to play?', svg:'<rect x="5.2" y="5.2" width="13.6" height="13.6" rx="1.2" fill="none" stroke-width="3"/>'}
   ];
   var WB_READY = ['Help, please.', 'More, please.', 'All done.', 'I need a break.', 'Can I have a turn?', 'Bathroom, please.'];
-  var WB_START = {say:{}, say2:{}, vol:6, dbl:false, wait:400, hold:false, guard:true, sleep:true};
+  var WB_START = {say:{}, say2:{}, say3:{}, level:1, vol:6, wait:400, guard:true, sleep:true};   // say = tap, say2 = press and hold, say3 = double tap
   var wb = JSON.parse(JSON.stringify(WB_START)), wbKey = null;
   try{ var wbSaved = JSON.parse(localStorage.getItem('talker-wristband') || 'null');
     if(wbSaved && typeof wbSaved==='object'){
-      ['say','say2'].forEach(function(k){ if(wbSaved[k] && typeof wbSaved[k]==='object') WB_KEYS.forEach(function(x){ if(typeof wbSaved[k][x.id]==='string') wb[k][x.id] = wbSaved[k][x.id].slice(0, 60); }); });
+      ['say','say2','say3'].forEach(function(k){ if(wbSaved[k] && typeof wbSaved[k]==='object') WB_KEYS.forEach(function(x){ if(typeof wbSaved[k][x.id]==='string') wb[k][x.id] = wbSaved[k][x.id].slice(0, 60); }); });
+      if(wbSaved.level===1 || wbSaved.level===2 || wbSaved.level===3) wb.level = wbSaved.level;
+      else if(wbSaved.dbl===true){                             // saved before the three levels: one "second phrase", by hold or by double tap
+        if(wbSaved.hold===true) wb.level = 2; else { wb.level = 3; wb.say3 = wb.say2; wb.say2 = {}; }
+      }
       if(wbSaved.vol >= 1 && wbSaved.vol <= 8) wb.vol = Math.round(wbSaved.vol);
       if([300,400,600].indexOf(wbSaved.wait) >= 0) wb.wait = wbSaved.wait;
-      ['dbl','hold','guard','sleep'].forEach(function(k){ if(typeof wbSaved[k]==='boolean') wb[k] = wbSaved[k]; });
+      ['guard','sleep'].forEach(function(k){ if(typeof wbSaved[k]==='boolean') wb[k] = wbSaved[k]; });
     } }catch(e){}
   function wbStore(){ try{ localStorage.setItem('talker-wristband', JSON.stringify(wb)); }catch(e){} }
   function wbSay(k){ if(typeof wb.say[k.id]==='string') return wb.say[k.id]; return k.id==='yellow' ? (state.name ? 'Hi! My name is '+state.name+'.' : 'Hi!') : k.say; }   // the hello key follows the child's name until a grown-up types its own phrase
@@ -3246,7 +3255,8 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       var t = document.createElement('div'); t.className = 't';
       var s1 = document.createElement('small'); s1.textContent = k.name+', '+k.where; t.appendChild(s1);
       var b = document.createElement('b'); b.textContent = wbSay(k); t.appendChild(b);
-      if(wb.dbl && wb.say2[k.id]){ var i = document.createElement('i'); i.textContent = (wb.hold ? 'Hold: ' : 'Double tap: ')+wb.say2[k.id]; t.appendChild(i); }
+      if(wb.level >= 2 && wb.say2[k.id]){ var i = document.createElement('i'); i.textContent = 'Hold: '+wb.say2[k.id]; t.appendChild(i); }
+      if(wb.level >= 3 && wb.say3[k.id]){ var i3 = document.createElement('i'); i3.textContent = 'Double tap: '+wb.say3[k.id]; t.appendChild(i3); }
       r.appendChild(t);
       var h = document.createElement('button'); h.type = 'button'; h.className = 'btn'; h.textContent = 'Hear'; h.setAttribute('aria-label', 'Hear '+wbSay(k)); h.addEventListener('click', function(){ wbHear(wbSay(k)); }); r.appendChild(h);
       var c = document.createElement('button'); c.type = 'button'; c.className = 'btn'; c.textContent = 'Change'; c.setAttribute('aria-label', 'Change the '+k.name.toLowerCase()); c.addEventListener('click', function(){ wbEditOpen(k); }); r.appendChild(c);
@@ -3256,13 +3266,15 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   function wbCount(){ $('wbCount').textContent = $('wbPhrase').value.length+' of 60 letters. Short phrases are easier to hear.'; }
   function wbEditOpen(k){
     wbKey = k; $('wbEditT').textContent = k.name; wbDot($('wbEditDot'), k);
-    $('wbPhrase').value = wbSay(k); $('wbPhrase2').value = wb.say2[k.id] || ''; wbCount(); $('wbEditMsg').textContent = '';
-    $('wbSecondBox').hidden = !wb.dbl; $('wbSecondOff').hidden = wb.dbl;
+    $('wbPhrase').value = wbSay(k); $('wbPhrase2').value = wb.say2[k.id] || ''; $('wbPhrase3').value = wb.say3[k.id] || ''; wbCount(); $('wbEditMsg').textContent = '';
+    $('wbSecondBox').hidden = wb.level < 2; $('wbThirdBox').hidden = wb.level < 3; $('wbSecondOff').hidden = wb.level >= 3;
+    $('wbSecondOff').textContent = wb.level < 2 ? 'This key can say more: a press-and-hold phrase (Level 2) and a double-tap phrase (Level 3). Switch levels in Sound and taps.' : 'A double-tap phrase can be added at Level 3, in Sound and taps.';
     var rd = $('wbReady'); rd.textContent = '';
     WB_READY.forEach(function(p){ var b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = p; b.addEventListener('click', function(){ $('wbPhrase').value = p; wbCount(); }); rd.appendChild(b); });
     wbShow('wbEdit');
   }
-  function wbSetFill(){ $('wbVol').value = wb.vol; $('wbVolN').textContent = wb.vol; $('wbDouble').checked = wb.dbl; $('wbWait').value = String(wb.wait); $('wbHold').checked = wb.hold; $('wbGuard').checked = wb.guard; $('wbSleep').checked = wb.sleep; $('wbWait').disabled = !wb.dbl || wb.hold; $('wbHold').disabled = !wb.dbl; }
+  function wbSetFill(){ $('wbVol').value = wb.vol; $('wbVolN').textContent = wb.vol; $('wbLevel').value = String(wb.level); $('wbWait').value = String(wb.wait); $('wbGuard').checked = wb.guard; $('wbSleep').checked = wb.sleep; $('wbWait').disabled = wb.level < 3;
+    $('wbLevelNote').textContent = wb.level===1 ? 'Each key says one phrase the moment it is pressed.' : wb.level===2 ? 'A quick press says the first phrase when the key is let go. Holding for about 0.7 seconds says the second. Set the hold phrases with Change on each key.' : 'Hold says the second phrase; two quick taps say the third. A single tap waits the time below before it talks, to see if a second tap is coming. Set the phrases with Change on each key.'; }
   /* ---------- the Bluetooth link to the wristband (same names and commands as wristband/firmware/MyTurnBand/MyTurnBand.ino) ---------- */
   var BAND = {svc:'7d2a0001-5c1e-4f0b-9a57-3f1c2d6e8b10', ctrl:'7d2a0002-5c1e-4f0b-9a57-3f1c2d6e8b10', data:'7d2a0003-5c1e-4f0b-9a57-3f1c2d6e8b10', stat:'7d2a0004-5c1e-4f0b-9a57-3f1c2d6e8b10'};
   var BAND_WHY = ['', 'part of the sound was lost on the way', 'the sound was damaged on the way', 'the wristband could not store it', 'the wristband did not understand the sound'];
@@ -3278,7 +3290,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       return;
     }
     if(bandOn()){
-      var n = 0; if(band.info) for(var i = 0; i < 8; i++) if(band.info.have & (1 << i)) n++;
+      var n = 0; if(band.info) for(var i = 0; i < 12; i++) if(band.info.have & (1 << i)) n++;
       t.textContent = 'Connected'; s.textContent = band.note || ((band.info ? 'Wristband software '+band.info.fw+'. '+n+' phrase'+(n===1?'':'s')+' stored on it. ' : '')+'Tap Send to put the phrases below on the wristband.');
     } else {
       t.textContent = 'Not connected'; s.textContent = band.note || 'On the wristband, hold the green and red keys together for 3 seconds, until it beeps twice. Then tap Find wristband.';
@@ -3286,7 +3298,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   }
   function bandInfo(v){
     if(!v || v.byteLength < 10) return null;
-    var i = {what:v.getUint8(0), slot:v.getUint8(1), result:v.getUint8(2), fw:v.getUint8(3)+'.'+v.getUint8(4), have:v.getUint8(5), vol:v.getUint8(6), flags:v.getUint8(7), wait:v.getUint16(8, true)};
+    var i = {what:v.getUint8(0), slot:v.getUint8(1), result:v.getUint8(2), fw:v.getUint8(3)+'.'+v.getUint8(4), have:v.getUint8(5) | (v.byteLength >= 11 ? v.getUint8(10) << 8 : 0), slots:v.byteLength >= 11 ? 12 : 8, vol:v.getUint8(6), flags:v.getUint8(7), wait:v.getUint16(8, true)};
     band.info = i; return i;
   }
   function bandHeard(e){
@@ -3367,21 +3379,23 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     });
   }
   function bandCmd(bytes, what){ var answer = bandWait(what, 6000); return band.ctrl.writeValueWithResponse(new Uint8Array(bytes)).then(function(){ return answer; }, function(e){ answer.catch(function(){}); throw e; }); }
-  function bandSettings(){ return bandCmd([3, wb.vol, (wb.dbl?1:0)|(wb.hold?2:0)|(wb.guard?4:0)|(wb.sleep?8:0), wb.wait & 255, wb.wait >> 8], 3).then(function(i){ if(i.result !== 0) throw new Error('the wristband refused the settings'); }); }
+  function bandSettings(){ return bandCmd([3, wb.vol, (wb.level>=3?1:0)|(wb.level>=2?2:0)|(wb.guard?4:0)|(wb.sleep?8:0), wb.wait & 255, wb.wait >> 8], 3).then(function(i){ if(i.result !== 0) throw new Error('the wristband refused the settings'); }); }
   function bandSend(){
     if(!bandOn() || band.busy) return;
     var jobs = [], keep = {};
     WB_KEYS.forEach(function(k, n){
       jobs.push({slot:n, text:wbSay(k)}); keep[n] = true;
-      if(wb.dbl && wb.say2[k.id]){ jobs.push({slot:n + 4, text:wb.say2[k.id]}); keep[n + 4] = true; }
+      if(wb.level >= 2 && wb.say2[k.id]){ jobs.push({slot:n + 4, text:wb.say2[k.id]}); keep[n + 4] = true; }
+      if(wb.level >= 3 && wb.say3[k.id]){ jobs.push({slot:n + 8, text:wb.say3[k.id]}); keep[n + 8] = true; }
     });
+    if(band.info && band.info.slots < 12 && wb.level >= 2){ band.note = 'This wristband has older software ('+band.info.fw+') that cannot do Levels 2 and 3. Load the newest wristband software, or set Level 1 in Sound and taps.'; bandUi(); return; }
     band.busy = true; var done = 0, chain = Promise.resolve();
     jobs.forEach(function(j, n){
       chain = chain.then(function(){ band.note = 'Getting phrase '+(n + 1)+' of '+jobs.length+' ready'; bandUi(); return bandClip(j.text); })
         .then(function(clip){ return bandPut(j.slot, clip, 0, function(p){ band.note = 'Sending phrase '+(n + 1)+' of '+jobs.length+': '+Math.round(p * 100)+'%. Keep the wristband near the tablet.'; bandUi(); }); })
         .then(function(){ done++; });
     });
-    [4, 5, 6, 7].forEach(function(sl){ if(!keep[sl]) chain = chain.then(function(){ if(band.info && (band.info.have & (1 << sl))) return bandCmd([5, sl], 5); }); });
+    [4, 5, 6, 7, 8, 9, 10, 11].forEach(function(sl){ if(!keep[sl]) chain = chain.then(function(){ if(band.info && (band.info.have & (1 << sl))) return bandCmd([5, sl], 5); }); });
     chain.then(bandSettings).then(function(){
       band.busy = false; band.note = 'Done. '+done+' phrase'+(done===1?' is':'s are')+' on the wristband. Press a key on it to check.'; bandUi();
     }, function(e){
@@ -3399,15 +3413,18 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   $('wbPhrase').addEventListener('input', wbCount);
   $('wbHear').addEventListener('click', function(){ wbHear($('wbPhrase').value); });
   $('wbHear2').addEventListener('click', function(){ wbHear($('wbPhrase2').value); });
+  $('wbHear3').addEventListener('click', function(){ wbHear($('wbPhrase3').value); });
   $('wbSave').addEventListener('click', function(){
     var v = $('wbPhrase').value.trim().replace(/\s+/g,' '); if(!wbKey) return;
     if(!v){ $('wbEditMsg').textContent = 'Type what the key should say first.'; return; }
     wb.say[wbKey.id] = v; var v2 = $('wbPhrase2').value.trim().replace(/\s+/g,' ');
-    if(wb.dbl){ if(v2) wb.say2[wbKey.id] = v2; else delete wb.say2[wbKey.id]; }
+    var v3 = $('wbPhrase3').value.trim().replace(/\s+/g,' ');
+    if(wb.level >= 2){ if(v2) wb.say2[wbKey.id] = v2; else delete wb.say2[wbKey.id]; }
+    if(wb.level >= 3){ if(v3) wb.say3[wbKey.id] = v3; else delete wb.say3[wbKey.id]; }
     wbStore(); wbRender(); wbShow('wbHome');
   });
-  ['wbVol','wbDouble','wbWait','wbHold','wbGuard','wbSleep'].forEach(function(id){ $(id).addEventListener(id==='wbVol' ? 'input' : 'change', function(){
-    wb.vol = Number($('wbVol').value); wb.dbl = $('wbDouble').checked; wb.wait = Number($('wbWait').value); wb.hold = $('wbHold').checked; wb.guard = $('wbGuard').checked; wb.sleep = $('wbSleep').checked;
+  ['wbVol','wbLevel','wbWait','wbGuard','wbSleep'].forEach(function(id){ $(id).addEventListener(id==='wbVol' ? 'input' : 'change', function(){
+    wb.vol = Number($('wbVol').value); wb.level = Number($('wbLevel').value) || 1; wb.wait = Number($('wbWait').value); wb.guard = $('wbGuard').checked; wb.sleep = $('wbSleep').checked;
     wbStore(); wbSetFill();
     if(bandOn() && !band.busy){ clearTimeout(band.setTimer); band.setTimer = setTimeout(function(){ if(bandOn() && !band.busy) bandSettings().then(function(){ $('wbSetMsg').textContent = 'Saved, and sent to the wristband.'; }, function(){ $('wbSetMsg').textContent = 'Saved on this tablet. The wristband did not take the change: use Send on the first screen.'; }); }, 500); }
   }); });
