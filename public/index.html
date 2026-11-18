@@ -1224,6 +1224,7 @@ function openKind(text, name){
   return d && !e ? 'drink' : (e && !d ? 'eat' : null);
 }
 function isDrink(w){
+  if(w && typeof w.drink==='boolean') return w.drink;        // a word a grown-up added as a drink (or as a food) is what they said it is
   var l = String((w && (w.label||w.base))||'').toLowerCase(), b = String((w && w.base)||'').toLowerCase();
   var re = /^(milk|juice|water|soda|pop|tea|lemonade|smoothie|shake|milkshake|cocoa|hot chocolate|formula|bottle|drink|cider|punch|coffee)$|\b(milk|juice|water|tea|soda|smoothie|shake)$/;
   return re.test(l) || re.test(b);
@@ -1322,7 +1323,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v66) ---'+
+      dbgText = '\n--- Listening check (v67) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2940,12 +2941,15 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     if(typeof cropBtn==='function') cropBtn();
     $('wordName').value = sel.value && LOOKUP[sel.value] ? LOOKUP[sel.value].label : '';
     var np = $('newPage'); if(!np.options.length){
-      PAGES.filter(function(p){ return p.id!=='core'; }).forEach(function(p){ var o=document.createElement('option'); o.value=p.id; o.textContent=p.label; np.appendChild(o); });
+      PAGES.filter(function(p){ return p.id!=='core'; }).forEach(function(p){
+        var o=document.createElement('option'); o.value=p.id; o.textContent=p.label; np.appendChild(o);
+        if(p.id==='food'){ var d=document.createElement('option'); d.value='food:drink'; d.textContent='Drinks'; np.appendChild(d); }
+      });
     }
     var m = $('mine'); m.textContent='';
     custom.forEach(function(w){
       var d = document.createElement('div'), s = document.createElement('span'), b = document.createElement('button');
-      s.textContent = w.label+' ('+w.page+')'; b.type='button'; b.className='btn'; b.textContent='Remove';
+      s.textContent = w.label+' ('+(w.page==='food' ? (isDrink(w) ? 'drinks' : 'food') : w.page)+')'; b.type='button'; b.className='btn'; b.textContent='Remove';
       b.addEventListener('click', function(){
         custom = custom.filter(function(x){ return x.id!==w.id; }); delete LOOKUP[w.id]; delete pics[w.id];
         idbSet('custom', custom).catch(storeFail); idbDel('pic:'+w.id).catch(function(){}); idbDel('picsrc:'+w.id).catch(function(){});
@@ -3413,9 +3417,11 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     $('picMsg').textContent = 'Back to the drawing for "'+word(id).label+'".';
   });
   $('addWord').addEventListener('click', function(){
-    var label = $('newWord').value.trim().replace(/\s+/g,' '), page = $('newPage').value;
+    var label = $('newWord').value.trim().replace(/\s+/g,' '), page = $('newPage').value, asDrink = page==='food:drink';
     if(!label) return;
+    if(asDrink) page = 'food';                       // drinks live on the Food page; the mark below keeps them with the drinks
     var w = {id:'custom:'+Date.now(), label:label, pic:'🔲', page:page, np:defaultNp(page, label)};
+    if(page==='food') w.drink = asDrink;
     custom.push(w); registerWords([w]); $('newWord').value='';
     idbSet('custom', custom).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
     renderPicList(); $('picWord').value = w.id; renderFavs(); renderAll();
