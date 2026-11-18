@@ -1378,7 +1378,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v73) ---'+
+      dbgText = '\n--- Listening check (v74) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -3332,7 +3332,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       w = {id:'custom:'+Date.now(), label:label, pic:st.pic, page:st.page, np:qzNp(st, label), q:st.id};
       if(st.page==='food') w.drink = !!st.drink;
       if(st.eat) w.eat = true;
-      custom.unshift(w); registerWords([w]);
+      custom.push(w); registerWords([w]);                    // always on the end of its page: words already there never change places
       idbSet('custom', custom).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
       if(st.find) qzPicture(w, label);
     } else if(st.eat && w.id.indexOf('custom:')===0){ w.eat = true; idbSet('custom', custom).catch(function(){}); }
@@ -3613,7 +3613,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   });
   $('addWord').addEventListener('click', function(){
     var label = $('newWord').value.trim().replace(/\s+/g,' '), page = $('newPage').value, asDrink = page==='food:drink';
-    if(!label) return;
+    if(!label || !page) return;                      // never store a word that belongs to no page
     if(asDrink) page = 'food';                       // drinks live on the Food page; the mark below keeps them with the drinks
     var w = {id:'custom:'+Date.now(), label:label, pic:'🔲', page:page, np:defaultNp(page, label)};
     if(page==='food') w.drink = asDrink;
