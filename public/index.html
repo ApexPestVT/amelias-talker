@@ -146,6 +146,7 @@ body.typing #tabs, body.typing #grid{display:none}
 }
 .key.blank{visibility:hidden}
 .key .pic{font-size:min(8vh,10vw);line-height:1}
+.key span.pic{padding-bottom:.16em}   /* emoji are drawn a little lower than their own box; without this room the word underneath touches the picture */
 .key img.pic{height:62%;max-width:92%;aspect-ratio:1;object-fit:cover;border-radius:14px;font-size:0}
 .key img.pic[data-drawn]{height:min(10.5vh,12vw);object-fit:contain;border-radius:0}
 .chips img[data-drawn]{height:1.15em;vertical-align:middle}
@@ -1323,7 +1324,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v67) ---'+
+      dbgText = '\n--- Listening check (v68) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2186,6 +2187,17 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(w > avail && key.classList.contains('key') && !key.classList.contains('sent')){
         var fs = parseFloat(getComputedStyle(el).fontSize) || 16;
         el.style.fontSize = Math.max(11, Math.floor(fs*avail/w)) + 'px';
+      }
+      /* and the picture must never push the word out of the bottom of a small button: shrink just that picture until both fit */
+      var pic = key.querySelector('span.pic, img.pic[data-drawn]');
+      if(pic && key.classList.contains('key')){
+        var drawn = pic.tagName === 'IMG';
+        if(drawn) pic.style.height = ''; else pic.style.fontSize = '';
+        var ph = pic.offsetHeight, room = key.clientHeight - 10 - el.offsetHeight;
+        if(ph > 0 && room > 0 && ph > room){
+          if(drawn) pic.style.height = Math.max(14, Math.floor(room)) + 'px';
+          else { var pf = parseFloat(getComputedStyle(pic).fontSize) || 16; pic.style.fontSize = Math.max(14, Math.floor(pf*room/ph)) + 'px'; }
+        }
       }
     }
   }
