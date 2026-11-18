@@ -497,7 +497,7 @@ const handle = (req, res) => {
     const ip4 = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
     if (!askAllowed(ip4)) return json(res, 429, { error: 'too many questions this hour' });
     return readBody(req, 8192).then(b => { const q = JSON.parse(b); return askHelp(q.heard, +q.stage || 1, q.words); })
-      .then(a => json(res, 200, a), e => { console.error('ask failed:', e.message); json(res, 502, { error: e.message }); });
+      .then(a => json(res, 200, a), e => { if (e instanceof SyntaxError) return json(res, 400, { error: 'bad request' }); console.error('ask failed:', e.message); json(res, 502, { error: e.message }); });
   }
   if (p === '/api/voice/status') return json(res, 200, { enabled: VOICE_ON, region: AZ_KEY ? AZ_REGION : AWS_REGION, voices: VOICES.map(v => ({ id: v.id, label: v.label, noSave: v.noSave || undefined })), month: AZ_KEY ? azMonth : undefined, kept: { on: kept.ok, clips: kept.files, megabytes: Math.round(kept.bytes / 104857.6) / 10, servedFromDisk: kept.hits, error: kept.error || undefined }, slow: !!AZ_KEY && AZ_PACE > 0, free: !!AZ_KEY && !AZ_PAID, queue: azQueue.length, azure: AZ_KEY ? azStats : undefined });
   if (p === '/api/voice/last') return json(res, 200, lastVoice || { note: 'no child-voice request has run since the server last restarted' });

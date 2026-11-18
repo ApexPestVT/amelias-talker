@@ -1267,6 +1267,7 @@ function detectOpenQuestion(text, name){
 function eatOutQuestion(text, name){
   var t = clean(text, name); if(!t) return false;
   if(/\b(restaurants?|fast food|places? to eat|drive ?thru|drive through|diner|cafe|take ?out)\b/.test(t)) return true;
+  if(/\bwhere (did|was|were|is|are the)\b|\bwhere's\b|\bwheres\b/.test(t)) return false;        // "where did you eat lunch", "where is lunch": not asking to choose a place
   return /\bwhere\b.*\b(eat|eating|lunch|dinner|breakfast|supper|brunch)\b/.test(t);
 }
 /* "What do you want to drink?" should offer drinks only, and "to eat?" food only. */
@@ -1377,7 +1378,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v71) ---'+
+      dbgText = '\n--- Listening check (v72) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
