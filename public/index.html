@@ -223,6 +223,28 @@ body.typing #tabs, body.typing #grid{display:none}
 .ask-opts .key.dim{opacity:.25}
 .ask-opts .key.picked{transform:scale(1.03);box-shadow:0 0 0 8px var(--ink)}
 .ask-foot{flex:none;display:flex;justify-content:center;gap:16px}
+/* Build-it-herself answers: a strip of starter words above the answers, the words tapped so far, and a Say it button. */
+.ask-start{flex:none;display:flex;align-items:stretch;gap:10px;min-height:min(15vh,110px)}
+.ask-start .key{flex:0 0 min(13vw,120px);border-width:4px;border-radius:18px;padding:2px}
+.ask-start .key{overflow:hidden} .ask-start .key .pic{font-size:min(4.6vh,5vw)} .ask-start .key .lab{font-size:min(2.6vh,2.8vw)}
+.ask-line{flex:1;min-width:0;display:flex;align-items:center;padding:0 14px;border:3px solid var(--line);border-radius:18px;background:#fff;font-size:clamp(18px,3.6vh,32px);font-weight:700;color:var(--ink);overflow:hidden}
+.ask-say{flex:none;align-self:stretch;min-width:min(16vw,150px);border-radius:18px;border:4px solid #2e8b57;background:#c9efd3;font-size:clamp(18px,3vh,26px);font-weight:700;color:var(--ink)}
+.ask-say:disabled{opacity:.35}
+/* Answers in their board place: the pop-up draws the same grid as the board, and each answer sits in its own cell. */
+.ask.place{display:block;padding:0}
+.ask.place .ask-q{position:fixed;left:16px;display:flex;align-items:center;justify-content:center}
+.ask.place .ask-foot{position:fixed;top:8px;right:16px}
+.ask.place .ask-skip{min-height:44px;padding:0 18px;font-size:16px}
+.ask.place .ask-start{position:fixed;left:16px;right:16px;min-height:0}
+.grid.askplace{position:fixed;flex:none}
+.grid.askplace .key.dim{opacity:.25}
+.grid.askplace .key.picked{transform:scale(1.03);box-shadow:0 0 0 6px var(--ink)}
+/* Word endings: hold a word and its other forms pop out beside it. */
+.ends{position:fixed;z-index:7;display:flex;gap:8px;padding:8px;border-radius:20px;background:var(--paper);border:3px solid var(--ink);box-shadow:0 8px 28px rgba(0,0,0,.35)}
+.ends button{min-width:min(17vw,150px);min-height:min(12vh,96px);padding:0 14px;border-radius:14px;border:4px solid var(--line);background:#fff;font-size:clamp(20px,3.8vh,34px);font-weight:700;color:var(--ink)}
+.ends button.base{background:var(--bar)}
+.ends button.pressing{filter:brightness(.9)}
+@media (orientation:portrait){.ends{flex-wrap:wrap;max-width:94vw}}
 .ask-skip{flex:none;align-self:center;min-height:52px;padding:0 28px;border-radius:26px;border:3px solid var(--line);background:var(--bar);font-size:18px;font-weight:600;color:var(--ink-soft)}
 @media (orientation:portrait){.ask-opts{flex-direction:column}}
 
@@ -330,8 +352,10 @@ body.typing #tabs, body.typing #grid{display:none}
 <div class="tabs" id="tabs" hidden></div>
 <div class="grid" id="grid"></div>
 
+<div class="ends" id="ends" hidden></div>
 <div class="ask" id="ask" hidden>
   <div class="ask-q" id="askQ"></div>
+  <div class="ask-start" id="askStart" hidden><span class="ask-line" id="askLine" aria-live="polite"></span><button class="ask-say" id="askSay" type="button" disabled>Say it</button></div>
   <div class="ask-opts" id="askOpts"></div>
   <div class="ask-foot">
     <button class="ask-skip" id="askMore" type="button" hidden>Bigger number</button>
@@ -393,6 +417,10 @@ body.typing #tabs, body.typing #grid{display:none}
     </div>
     <label class="check"><input type="checkbox" id="namesOn"> Help it hear names correctly</label>
     <small id="namesMsg"></small>
+    <label class="check"><input type="checkbox" id="placeOn"> Show answers in their board place</label>
+    <small>Off: answers pop up as a few very big buttons. On: each answer appears exactly where that word sits on its own page, at the size of a board picture, so your child's hand always finds a word in the same spot. Answers that are not board words still use the big buttons.</small>
+    <label class="check"><input type="checkbox" id="buildOn"> Let your child build the answer, word by word</label>
+    <small>Off: one tap on an answer says a whole sentence ("I want some pizza."). On: the pop-up adds the words I, not, want and like. Your child taps words in order and the talker says exactly those words ("I want pizza."). It speaks after a short pause, or at once with Say it. Yes or no questions do not change.</small>
     <label class="check"><input type="checkbox" id="smartOn"> Use AI for harder questions</label>
     <small id="smartMsg">Off: only the built-in rules are used.</small>
     <div class="row">
@@ -482,6 +510,8 @@ body.typing #tabs, body.typing #grid{display:none}
     <label class="check"><input type="checkbox" id="wordsOn"> Show the written word big for 3 seconds on every tap (early reading)</label>
     <label class="check"><input type="checkbox" id="glowOn"> Light up the pictures as people talk to your child</label>
     <label class="check"><input type="checkbox" id="modelOn"> Show the Show me button on the child's screen</label>
+    <label class="check"><input type="checkbox" id="endsOn"> Word endings: hold a word to choose another form</label>
+    <small>Hold a word for about a second and its other forms pop out: play, plays, playing, played; cookie, cookies; mom, mom's; big, bigger. A sentence with one of these is said word for word, in your child's order. A hand that keeps resting on the screen closes it again.</small>
     </details>
     <details class="sec">
       <summary><b>6. Seeing and hearing</b><span>High contrast, bigger pictures, more space, vibration</span></summary>
@@ -595,6 +625,9 @@ body.typing #tabs, body.typing #grid{display:none}
 
       <b>Things you set up</b>
       <ol class="coach">
+        <li><b>Answers in their board place</b> (section 2). Each pop-up answer appears where that word sits on its own page, so your child's hand learns one spot per word.</li>
+        <li><b>Build the answer</b> (section 2). The pop-up adds I, not, want and like. Your child taps words in order and the talker says just those words. Say the full sentence back yourself as the model.</li>
+        <li><b>Word endings</b> (section 5). Hold a word for about a second to choose play, plays, playing or played; cookie or cookies; mom or mom's.</li>
         <li><b>About your child.</b> In section 1, a short set of questions adds your child's own people, pets, foods, drinks, places and favorite things, and the places your family eats. Those answers come up first when someone asks a question.</li>
         <li><b>Photo scenes.</b> Add a real photo from your child's life and put word spots on it. "Suggest words" finds things in the photo for you.</li>
         <li><b>Personal words.</b> "Add a word" for names, favorite foods and places. "Change a word" swaps any picture or name.</li>
@@ -1001,6 +1034,46 @@ var IT = {
   done:['I am all done with it.', 'I am not done with it.'], stop:['Stop it, please.', 'Stop it, please.'], hurt:['It hurts.', 'It does not hurt.'],
   up:['Put it up, please.', "Don't put it up."], down:['Put it down, please.', "Don't put it down."]
 };
+/* Word endings. Holding a word offers its other forms: play -> plays, playing, played; cookie -> cookies; mom -> mom's.
+   Only words whose forms are known to be right are offered; anything unsure gets none. */
+var VERB_FORMS = {
+  want:1, play:1, help:1, look:1, like:1, stop:1, need:1, wait:1, talk:1,
+  eat:['eats','eating','ate'], drink:['drinks','drinking','drank'], go:['goes','going','went'], hurt:['hurts','hurting'],
+  have:['has','having','had'], 'do':['does','doing','did'], get:['gets','getting','got'], put:['puts','putting'], take:['takes','taking','took'],
+  make:['makes','making','made'], know:['knows','knowing','knew'], think:['thinks','thinking','thought'], see:['sees','seeing','saw'],
+  tell:['tells','telling','told'], say:['says','saying','said'], come:['comes','coming','came'], let:['lets','letting'], mean:['means','meaning','meant']
+};
+var ADJ_FORMS = { good:['better','best'], bad:['worse','worst'], happy:1, sad:1, mad:1, sick:1, hungry:1, thirsty:1, silly:1, hot:1, cold:1 };
+var NOUN_IRR = { child:'children', foot:'feet', tooth:'teeth', man:'men', woman:'women', person:'people', mouse:'mice' };
+var NO_PLURAL = { cheese:1, milk:1, juice:1, water:1, chicken:1, cereal:1, yogurt:1, music:1, tv:1, family:0 };
+function cvc(v){ return /^[^aeiou]*[aeiou][^aeiouwxy]$/.test(v); }                 // stop, mad, hot: the last letter doubles
+function addS(v){ return /(s|x|z|ch|sh|o)$/.test(v) ? v+'es' : (/[^aeiou]y$/.test(v) ? v.slice(0,-1)+'ies' : v+'s'); }      // verbs: goes, does
+function nounS(v){ return (/(s|x|z|ch|sh)$/.test(v) || /^(potato|tomato|hero|echo)$/.test(v)) ? v+'es' : (/[^aeiou]y$/.test(v) ? v.slice(0,-1)+'ies' : v+'s'); }   // tacos, but potatoes
+function wordForms(w){
+  if(!w || w.digit || w.form) return [];
+  var raw = String(w.label || ''), l = raw.toLowerCase(), out = [], add = function(t, k){ if(t && t.toLowerCase()!==l && !out.some(function(o){ return o.t===t; })) out.push({t:t, k:k}); };
+  if(!/^[a-z']+$/i.test(raw)) return [];                                            // one plain word only: "all done", "chicken nuggets", "TV 2" get none
+  var core = !w.page || w.page==='core', doing = w.page==='doing';
+  if((core || doing) && VERB_FORMS[l]){
+    var f = VERB_FORMS[l];
+    if(f===1){
+      add(addS(l), 's');
+      add((/ie$/.test(l) ? l.slice(0,-2)+'y' : (/[^e]e$/.test(l) ? l.slice(0,-1) : (cvc(l) ? l+l.slice(-1) : l)))+'ing', 'ing');
+      add(/e$/.test(l) ? l+'d' : (/[^aeiou]y$/.test(l) ? l.slice(0,-1)+'ied' : (cvc(l) ? l+l.slice(-1)+'ed' : l+'ed')), 'past');
+    } else { add(f[0], 's'); add(f[1], 'ing'); add(f[2], 'past'); }
+    return out;
+  }
+  if(w.page==='feelings' && ADJ_FORMS[l]){
+    var a = ADJ_FORMS[l];
+    if(a===1){ var st = /[^aeiou]y$/.test(l) ? l.slice(0,-1)+'i' : (cvc(l) ? l+l.slice(-1) : l); add(st+'er', 'er'); add(st+'est', 'est'); }
+    else { add(a[0], 'er'); add(a[1], 'est'); }
+    return out;
+  }
+  var named = /^[A-Z]/.test(raw) && raw!=='TV';                                     // a name a grown-up typed: Sam, Bluey, Gatorade
+  if(w.page==='people'){ if(!named && !/s$/.test(l)) add(NOUN_IRR[l] || nounS(l), 'plural'); add(raw+(/s$/.test(l) ? "'" : "'s"), 'poss'); return out; }
+  if((w.page==='food' || w.page==='things') && !named && !NO_PLURAL[l] && !/s$/.test(l)) add(NOUN_IRR[l] || nounS(l), 'plural');
+  return out;
+}
 /* Says exactly what she built, in her order, with three small fixes: "am / are" before a feeling, "don't" for "not", and a "?" on questions. */
 var BE = {i:'am', you:'are', we:'are', they:'are', he:'is', she:'is', it:'is'};
 var AUX = {is:1, are:1, am:1, was:1, 'do':1, can:1, will:1, would:1, could:1, have:1};
@@ -1018,7 +1091,7 @@ function literal(taps){
   var subj = BE[low[0]] ? low[0] : null, hasAux = low.some(function(t){ return AUX[t]; });
   if(subj && !hasAux && tok.length > 1){
     var ni = low[1]==='not' ? 2 : 1, nx = ws[ni];
-    if(nx && (nx.page==='feelings' || nx.id==='done' || nx.digitRun)) tok.splice(1, 0, BE[subj]);           // "you happy" -> "You are happy."
+    if(nx && (nx.page==='feelings' || nx.id==='done' || nx.digitRun || nx.form==='ing')) tok.splice(1, 0, BE[subj]);           // "you happy" -> "You are happy.", "I playing" -> "I am playing."
     else if(low[1]==='not' && nx) tok[1] = (subj==='he'||subj==='she'||subj==='it') ? "doesn't" : "don't";
   }
   var out = tok.join(' ');
@@ -1282,7 +1355,7 @@ function isDrink(w){
   var re = /^(milk|juice|water|soda|pop|tea|lemonade|smoothie|shake|milkshake|cocoa|hot chocolate|formula|bottle|drink|cider|punch|coffee)$|\b(milk|juice|water|tea|soda|smoothie|shake)$/;
   return re.test(l) || re.test(b);
 }
-if(typeof module!=='undefined') module.exports = {eatOutQuestion:eatOutQuestion, likeQuestion:likeQuestion, NUM6:NUM6, detectNumberQuestion:detectNumberQuestion, numberSentence:numberSentence, NUMBERS:NUMBERS, detectColorQuestion:detectColorQuestion, colorSentence:colorSentence, COLORS:COLORS, setOlder:setOlder, BUILD:BUILD, literal:literal, MORE6:MORE6, QUESTIONS_DEFAULT:QUESTIONS_DEFAULT, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
+if(typeof module!=='undefined') module.exports = {wordForms:wordForms, eatOutQuestion:eatOutQuestion, likeQuestion:likeQuestion, NUM6:NUM6, detectNumberQuestion:detectNumberQuestion, numberSentence:numberSentence, NUMBERS:NUMBERS, detectColorQuestion:detectColorQuestion, colorSentence:colorSentence, COLORS:COLORS, setOlder:setOlder, BUILD:BUILD, literal:literal, MORE6:MORE6, QUESTIONS_DEFAULT:QUESTIONS_DEFAULT, openKind:openKind, isDrink:isDrink, detectOpenQuestion:detectOpenQuestion, glowMatches:glowMatches, detectQuestion:detectQuestion, nameHeard:nameHeard, LOOKUP:LOOKUP, compose:compose, parseHeard:parseHeard, CORE:CORE, FRINGE:FRINGE, registerWords:registerWords, defaultNp:defaultNp};
 </script>
 
 <script>
@@ -1301,7 +1374,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving your own'},
     {n:6, name:'6. Teen and adult words', note:'Adds 96 of the most used everyday words on four pages. Sentences are said word for word'}
   ];
-  var state = { about:{}, aboutSeen:false, photosOn:true, onDevice:true, names:true, name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { placeAns:false, buildAns:false, endings:false, about:{}, aboutSeen:false, photosOn:true, onDevice:true, names:true, name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
@@ -1319,6 +1392,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(saved.stage>=1) state.stage=Math.min(6, Math.floor(+saved.stage));
       if(Array.isArray(saved.questions)) state.questions = saved.questions.filter(function(q){ return typeof q==='string' && q.trim(); }).slice(0, 12);
       state.smart = saved.smart===true;
+      state.placeAns = saved.placeAns===true; state.buildAns = saved.buildAns===true; state.endings = saved.endings===true;
       state.photosOn = saved.photosOn!==false; state.aboutSeen = saved.aboutSeen===true;
       if(saved.about && typeof saved.about==='object' && !Array.isArray(saved.about)) Object.keys(saved.about).forEach(function(k){ if(Array.isArray(saved.about[k])) state.about[k] = saved.about[k].filter(function(x){ return typeof x==='string'; }).slice(0, 12); }); state.hc = saved.hc===true; state.seeTalk = saved.seeTalk===true; state.buzz = saved.buzz===true;
       if(saved.size==='pic' || saved.size==='word') state.size = saved.size;
@@ -1341,7 +1415,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,names:state.names,onDevice:state.onDevice,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz,photosOn:state.photosOn,about:state.about,aboutSeen:state.aboutSeen})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,names:state.names,onDevice:state.onDevice,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz,photosOn:state.photosOn,about:state.about,aboutSeen:state.aboutSeen,placeAns:state.placeAns,buildAns:state.buildAns,endings:state.endings})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -1378,7 +1452,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v74) ---'+
+      dbgText = '\n--- Listening check (v75) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2097,9 +2171,56 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var l = document.createElement('span'); l.className='lab'; l.textContent=w.label; b.appendChild(l);
     b.setAttribute('data-id', w.id);
     if(w.lit && !pics[w.id]) b.classList.add('wordonly');
-    onPress(b, function(){ tap(w.id, b, !!w.lit); });
+    onPress(b, function(){ if(endsSkip===b){ endsSkip = null; return; } tap(w.id, b, !!w.lit); });
+    endsWatch(b, w);
     return b;
   }
+  /* ----- Word endings (a grown-up switch): hold a word and its other forms pop out next to it -----
+     A press that is still down after ENDS_MS opens the choices; lifting then leaves them up to pick from.
+     A press that goes on past the resting-hand time is a hand lying on the screen: the choices close again. */
+  var endsSkip = null, endsT = null, endsRestT = null, endsHideT = null, endsFor = null;
+  function endsMs(){ return Math.max(650, state.hold*1000 + 450); }
+  function endsClose(){ clearTimeout(endsHideT); endsFor = null; var box = $('ends'); box.hidden = true; box.textContent = ''; }
+  function formWord(w, f){
+    var id = 'form:'+w.id+':'+f.t;
+    if(!LOOKUP[id]){ registerWords([{id:id, label:f.t, pic:w.pic, page:w.page, cat:w.cat, np:f.t, lit:1, form:f.k, root:w.id}]); if(pics[w.id]) pics[id] = pics[w.id]; }
+    return LOOKUP[id];
+  }
+  function endsOpen(b, w, forms){
+    var box = $('ends'); box.textContent = ''; endsFor = b;
+    var mk = function(label, cls, fn){
+      var x = document.createElement('button'); x.type = 'button'; x.textContent = label; if(cls) x.className = cls;
+      onPress(x, function(){ endsClose(); fn(); }, {noRepeatGuard:true});
+      box.appendChild(x);
+    };
+    mk(w.label, 'base', function(){ tap(w.id, b, !!w.lit); });
+    forms.forEach(function(f){ mk(f.t, '', function(){ var fw = formWord(w, f); tap(fw.id, b, !!w.lit); }); });
+    box.hidden = false;
+    var r = b.getBoundingClientRect(), e = box.getBoundingClientRect(), m = 8;
+    var left = Math.min(Math.max(m, r.left + r.width/2 - e.width/2), window.innerWidth - e.width - m);
+    var top = r.top - e.height - m; if(top < m) top = Math.min(r.bottom + m, window.innerHeight - e.height - m);
+    box.style.left = Math.max(m, left)+'px'; box.style.top = Math.max(m, top)+'px';
+    clearTimeout(endsHideT); endsHideT = setTimeout(endsClose, 10000);
+  }
+  function endsWatch(b, w){
+    var pid = null;
+    var stop = function(){ clearTimeout(endsT); clearTimeout(endsRestT); pid = null; };
+    b.addEventListener('pointerdown', function(e){
+      if(!state.endings || (e.pointerType==='mouse' && e.button!==0) || inEdge(e) || pid!==null) return;
+      var ms = endsMs(); if(ms > REST_MS - 250) return;                 // a very long "hold time" setting leaves no room for it
+      var forms = wordForms(w); if(!forms.length) return;
+      pid = e.pointerId;
+      clearTimeout(endsT); endsT = setTimeout(function(){
+        if(pid===null || !b.isConnected || Date.now() < tapBlockUntil) return;
+        endsSkip = b; endsOpen(b, w, forms); buzz();
+      }, ms);
+      clearTimeout(endsRestT); endsRestT = setTimeout(function(){ if(pid!==null && endsFor===b) endsClose(); }, REST_MS + 30);   // still down: a resting hand
+    });
+    var up = function(e){ if(e.pointerId!==pid) return; stop(); setTimeout(function(){ if(endsSkip===b) endsSkip = null; }, 0); };
+    b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+    b.addEventListener('pointerleave', function(e){ if(e.pointerId===pid && endsFor!==b) stop(); });
+  }
+  document.addEventListener('pointerdown', function(e){ if(endsFor && !$('ends').contains(e.target) && !endsFor.contains(e.target)) endsClose(); }, true);
   function renderGrid(){
     var g = $('grid'); g.textContent = '';
     if(state.page==='photos' && !photosShown()) state.page = 'core';
@@ -2142,7 +2263,11 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     } else {
       var pg = PAGES.concat(PAGES6, [NUMPAGE]).filter(function(p){ return p.id===state.page; })[0];
       var only = (openOnly && openOnly.page===state.page && Date.now() < openOnly.until) ? openOnly.ids : null;   // a drink question shows just the drinks
-      FRINGE.concat(MORE6, NUM6, custom).filter(function(w){ return w.page===state.page && (!only || only[w.id]); }).forEach(function(w){ g.appendChild(keyFor(w, pg.cat)); });
+      FRINGE.concat(MORE6, NUM6, custom).filter(function(w){ return w.page===state.page && (!only || only[w.id] || state.placeAns); }).forEach(function(w){
+        var k = keyFor(w, pg.cat);
+        if(only && !only[w.id]){ k.classList.add('blank'); k.tabIndex = -1; k.setAttribute('aria-hidden','true'); }   // "in their board place": the words that do not fit the question leave a gap, so the rest stay where they always are
+        g.appendChild(k);
+      });
     }
   }
   /* A whole ready-made sentence on one key: Questions page and My sentences. */
@@ -2631,7 +2756,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     }
     speak(w.label);                               // her own word, right away
     showWord(el, w.label);                        // and the written word, paired with the sound
-    plogWord(id);
+    plogWord(w.root || id);                       // an ending counts toward its own word in the progress log
     if(openAskUntil && Date.now() < openAskUntil && w.page!=='core'){ openAskUntil = 0; plogAdd('answered','open'); }   // answered an open question from its page
     clearTimeout(state.timer);
     state.timer = setTimeout(finish, Math.max(COMPOSE_WAIT, state.repeat*1000 + 1500));
@@ -2727,13 +2852,13 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   var askT = null, pendingQ = null;
   var numFrame = null;
   var askLater = null;
-  function hideAsk(){ askLater = null; $('askSkip').textContent = 'Something else'; clearTimeout(askT); $('ask').hidden = true; $('askOpts').textContent = ''; $('askSkip').style.visibility = ''; $('askMore').hidden = true; }
+  function hideAsk(){ askReset(); askLater = null; $('askSkip').textContent = 'Something else'; clearTimeout(askT); $('ask').hidden = true; $('askOpts').textContent = ''; $('askSkip').style.visibility = ''; $('askMore').hidden = true; }
   /* She often taps twice. The first tap is her answer: the pop-up stays up showing it for a moment and
      swallows extra taps, then the board ignores taps briefly so a late one cannot change what she said. */
   var askDone = false, tapBlockUntil = 0, ANSWER_HOLD = 1600, BOARD_HOLD = 900;
-  function sayAnswer(sentence, ids, btn){
+  function sayAnswer(sentence, ids, btn, quiet){
     if(askDone) return;
-    askDone = true; clearTimeout(askT);
+    askDone = true; clearTimeout(askT); clearTimeout(buildT);
     if(askKind) plogAdd('answered', askKind);
     (ids||[]).forEach(function(id){ if(LOOKUP[id]) plogWord(id); });
     var all = $('askOpts').children;
@@ -2743,7 +2868,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     tapBlockUntil = Date.now()+ANSWER_HOLD+BOARD_HOLD;
     setTimeout(hideAsk, ANSWER_HOLD);
     clearTimeout(state.timer); state.taps = (ids||[]).filter(function(id){ return LOOKUP[id]; }); state.fresh = true;
-    renderBar(sentence, false); speak(sentence);
+    renderBar(sentence, false); if(!quiet) speak(sentence);
     state.heard = ''; setTimeout(function(){ showHeard('', false); }, 2500);
   }
   /* ----- AI help for harder questions (off unless a grown-up turns it on) ----- */
@@ -2804,7 +2929,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   }
   function showSmart(text, a, kind){
     var max = state.stage >= 5 ? 6 : (state.stage >= 3 ? 4 : 3), opts = a.options.slice(0, max);
-    var box = $('askOpts'); box.textContent = ''; box.classList.remove('eight', 'ten'); box.classList.toggle('many', opts.length > 3);
+    askReset(); var box = $('askOpts'); box.textContent = ''; box.classList.remove('eight', 'ten'); box.classList.toggle('many', opts.length > 3);
     $('askQ').textContent = clean(text, state.name)+'?';
     opts.forEach(function(o){
       var w = boardWord(o.label), cat = o.label==='yes' ? 'action' : (o.label==='no' ? 'stop' : 'thing');
@@ -2814,11 +2939,12 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     });
     askKind = kind; plogAdd('asked', kind);
     askDone = false; $('askSkip').style.visibility = '';
+    askArrange(false);
     $('ask').hidden = false;
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
   }
   function showColors(text, frame){
-    var box = $('askOpts'); box.textContent = ''; box.classList.remove('ten'); box.classList.add('many', 'eight');
+    askReset(); var box = $('askOpts'); box.textContent = ''; box.classList.remove('ten'); box.classList.add('many', 'eight');
     $('askQ').textContent = clean(text, state.name)+'?';
     COLORS.forEach(function(c){ box.appendChild(askKey(c, c.label, 'thing', colorSentence(frame, c.label), [])); });
     askKind = 'choice'; plogAdd('asked', 'choice');
@@ -2827,7 +2953,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
   }
   function showNumbers(text, frame){
-    var box = $('askOpts'); box.textContent = ''; box.classList.remove('eight'); box.classList.add('many', 'ten');
+    askReset(); var box = $('askOpts'); box.textContent = ''; box.classList.remove('eight'); box.classList.add('many', 'ten');
     $('askQ').textContent = clean(text, state.name)+'?';
     NUMBERS.forEach(function(nm){ box.appendChild(askKey(nm, nm.label, 'describe', numberSentence(frame, nm.label), [])); });
     askKind = 'choice'; plogAdd('asked', 'choice'); askFrame = frame;
@@ -2840,9 +2966,91 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     b.type = 'button'; b.className = 'key '+cat; b.setAttribute('aria-label', label);
     if(w) b.appendChild(picNode(w, 'pic'));
     var l = document.createElement('span'); l.className = 'lab'; l.textContent = label; b.appendChild(l);
-    onPress(b, function(){ sayAnswer(sentence, ids, b); });
+    b._ids = ids || [];
+    onPress(b, function(){ if(askBuildOn && b._ids.length===1) buildTap(b._ids[0], b); else sayAnswer(sentence, ids, b); });
     return b;
   }
+  /* ----- Two grown-up choices for how answers are shown -----
+     "In their board place": the pop-up draws the same grid as the board, in the same spot on the screen, and each answer
+     sits in the cell where that word lives on its own page. Her hand finds "pizza" in one place, pop-up or page.
+     "Build the answer": the pop-up adds I, not, want, like. She taps words in order and the talker says just those words. */
+  var askBuildOn = false, askBuilt = [], buildT = null, askPlaced = false, STARTERS = ['i','not','want','like'];
+  function askReset(){
+    clearTimeout(buildT); askBuildOn = false; askBuilt = []; askPlaced = false;
+    var box = $('askOpts'), st = $('askStart'), q = $('askQ'), foot = document.querySelector('#ask .ask-foot');
+    box.className = 'ask-opts'; box.removeAttribute('style'); $('ask').classList.remove('place');
+    q.removeAttribute('style'); st.removeAttribute('style'); st.hidden = true; if(foot) foot.removeAttribute('style');
+    [].slice.call(st.querySelectorAll('.key')).forEach(function(k){ k.remove(); });
+    $('askLine').textContent = ''; $('askSay').disabled = true;
+  }
+  function boardCell(id){                         // where a word sits on its own page: column, row, and how many columns that page has
+    var w = LOOKUP[id]; if(!w) return null;
+    var lead = state.stage >= 4 ? 1 : 0, ci = CORE.indexOf(w), bi = BUILD.indexOf(w);
+    if(ci >= 0) return (w.s||1) <= state.stage ? {page:'core', cols:5+lead, rows:4, col:(ci % 5)+lead, row:Math.floor(ci/5)} : null;
+    if(bi >= 0) return lead ? {page:'core', cols:6, rows:4, col:0, row:bi} : null;
+    if(w.page==='numbers' || w.form) return null;
+    var list = FRINGE.concat(MORE6, custom).filter(function(x){ return x.page===w.page; }), i = list.indexOf(w), cols = MORE6_SRC[w.page] ? 6 : 5;
+    return i < 0 ? null : {page:w.page, cols:cols, rows:Math.max(1, Math.ceil(list.length/cols)), col:i % cols, row:Math.floor(i/cols)};
+  }
+  function askPlaceFit(){                         // line the pop-up's grid up with the board's grid on the screen
+    if(!askPlaced) return;
+    var r = $('grid').getBoundingClientRect(), box = $('askOpts'), q = $('askQ'), st = $('askStart'), foot = document.querySelector('#ask .ask-foot');
+    box.style.left = r.left+'px'; box.style.top = r.top+'px'; box.style.width = r.width+'px'; box.style.height = r.height+'px';
+    box.style.gap = getComputedStyle($('grid')).gap;
+    var head = Math.max(60, r.top - 8), fw = foot ? foot.getBoundingClientRect().width : 0;
+    q.style.top = '6px'; q.style.right = (fw + 28)+'px';
+    if(st.hidden){ q.style.height = (head - 6)+'px'; }
+    else { var qh = Math.min(44, Math.round(head*0.3)); q.style.height = qh+'px'; st.style.top = (qh + 10)+'px'; st.style.height = Math.max(40, head - qh - 14)+'px';
+      st.style.right = (foot && qh + 10 < foot.getBoundingClientRect().bottom + 4) ? (fw + 28)+'px' : '16px'; }   // a short screen: the strip stops before the close button
+  }
+  window.addEventListener('resize', function(){ setTimeout(askPlaceFit, 60); });
+  function askArrange(buildable){                 // called when the answers are in the pop-up, just before it shows
+    var box = $('askOpts'), keys = [].slice.call(box.children);
+    var boardOnly = keys.length > 0 && keys.every(function(k){ return k._ids && k._ids.length===1 && LOOKUP[k._ids[0]]; });
+    if(state.buildAns && buildable && boardOnly){
+      askBuildOn = true; askBuilt = [];
+      var st = $('askStart'), line = $('askLine');
+      STARTERS.forEach(function(id){
+        var w = LOOKUP[id]; if(!w) return;
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'key '+(w.cat||'social'); b.setAttribute('aria-label', w.label); b.setAttribute('data-id', w.id);
+        b.appendChild(picNode(w, 'pic')); var l = document.createElement('span'); l.className = 'lab'; l.textContent = w.label; b.appendChild(l);
+        b._ids = [id]; b._starter = true;
+        onPress(b, function(){ buildTap(id, b); });
+        st.insertBefore(b, line);
+      });
+      st.hidden = false;
+    }
+    if(state.placeAns && boardOnly){
+      var cells = keys.map(function(k){ return boardCell(k._ids[0]); }), seen = {};
+      var ok = cells.every(function(c){ if(!c || c.cols!==cells[0].cols || c.rows!==cells[0].rows) return false; var key = c.row+':'+c.col; if(seen[key]) return false; seen[key] = 1; return true; });
+      var gr = $('grid').getBoundingClientRect();
+      if(ok && gr.width > 200 && gr.height > 150){
+        askPlaced = true; $('ask').classList.add('place');
+        box.className = 'grid askplace';
+        box.style.gridTemplateColumns = 'repeat('+cells[0].cols+',1fr)'; box.style.gridTemplateRows = 'repeat('+cells[0].rows+',1fr)';
+        keys.forEach(function(k, i){ k.style.gridColumn = String(cells[i].col+1); k.style.gridRow = String(cells[i].row+1); });
+        askPlaceFit(); setTimeout(askPlaceFit, 0);
+      }
+    }
+  }
+  function buildTap(id, btn){
+    if(askDone || !LOOKUP[id]) return;
+    if(askBuilt[askBuilt.length-1]!==id){ askBuilt.push(id); if(askBuilt.length > 6) askBuilt.shift(); }
+    btn.classList.add('hit'); setTimeout(function(){ btn.classList.remove('hit'); }, 160);
+    $('askLine').textContent = askBuilt.map(function(t){ return LOOKUP[t].label; }).join(' + ');
+    $('askSay').disabled = false;
+    speak(LOOKUP[id].label);                       // each word is heard as she taps it
+    clearTimeout(askT); askT = setTimeout(hideAsk, 25000);           // she is working on it: the pop-up gets its full time again
+    clearTimeout(buildT);
+    if(askBuilt.some(function(t){ return STARTERS.indexOf(t) < 0; })) buildT = setTimeout(buildSay, Math.max(3000, state.repeat*1000 + 2000));   // an answer word is in: say it after a pause. "I want" alone waits for her.
+  }
+  function buildSay(){
+    clearTimeout(buildT);
+    if(askDone || !askBuilt.length) return;
+    var ids = askBuilt.slice();
+    sayAnswer(literal(ids), ids, null, ids.length===1);             // one word was already said when she tapped it
+  }
+  onPress($('askSay'), function(){ buildSay(); }, {noRepeatGuard:true});
   /* A pop-up stays until it is answered, closed with its button, or times out. The one exception: answers put up early,
      from the first words of a sentence, are redone when the rest of that same sentence arrives a moment later. */
   var askSrc = {norm:'', at:0, early:false}, askKept = 0;
@@ -2870,7 +3078,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   }
   function showAsk(text, q){
     if(!q){ openPageFor(text); return; }
-    var box = $('askOpts'); box.textContent = '';
+    askReset(); var box = $('askOpts'); box.textContent = '';
     box.classList.remove('many', 'eight', 'ten');
     $('askQ').textContent = q.question+'?';
     if(q.kind==='yesno'){
@@ -2881,6 +3089,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     }
     askKind = q.kind==='yesno' ? 'yesno' : 'choice'; plogAdd('asked', askKind);
     askDone = false; $('askSkip').style.visibility = '';
+    askArrange(q.kind!=='yesno');
     $('ask').hidden = false;
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
   }
@@ -2965,10 +3174,11 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     if(page==='do'){                             // "what do you want to do?": the doing words she has at this stage
       var acts = ['play','eat','drink','go','look','help'].map(function(id){ return LOOKUP[id]; }).filter(function(w){ return w && (w.s||1) <= state.stage; });
       if(!acts.length) return;
-      var bx = $('askOpts'); bx.textContent = ''; bx.classList.remove('eight', 'ten'); bx.classList.add('many');
+      askReset(); var bx = $('askOpts'); bx.textContent = ''; bx.classList.remove('eight', 'ten'); bx.classList.add('many');
       $('askQ').textContent = clean(text, state.name)+'?';
       acts.forEach(function(w){ bx.appendChild(askKey(w, w.label, 'action', compose(['want', w.id], '', state.name).sentence || wordSentence(w), [w.id])); });
       askKind = 'open'; plogAdd('asked', 'open'); askDone = false; $('askSkip').style.visibility = '';
+      askArrange(true);
       $('ask').hidden = false; clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
       return;
     }
@@ -2985,13 +3195,14 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       clearTimeout(pageT);
       pageT = setTimeout(function(){ if(state.page===page && (state.fresh || !state.taps.length)){ state.page='core'; renderTabs(); renderGrid(); } }, 25000);
     };
-    var box = $('askOpts'); box.textContent = ''; box.classList.remove('eight', 'ten'); box.classList.add('many');
+    askReset(); var box = $('askOpts'); box.textContent = ''; box.classList.remove('eight', 'ten'); box.classList.add('many');
     $('askQ').textContent = clean(text, state.name)+'?';
     var pg = PAGES.filter(function(x){ return x.id===page; })[0];
     var liking = likeQuestion(text, state.name) && page!=='feelings';
     words.slice(0, 6).forEach(function(w){ box.appendChild(askKey(w, w.label, pg.cat || 'thing', (liking && likeSentence(w)) || wordSentence(w), [w.id])); });
     askKind = 'open'; plogAdd('asked', 'open');
     askDone = false; $('askSkip').style.visibility = '';
+    askArrange(true);
     $('ask').hidden = false;
     clearTimeout(askT); askT = setTimeout(hideAsk, 25000);
     if(state.stage >= 3){ askLater = showPage; $('askSkip').textContent = 'More choices'; }   // with word pages: six quick answers, and the whole page one tap away
@@ -3055,7 +3266,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   }
   function storeFail(){ diag.store = 'could not save on this device'; $('picMsg').textContent = 'Could not save on this device.'; showDiag(); }
   function openPanel(){
-    $('qList').value = state.questions.join('\n'); $('olderOn').checked = state.older; $('smartOn').checked = state.smart; smartNote(); $('namesOn').checked = state.names; namesNote(); $('deviceRow').hidden = !NS; $('deviceOn').checked = state.onDevice;
+    $('qList').value = state.questions.join('\n'); $('olderOn').checked = state.older; $('smartOn').checked = state.smart; $('placeOn').checked = state.placeAns; $('buildOn').checked = state.buildAns; $('endsOn').checked = state.endings; smartNote(); $('namesOn').checked = state.names; namesNote(); $('deviceRow').hidden = !NS; $('deviceOn').checked = state.onDevice;
     $('hcOn').checked = state.hc; $('seeTalkOn').checked = state.seeTalk; $('buzzOn').checked = state.buzz; $('sizeSel').value = state.size; $('gapSel').value = state.gap;
     $('nameIn').value = state.name; $('sentOn').checked = state.sentences; $('listenOn').checked = state.listen; $('kioskOn').checked = state.kiosk; kioskNote(); $('wordsOn').checked = state.words; $('modelOn').checked = state.modelBtn; $('logOn').checked = state.log !== false; renderReport(); clearArmed = false; $('reportClear').textContent = 'Clear the log'; $('glowOn').checked = state.glow; $('repeatSel').value = String(state.repeat); $('holdSel').value = String(state.hold); $('edgeSel').value = String(state.edge); $('typeOn').checked = state.typing; $('askSel').value = state.ask; $('rateIn').value = state.rate;
     hideAsk(); renderStages(); renderPicList(); renderFavs(); renderSceneList(); renderResearch(); renderVoices(); showDiag(); $('picGrid').textContent = ''; $('picFind').value = LOOKUP[$('picWord').value] ? LOOKUP[$('picWord').value].label : ''; $('panel').classList.add('open');
@@ -3107,6 +3318,9 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   $('deviceOn').addEventListener('change', function(){ state.onDevice = this.checked; ns.streak = 0; ns.noDevice = false; ns.dead = false; ns.errs = 0; ns.lastErr = ''; $('deviceMsg').textContent = ''; save(); pickListening(); });
   $('namesOn').addEventListener('change', function(){ state.names = this.checked; cloud.namesRefused = false; save(); namesNote(); });
   $('smartOn').addEventListener('change', function(){ state.smart = this.checked; save(); smartNote(); });
+  $('placeOn').addEventListener('change', function(){ state.placeAns = this.checked; save(); });
+  $('buildOn').addEventListener('change', function(){ state.buildAns = this.checked; save(); });
+  $('endsOn').addEventListener('change', function(){ state.endings = this.checked; save(); endsClose(); });
   $('olderOn').addEventListener('change', function(){ state.older = this.checked; setOlder(state.older, labels); save(); renderPicList(); renderFavs(); renderAll(); });
   $('qList').addEventListener('change', function(){ state.questions = this.value.split('\n').map(function(q){ return q.trim().slice(0, 80); }).filter(Boolean).slice(0, 12); this.value = state.questions.join('\n'); save(); if(state.page==='questions') renderGrid(); });
   $('voiceSel').addEventListener('change', function(){ state.voiceName = this.value; save(); pickVoice(); cvUnlock(); cvWarm(); });
