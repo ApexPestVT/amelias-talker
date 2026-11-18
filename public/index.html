@@ -105,7 +105,7 @@ body.modeling .say{border-style:dashed;border-color:var(--describe-edge)}
 @media (orientation:portrait){.tabs{flex-wrap:wrap;overflow-x:visible}.tabs .tab{flex:1 0 21%}.tabs.many .tab{flex:1 0 18%;min-height:44px}}   /* held upright, every page tab stays on screen instead of sliding off the side */
 
 /* picture grid: positions never change (motor planning) */
-.grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(4,1fr);gap:10px}
+.grid{--g:10px;flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(4,1fr);gap:var(--g)}
 .grid.six{grid-template-columns:repeat(6,1fr)}
 /* Seeing and hearing options */
 body.hc{--paper:#000;--bar:#000;--ink:#fff;--ink-soft:#e8e8e8;--line:#fff;
@@ -118,7 +118,7 @@ body.hc .tab{color:#fff}
 body.hc .panel{--paper:#f3f6fb;--bar:#ffffff;--ink:#16223a;--ink-soft:#5b6780;--line:#d5dcea;color:#16223a}
 body.sz-pic .key .pic{font-size:min(11vh,13vw)} body.sz-pic .key .lab{font-size:min(2.4vh,2.8vw)} body.sz-pic .key img.pic{height:72%}
 body.sz-word .key .pic{font-size:min(5.5vh,7vw)} body.sz-word .key .lab{font-size:min(4.8vh,5.2vw)} body.sz-word .key img.pic{height:44%}
-body.gap-wide .grid{gap:22px} body.gap-xwide .grid{gap:36px}
+body.gap-wide .grid{--g:22px} body.gap-xwide .grid{--g:36px}
 body.seetalk .say.speaking{border-color:var(--glow);box-shadow:0 0 0 7px var(--glow)}
 body.seetalk .say.speaking::after{content:'🔊';position:absolute;right:18px;top:50%;transform:translateY(-50%);font-size:min(6vh,7vw)}
 body.seetalk .say{position:relative}
@@ -140,6 +140,13 @@ body.typing #tabs, body.typing #grid{display:none}
 .key.wordonly .lab{font-size:min(5vh,4.4vw)}
 .empty-note{grid-column:1/-1;align-self:center;text-align:center;font-size:20px;color:var(--muted,#5b6478);padding:20px}
 .grid.fringe{grid-template-rows:none;grid-auto-rows:minmax(23%,1fr);overflow-y:auto;touch-action:pan-y}
+/* Scrolling pages switched off (the default): every word on a page stays on one screen, and the rows shrink to fit */
+.grid.fringe.fit{grid-auto-rows:minmax(0,1fr);overflow:hidden;touch-action:none}
+.grid.fringe:not(.fit){grid-auto-rows:calc((100% - 3*var(--g))/4);scroll-snap-type:y mandatory}   /* exactly four rows fill the screen */ .grid.fringe:not(.fit) > *{scroll-snap-align:start}   /* a swipe always stops on whole rows, never half a button */
+.morebar{flex:none;min-height:52px;margin-bottom:max(0px,calc(var(--edge,0px) - 12px));   /* sits clear of the ignored strip along the bottom edge, or presses on it would be thrown away */
+  border-radius:16px;border:3px solid var(--line);background:var(--bar);color:var(--ink);font-size:20px;font-weight:700}
+.morebar[hidden]{display:none}
+body.typing .morebar{display:none}
 .key{
   border-radius:22px;border:4px solid;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
   padding:4px;min-width:0;min-height:0;cursor:pointer;transition:transform .08s;overflow:hidden;
@@ -359,6 +366,7 @@ body.typing #tabs, body.typing #grid{display:none}
 
 <div class="tabs" id="tabs" hidden></div>
 <div class="grid" id="grid"></div>
+<button type="button" class="morebar" id="moreBar" hidden>▼ More words</button>
 
 <div class="ends" id="ends" hidden></div>
 <div class="ask" id="ask" hidden>
@@ -503,6 +511,8 @@ body.typing #tabs, body.typing #grid{display:none}
         <button class="btn" id="addWord" type="button">Add</button>
       </div>
       <small>New words appear on their page at Stage 3 and up. Pick a picture for it above.</small>
+      <label class="check"><input type="checkbox" id="scrollOn"> Let word pages scroll</label>
+      <small id="scrollNote"></small>
       <div class="mine" id="mine"></div>
     </div>
     <h3>Photo scenes</h3>
@@ -1393,7 +1403,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     {n:5, name:'5. My own sentences', note:'Typing, fixing a sentence before it is said, and saving your own'},
     {n:6, name:'6. Teen and adult words', note:'Adds 96 of the most used everyday words on four pages. Sentences are said word for word'}
   ];
-  var state = { ansMode:'big', placeAns:false, buildAns:false, endings:false, about:{}, aboutSeen:false, photosOn:true, onDevice:true, names:true, name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
+  var state = { scrollPages:false, ansMode:'big', placeAns:false, buildAns:false, endings:false, about:{}, aboutSeen:false, photosOn:true, onDevice:true, names:true, name:'', stage:2, sentences:true, listen:true, typing:false, ask:'any', kiosk:(navigator.maxTouchPoints||0)>0, glow:true, words:true, modelBtn:true, modeling:false, log:true, repeat:0.8, hold:0, edge:0.05, favs:{}, questions:QUESTIONS_DEFAULT.slice(), mine:[], older:false, smart:false, hc:false, size:'normal', gap:'normal', seeTalk:false, buzz:false, rate:0.9, voiceName:'', taps:[], page:'core',
                 heard:'', heardAt:0, lastSaid:'', speaking:false, spokeEnd:0, timer:null, fresh:true };
   var pics = {}, custom = [], labels = {}, scenes = [], sceneImg = {}, openScene = null, visionOn = false;
   var diag = { voice:'checking', mic:'checking', cloud:'', kiosk:'', vision:'', store:'checking', error:'' };
@@ -1412,7 +1422,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(Array.isArray(saved.questions)) state.questions = saved.questions.filter(function(q){ return typeof q==='string' && q.trim(); }).slice(0, 12);
       state.smart = saved.smart===true;
       state.ansMode = /^(big|place|page)$/.test(saved.ansMode) ? saved.ansMode : (saved.placeAns===true ? 'place' : 'big'); state.placeAns = state.ansMode==='place'; state.buildAns = saved.buildAns===true; state.endings = saved.endings===true;
-      state.photosOn = saved.photosOn!==false; state.aboutSeen = saved.aboutSeen===true;
+      state.photosOn = saved.photosOn!==false; state.aboutSeen = saved.aboutSeen===true; state.scrollPages = saved.scrollPages===true;
       if(saved.about && typeof saved.about==='object' && !Array.isArray(saved.about)) Object.keys(saved.about).forEach(function(k){ if(Array.isArray(saved.about[k])) state.about[k] = saved.about[k].filter(function(x){ return typeof x==='string'; }).slice(0, 12); }); state.hc = saved.hc===true; state.seeTalk = saved.seeTalk===true; state.buzz = saved.buzz===true;
       if(saved.size==='pic' || saved.size==='word') state.size = saved.size;
       if(saved.gap==='wide' || saved.gap==='xwide') state.gap = saved.gap;
@@ -1434,7 +1444,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,names:state.names,onDevice:state.onDevice,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz,photosOn:state.photosOn,about:state.about,aboutSeen:state.aboutSeen,ansMode:state.ansMode,buildAns:state.buildAns,endings:state.endings})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,names:state.names,onDevice:state.onDevice,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz,photosOn:state.photosOn,scrollPages:state.scrollPages,about:state.about,aboutSeen:state.aboutSeen,ansMode:state.ansMode,buildAns:state.buildAns,endings:state.endings})); }catch(e){} }
 
   var dbp = null;
   function db(){
@@ -1471,7 +1481,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v83) ---'+
+      dbgText = '\n--- Listening check (v84) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1674,6 +1684,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   var glowSeen = {}, GLOW_MS = 3200;
   function glowOne(el){
     if(!el) return;
+    if(state.scrollPages && el.closest && el.closest('#grid.fringe') && el.scrollIntoView){ try{ el.scrollIntoView({block:'nearest'}); }catch(e){} }
     el.classList.add('glow');
     setTimeout(function(){ el.classList.remove('glow'); }, GLOW_MS);
   }
@@ -2183,6 +2194,26 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       lastTapAt = now; fn();
     });
   }
+  /* ----- Scrolling pages (a grown-up switch) -----
+     Switched on, a word page keeps four rows of full-size buttons on screen and the rest are reached by swiping up or by the More bar.
+     Once a word is chosen the page goes back to the top, so the first rows are always where the child left them. */
+  var scrollHomeT = null;
+  function gridScrolls(){ var g = $('grid'); return state.scrollPages && g.classList.contains('fringe') && g.scrollHeight - g.clientHeight > 8; }
+  function moreCue(){
+    var g = $('grid'), bar = $('moreBar'), on = gridScrolls() && $('ask').hidden !== false;
+    bar.hidden = !on; if(!on) return;
+    var atEnd = g.scrollHeight - g.scrollTop - g.clientHeight <= 8;
+    bar.textContent = atEnd ? '▲ Back to the top' : '▼ More words';
+    bar.setAttribute('aria-label', atEnd ? 'Back to the top of the page' : 'More words on this page');
+  }
+  function scrollHome(){
+    clearTimeout(scrollHomeT);
+    if(!state.scrollPages) return;
+    scrollHomeT = setTimeout(function(){ var g = $('grid'); if(g.scrollTop > 0){ g.scrollTop = 0; moreCue(); } }, 400);   // long enough to see the button light up first
+  }
+  function scrollNote(){ $('scrollOn').checked = !!state.scrollPages; $('scrollNote').textContent = state.scrollPages
+    ? 'On: buttons stay full size. Swipe up, or press More words under the page, to reach the rest. The page goes back to the top after a word is chosen. In-their-place answers use big buttons on pages longer than one screen.'
+    : 'Off: every word on a page fits on one screen, so the buttons get smaller as you add words.'; }
   function keyFor(w, cat){
     var b = document.createElement('button');
     b.type='button'; b.className='key '+(cat||w.cat||'thing'); b.setAttribute('aria-label', w.label);
@@ -2190,7 +2221,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var l = document.createElement('span'); l.className='lab'; l.textContent=w.label; b.appendChild(l);
     b.setAttribute('data-id', w.id);
     if(w.lit && !pics[w.id]) b.classList.add('wordonly');
-    onPress(b, function(){ if(endsSkip===b){ endsSkip = null; return; } tap(w.id, b, !!w.lit); });
+    onPress(b, function(){ if(endsSkip===b){ endsSkip = null; return; } tap(w.id, b, !!w.lit); scrollHome(); });
     endsWatch(b, w);
     return b;
   }
@@ -2261,6 +2292,8 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     g.classList.toggle('wide6', !!MORE6_SRC[state.page]);
     g.classList.toggle('fringe', state.page!=='core' && state.page!=='photos' && !sentPage);
     g.classList.toggle('numpad', state.page==='numbers');
+    g.classList.toggle('fit', !state.scrollPages);
+    g.scrollTop = 0; setTimeout(moreCue, 0);
     if(sentPage){
       var list = state.page==='questions' ? state.questions : state.mine;
       list.forEach(function(q){
@@ -2421,7 +2454,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   }
   function renderSceneList(){
     var box = $('scList'); box.textContent = '';
-    $('photosOn').checked = state.photosOn !== false;
+    $('photosOn').checked = state.photosOn !== false; scrollNote();
     $('photosNote').textContent = !scenes.length ? 'No photo scenes yet.' : (state.photosOn !== false ? '' : 'Hidden from the board. Your '+scenes.length+' photo scene'+(scenes.length===1?' is':'s are')+' still saved here and can still be edited.');
     scenes.forEach(function(sc){
       var d = document.createElement('div'), n = document.createElement('span'), b = document.createElement('button');
@@ -3186,7 +3219,9 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     if(bi >= 0) return lead ? {page:'core', cols:6, rows:4, col:0, row:bi} : null;
     if(w.page==='numbers' || w.form) return null;
     var list = FRINGE.concat(MORE6, custom).filter(function(x){ return x.page===w.page; }), i = list.indexOf(w), cols = MORE6_SRC[w.page] ? 6 : 5;
-    return i < 0 ? null : {page:w.page, cols:cols, rows:Math.max(1, Math.ceil(list.length/cols)), col:i % cols, row:Math.floor(i/cols)};
+    var rows = Math.max(1, Math.ceil(list.length/cols));
+    if(state.scrollPages && rows > 4) return null;      // a scrolling page is longer than the screen, so its places cannot be shown all at once
+    return i < 0 ? null : {page:w.page, cols:cols, rows:rows, col:i % cols, row:Math.floor(i/cols)};
   }
   function askPlaceFit(){                         // line the pop-up's grid up with the board's grid on the screen
     if(!askPlaced) return;
@@ -3527,6 +3562,13 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   applyLook();
   $('hcOn').addEventListener('change', function(){ state.hc = this.checked; save(); applyLook(); renderAll(); });
   $('photosOn').addEventListener('change', function(){ state.photosOn = this.checked; save(); renderSceneList(); renderTabs(); renderGrid(); });
+  $('scrollOn').addEventListener('change', function(){ state.scrollPages = this.checked; save(); scrollNote(); renderGrid(); });
+  $('grid').addEventListener('scroll', function(){ moreCue(); }, {passive:true});
+  window.addEventListener('resize', function(){ setTimeout(moreCue, 80); });
+  onPress($('moreBar'), function(){ var g = $('grid'); if(g.scrollHeight - g.scrollTop - g.clientHeight <= 8){ g.scrollTop = 0; moreCue(); return; }
+    var k = g.querySelector('.key'), gap = parseFloat(getComputedStyle(g).rowGap) || 0, pitch = k ? k.offsetHeight + gap : g.clientHeight;      // move by whole rows
+    var rows = Math.max(1, Math.floor((g.clientHeight + gap) / pitch + 0.1));
+    g.scrollTop = Math.round((g.scrollTop + rows*pitch) / pitch) * pitch; moreCue(); }, {noRepeatGuard:true});
   $('seeTalkOn').addEventListener('change', function(){ state.seeTalk = this.checked; save(); applyLook(); });
   $('sizeSel').addEventListener('change', function(){ state.size = this.value; save(); applyLook(); });
   $('gapSel').addEventListener('change', function(){ state.gap = this.value; save(); applyLook(); });
