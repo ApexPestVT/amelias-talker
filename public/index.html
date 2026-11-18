@@ -1471,7 +1471,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v82) ---'+
+      dbgText = '\n--- Listening check (v83) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -1497,7 +1497,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     voice = (state.voiceName && vs.filter(function(v){return v.name===state.voiceName;})[0]) ||
             vs.filter(function(v){return /^en[-_]US/i.test(v.lang);})[0] || vs.filter(function(v){return /^en/i.test(v.lang);})[0] || null;
     renderVoices();
-    diag.voice = vs.length ? 'this app'+(voice?' ('+voice.name+')':'') : (tts?'Claude voice':'waiting for a first tap');
+    diag.voice = vs.length ? 'this device'+(voice?' ('+voice.name+')':'') : (tts?'Claude voice':'waiting for a first tap');
     if(NSP.TabletSpeech && NSP.TabletSpeech.speak) appVoiceNote();
     cvMsg();
   }
@@ -2417,7 +2417,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   /* ---------- photo scene editor (grown-ups) ---------- */
   var ed = null, delArmed = false;
   function saveScenes(){
-    return idbSet('scenes', scenes).then(function(){ diag.store='saved on this app'; showDiag(); }, storeFail);
+    return idbSet('scenes', scenes).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
   }
   function renderSceneList(){
     var box = $('scList'); box.textContent = '';
@@ -3642,7 +3642,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       cropClose();
       pics[id] = data; renderPicList(); $('picWord').value = id; renderFavs(); renderAll(); cropBtn();
       $('picMsg').textContent = 'Photo set for "'+word(id).label+'".';
-      idbSet('pic:'+id, data).then(function(){ diag.store='saved on this app'; showDiag(); }, storeFail);
+      idbSet('pic:'+id, data).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
       idbSet('picsrc:'+id, keep).catch(function(){});       // the whole photo and where the square sits, for "Adjust crop" later
     }catch(e){ cropClose(); $('picMsg').textContent = 'That photo could not be used. Try another one.'; }
   });
@@ -3679,7 +3679,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   function picKeep(id, data, what){
     pics[id] = data; renderPicList(); $('picWord').value = id; renderFavs(); renderAll();
     $('picMsg').textContent = what+' set for "'+word(id).label+'".';
-    idbSet('pic:'+id, data).then(function(){ diag.store='saved on this app'; showDiag(); }, storeFail);
+    idbSet('pic:'+id, data).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
     idbDel('picsrc:'+id).catch(function(){}); cropBtn();
   }
   function emojiData(e){
@@ -3765,7 +3765,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(st.page==='food') w.drink = !!st.drink;
       if(st.eat) w.eat = true;
       custom.push(w); registerWords([w]);                    // always on the end of its page: words already there never change places
-      idbSet('custom', custom).then(function(){ diag.store='saved on this app'; showDiag(); }, storeFail);
+      idbSet('custom', custom).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
       if(st.find) qzPicture(w, label);
     } else if(st.eat && w.id.indexOf('custom:')===0){ w.eat = true; idbSet('custom', custom).catch(function(){}); }
     list.push(w.id); state.about[st.id] = list;
@@ -4027,7 +4027,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
 
   $('picFindBtn').addEventListener('click', picFindRun);
   $('picFind').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); picFindRun(); } });
-  function saveLabels(){ idbSet('labels', labels).then(function(){ diag.store='saved on this app'; showDiag(); }, storeFail); idbSet('custom', custom).catch(function(){}); }
+  function saveLabels(){ idbSet('labels', labels).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail); idbSet('custom', custom).catch(function(){}); }
   $('nameSave').addEventListener('click', function(){
     var id = $('picWord').value, v = $('wordName').value.trim().replace(/\s+/g,' '); if(!id || !v || !LOOKUP[id]) return;
     LOOKUP[id].label = v; labels[id] = v; saveLabels(); renderPicList(); renderFavs(); renderAll();
@@ -4050,7 +4050,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var w = {id:'custom:'+Date.now(), label:label, pic:'🔲', page:page, np:defaultNp(page, label)};
     if(page==='food') w.drink = asDrink;
     custom.push(w); registerWords([w]); $('newWord').value='';
-    idbSet('custom', custom).then(function(){ diag.store='saved on this app'; showDiag(); }, storeFail);
+    idbSet('custom', custom).then(function(){ diag.store='saved on this device'; showDiag(); }, storeFail);
     renderPicList(); $('picWord').value = w.id; renderFavs(); renderAll();
     $('picMsg').textContent = '"'+label+'" added. Choose a photo, or pick a picture below.';
     $('picFind').value = label; picFindRun();
