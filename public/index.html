@@ -295,7 +295,7 @@ body.typing #tabs, body.typing #grid{display:none}
 .research p b{font-size:14.5px}
 .research .rb{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;font-size:12px;font-style:normal;font-weight:700;border:2px solid var(--line);color:var(--ink);vertical-align:middle}
 .research .rb.yes{background:#c9efd3;border-color:#2e8b57} .research .rb.part{background:#fff1c2;border-color:#c79a12} .research .rb.prac{background:#dfe8fb;border-color:#5b7fd1} .research .rb.none{background:#ffd9d2;border-color:#c5432d} .research .rb.tool{background:#eee;border-color:#999}
-.research .rused{font-style:italic} .research .rwhy{font-weight:600;color:var(--ink)}
+.research .rused{font-style:italic} .research .rchk{font-size:12px} .research .rwhy{font-weight:600;color:var(--ink)}
 .research span a{font-weight:500}
 .picgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px;max-height:300px;overflow-y:auto}
 .picgrid:empty{display:none}
@@ -525,7 +525,7 @@ body.typing #tabs, body.typing #grid{display:none}
     <label class="check"><input type="checkbox" id="modelOn"> Show the Show me button on the child's screen</label>
     <label class="check"><input type="checkbox" id="endsOn"> Word endings: hold a word to choose another form</label>
     <small id="endsNote"></small>
-    <small>Hold a word for about a second and its other forms pop out: play, plays, playing, played; cookie, cookies; mom, mom's; big, bigger. A sentence with one of these is said word for word, in your child's order. A hand that keeps resting on the screen closes it again.</small>
+    <small>Hold a word for about a second and its other forms pop out: play, plays, playing, played; cookie, cookies; mom, mom's; big, bigger. With sentences on, the ending is used in the sentence: playing says "I am playing.", ate says "I ate.", cookies says "I want some cookies.", happier says "I am happier.", mom's says "It is mom's." A form like plays needs a word in front of it ("mom" then "plays"). A hand that keeps resting on the screen closes it again.</small>
     </details>
     <details class="sec">
       <summary><b>6. Seeing and hearing</b><span>High contrast, bigger pictures, more space, vibration</span></summary>
@@ -1102,6 +1102,8 @@ function literal(taps){
   var tok = ws.map(function(w){ return w.label; }), low = tok.map(function(t){ return String(t).toLowerCase(); });
   if(!tok.length) return '';
   if(ws[0].id==='want' && tok.length > 1){ ws.unshift({label:'I', id:'i'}); tok.unshift('I'); low.unshift('i'); }      // "want 3" -> "I want 3."
+  if(ws[0].form==='poss' && tok.length===1) return 'It is '+tok[0]+'.';                                                 // "mom's" -> "It is mom's."
+  if(ws[0].form==='ing' || ws[0].form==='past'){ ws.unshift({label:'I', id:'i'}); tok.unshift('I'); low.unshift('i'); }  // "playing" -> "I am playing.", "ate" -> "I ate."
   var subj = BE[low[0]] ? low[0] : null, hasAux = low.some(function(t){ return AUX[t]; });
   if(subj && !hasAux && tok.length > 1){
     var ni = low[1]==='not' ? 2 : 1, nx = ws[ni];
@@ -1132,7 +1134,10 @@ function composeBuild(taps, heard, name){
   return {sentence:sen, usedHeard:out.usedHeard};
 }
 function compose(taps, heard, name){
-  if(taps.some(function(t){ return LOOKUP[t] && LOOKUP[t].lit; })) return {sentence: taps.length>1 ? literal(taps) : '', usedHeard:false};   // stage 6 words: her own sentence, word for word
+  if(taps.some(function(t){ return LOOKUP[t] && LOOKUP[t].lit; })){   // stage 6 words and word endings: her own sentence, word for word
+    var one = taps.length===1 && LOOKUP[taps[0]], alone = one && (one.form==='ing' || one.form==='past' || one.form==='poss');   // a single ending still makes a sentence: "playing" -> "I am playing."
+    return {sentence: (taps.length>1 || alone) ? literal(taps) : '', usedHeard:false};
+  }
   if(taps.some(function(t){ return LOOKUP[t] && LOOKUP[t].build; })) return composeBuild(taps, heard, name);
   var hasYes = taps.indexOf('yes')>=0, hasNo = taps.indexOf('no')>=0, hasMore = taps.indexOf('more')>=0;
   var content = taps.filter(function(t){return t!=='yes'&&t!=='no'&&t!=='more';});
@@ -1466,7 +1471,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v77) ---'+
+      dbgText = '\n--- Listening check (v78) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2198,7 +2203,15 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   function endsClose(){ clearTimeout(endsHideT); endsFor = null; var box = $('ends'); box.hidden = true; box.textContent = ''; }
   function formWord(w, f){
     var id = 'form:'+w.id+':'+f.t;
-    if(!LOOKUP[id]){ registerWords([{id:id, label:f.t, pic:w.pic, page:w.page, cat:w.cat, np:f.t, lit:1, form:f.k, root:w.id}]); if(pics[w.id]) pics[id] = pics[w.id]; }
+    if(!LOOKUP[id]){
+      var x = {id:id, label:f.t, pic:w.pic, page:w.page, cat:w.cat, np:f.t, form:f.k, root:w.id};
+      if(f.k==='plural' || f.k==='er' || f.k==='est'){                 // these fit the same sentences as their own word: "I want some cookies.", "I am happier."
+        var rn = String(w.np || w.label), at = rn.toLowerCase().lastIndexOf(String(w.label).toLowerCase());
+        if(f.k==='plural' && at >= 0) x.np = (rn.slice(0, at)+f.t+rn.slice(at + String(w.label).length)).replace(/^(a|an|this|that) /i, 'some ');
+        if(w.drink!==undefined) x.drink = w.drink;
+      } else x.lit = 1;                                                // plays, playing, played, mom's: said word for word, with "I am" or "I" added in front when it stands first
+      registerWords([x]); if(pics[w.id]) pics[id] = pics[w.id];
+    }
     return LOOKUP[id];
   }
   function endsOpen(b, w, forms){
@@ -2563,104 +2576,105 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   });
 
   /* ---------- research library (grown-ups) ---------- */
-  /* Each study: [title, link, note, key]. FEATURES below points at studies by key. */
+  /* Each study: [title, link, note, key, checked]. checked: f = full text or the page itself read on 18 Nov 2026, a = abstract only, s = a summary page, n = not re-checked that day. FEATURES below points at studies by key. */
   var RESEARCH = [
     ["Coffin-Siris syndrome and communication", [
-      ["Coffin-Siris Syndrome (GeneReviews, the main clinical reference)","https://www.ncbi.nlm.nih.gov/books/NBK131811/","Speaking is usually harder than understanding. Recommends a talker and says it supports speech, not hinders it. Lists hearing, vision and muscle-tone rates.","cs1"],
-      ["Language Impairments in Individuals With Coffin-Siris Syndrome (2022)","https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8811135/","Registry study: 65% had speaking more limited than understanding. Why the vocabulary is not capped low.","cs2"],
-      ["ARID1B-Related Disorder (GeneReviews)","https://www.ncbi.nlm.nih.gov/books/NBK541502/","Details for the most common Coffin-Siris gene, including speech and vision.","cs3"],
-      ["Coffin-Siris Syndrome (NORD)","https://rarediseases.org/rare-diseases/coffin-siris-syndrome/","Plain-language overview for families.","cs4"]
+      ["Coffin-Siris Syndrome (GeneReviews, the main clinical reference)","https://www.ncbi.nlm.nih.gov/books/NBK131811/","Speaking is more affected than understanding. Recommends considering an evaluation for a talker, and says talkers do not hinder speech. Lists hearing, eye and muscle-tone rates.","cs1","f"],
+      ["Language Impairments in Individuals With Coffin-Siris Syndrome (2022)","https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8811135/","Registry study: 65% had speaking more limited than understanding. Why the vocabulary is not capped low.","cs2","n"],
+      ["ARID1B-Related Disorder (GeneReviews)","https://www.ncbi.nlm.nih.gov/books/NBK541502/","Details for the most common Coffin-Siris gene, including speech and vision.","cs3","n"],
+      ["Coffin-Siris Syndrome (NORD)","https://rarediseases.org/rare-diseases/coffin-siris-syndrome/","Plain-language overview for families.","cs4","n"]
     ]],
     ["Teaching by showing: Glow-along and modeling", [
-      ["Effects of aided AAC input, a meta-analysis (2018)","https://rerc2020.aac-learning-center.org/?p=2467","Adults pointing to pictures while talking is the best-proven teaching method. Glow-along automates the pointing; that automation is untested.","m1"],
-      ["Communication partner instruction, a systematic review (2018)","https://pubs.asha.org/doi/10.1044/2018_AJSLP-18-0024","Training the adults around the child is where talkers succeed or fail.","m2"]
+      ["Effects of aided AAC input, a meta-analysis (2018)","https://rerc2020.aac-learning-center.org/?p=2467","A review of 28 studies: a partner using the talker while speaking was highly effective for children of varied ages and disabilities. Glow-along automates the pointing; that automation is untested.","m1","f"],
+      ["Communication partner instruction, a systematic review (2018)","https://pubs.asha.org/doi/10.1044/2018_AJSLP-18-0024","Training the adults around the child is where talkers succeed or fail.","m2","n"]
     ]],
     ["Which words, and building sentences", [
-      ["What Are Core Words Anyway? (PRC-Saltillo handout)","https://saltillo.com/uploads/What_Are_Core_Words_Anyway_Handout_Part_1.pdf","A small set of words covers most of what toddlers say. Basis for the main board.","w1"],
-      ["Tracking early sentence-building in graphic symbol communication","https://pmc.ncbi.nlm.nih.gov/articles/PMC7225017","Children need to learn to build sentences word by word. Basis for Stages 4 and 5, where sentences are built word by word.","w2"],
-      ["AAC Generative Language Intervention with young children with Down syndrome (2025)","https://pmc.ncbi.nlm.nih.gov/articles/PMC12303605","Model sentences only a little longer than what the child uses now.","w3"],
-      ["Applying a Developmental Model to Preliterate Aided Language Learning (2024)","https://pubs.asha.org/doi/10.1044/2023_AJSLP-23-00098","Use typical language development as the map for what to add next.","w4"]
+      ["What Are Core Words Anyway? (PRC-Saltillo handout)","https://saltillo.com/uploads/What_Are_Core_Words_Anyway_Handout_Part_1.pdf","A small set of words covers most of what toddlers say. Basis for the main board.","w1","n"],
+      ["Tracking early sentence-building in graphic symbol communication","https://pmc.ncbi.nlm.nih.gov/articles/PMC7225017","Children need to learn to build sentences word by word. Basis for Stages 4 and 5, where sentences are built word by word.","w2","n"],
+      ["AAC Generative Language Intervention with young children with Down syndrome (2025)","https://pmc.ncbi.nlm.nih.gov/articles/PMC12303605","Model sentences only a little longer than what the child uses now.","w3","n"],
+      ["Applying a Developmental Model to Preliterate Aided Language Learning (2024)","https://pubs.asha.org/doi/10.1044/2023_AJSLP-23-00098","Use typical language development as the map for what to add next.","w4","n"]
     ]],
     ["Keeping each word in one place", [
-      ["Consistent symbol location affects motor learning in preschoolers (Thistle and others 2018)","https://pubs.asha.org/doi/10.1044/2018_AJSLP-17-0129","Preschoolers without disabilities did better when symbols stayed in the same place over five sessions. The authors say it must be repeated with children who use talkers.","k1"],
-      ["Manual motor-plan similarity affects word recall on a speech device (Dukhovny and Gahl 2014)","https://escholarship.org/content/qt85v808fm/qt85v808fm.pdf","Words on a talker are remembered partly as the hand movement that makes them. The authors suggest that moving symbols, or switching devices, has a cost.","k2"]
+      ["Consistent symbol location affects motor learning in preschoolers (Thistle and others 2018)","https://pubs.asha.org/doi/10.1044/2018_AJSLP-17-0129","Typical preschoolers found words about 3 seconds faster when symbols stayed put (12 children in that group, five sessions). The first study of its kind; the authors call for research with children who use talkers.","k1","a"],
+      ["Manual motor-plan similarity affects word recall on a speech device (Dukhovny and Gahl 2014)","https://escholarship.org/content/qt85v808fm/qt85v808fm.pdf","Twenty adults without disabilities. A hint, short of statistical proof, that words on a device are remembered partly by the hand movement. The authors say moving symbols or switching devices may be costly, pending more research.","k2","f"]
     ]],
     ["Choosing a child's own words", [
-      ["Enhancing vocabulary selection for preschoolers who require a talker (2001)","https://pubs.asha.org/doi/10.1044/1058-0360(2001/010)","A questionnaire for parents and professionals to choose a child's words was built and field-tested with 45 people; 93% said they would use it again.","v1"],
-      ["An initial vocabulary for nonspeaking preschool children (Fried-Oken and More 1992)","https://informahealthcare.com/doi/abs/10.1080/07434619212331276033","Word lists from parents, clinicians and children agreed on very little: only 46 words were common to half the lists. First words have to be chosen for each child.","v2"],
-      ["Vocabulary selection for Australian children who use talkers (Trembath, Balandin and Togher 2007)","https://dro.deakin.edu.au/articles/journal_contribution/Vocabulary_selection_for_Australian_children_who_use_augmentative_and_alternative_communication/20842618","Preschoolers used a small set of common words plus a large, highly personal set. The authors recommend providing both.","v3"],
-      ["Core vocabulary lists for young children, a narrative review (2020)","https://pubmed.ncbi.nlm.nih.gov/32172598/","A caution: it is not known whether putting common 'core' words first best serves children who are just starting with symbols.","v4"]
+      ["Enhancing vocabulary selection for preschoolers who require a talker (2001)","https://pubs.asha.org/doi/10.1044/1058-0360(2001/010)","A questionnaire for parents and professionals to choose a child's words was built and field-tested with 45 people; 93% said they would use it again.","v1","a"],
+      ["An initial vocabulary for nonspeaking preschool children (Fried-Oken and More 1992)","https://informahealthcare.com/doi/abs/10.1080/07434619212331276033","Word lists from parents, clinicians and children agreed on very little: only 46 words were common to half the lists. First words have to be chosen for each child.","v2","a"],
+      ["Vocabulary selection for Australian children who use talkers (Trembath, Balandin and Togher 2007)","https://dro.deakin.edu.au/articles/journal_contribution/Vocabulary_selection_for_Australian_children_who_use_augmentative_and_alternative_communication/20842618","Six typical preschoolers used a small set of common words plus large, personal sets. The authors stress providing both.","v3","a"],
+      ["Core vocabulary lists for young children, a narrative review (2020)","https://pubmed.ncbi.nlm.nih.gov/32172598/","A caution: it is not known whether putting common 'core' words first best serves children who are just starting with symbols.","v4","a"]
     ]],
     ["Asking questions, and saying what was built", [
-      ["Teaching partner-focused questions (Light, Binger and others, Penn State)","https://pure.psu.edu/en/publications/teaching-partner-focused-questions-to-individuals-who-use-augment/","People who use talkers learned to ask about their partner when 5 to 10 whole questions were stored for them. Basis for the Questions page.","q1"],
-      ["Teaching children to build yes/no questions (Kent-Walsh, Binger, Buchanan 2015)","https://pubs.asha.org/doi/abs/10.1044/2015_AJSLP-14-0066","Three children aged 4 to 6 learned to build questions themselves by word order. Why \"you\" now says exactly what was tapped.","q2"],
-      ["Plain summary of the yes/no question study (NWACS)","https://stafford-casey.squarespace.com/blog/2019/7/aacademics-july-2019","Explains why asking questions matters: a talker cannot raise its voice at the end.","q3"],
-      ["Children, young people and adults who use talkers (book chapter)","https://link.springer.com/10.1007/978-3-030-74985-9_25","They tend to answer more than they start, and use few kinds of message.","q4"],
-      ["Against clipped \"telegraphic\" models (Fey 2008, summary)","https://www.researchgate.net/publication/251534991_The_mis-use_of_telegraphic_input_in_child_language_intervention","No proven benefit to dropping the little words when modeling. Why the talker speaks full sentences.","q5"],
-      ["Construction grammar approaches for learners who use talkers (2026)","https://pmc.ncbi.nlm.nih.gov/articles/PMC13724842","Cautions that children can miss learning to build language if whole phrases are always entered for them.","q6"]
+      ["Teaching partner-focused questions (Light, Binger and others, Penn State)","https://pure.psu.edu/en/publications/teaching-partner-focused-questions-to-individuals-who-use-augment/","People who use talkers learned to ask about their partner when 5 to 10 whole questions were stored for them. Basis for the Questions page.","q1","n"],
+      ["Teaching children to build yes/no questions (Kent-Walsh, Binger, Buchanan 2015)","https://pubs.asha.org/doi/abs/10.1044/2015_AJSLP-14-0066","Three children aged 4 to 6 learned to build questions themselves by word order. Why \"you\" now says exactly what was tapped.","q2","n"],
+      ["Plain summary of the yes/no question study (NWACS)","https://stafford-casey.squarespace.com/blog/2019/7/aacademics-july-2019","Explains why asking questions matters: a talker cannot raise its voice at the end.","q3","n"],
+      ["Children, young people and adults who use talkers (book chapter)","https://link.springer.com/10.1007/978-3-030-74985-9_25","They tend to answer more than they start, and use few kinds of message.","q4","n"],
+      ["Against clipped \"telegraphic\" models (Fey 2008, summary)","https://www.researchgate.net/publication/251534991_The_mis-use_of_telegraphic_input_in_child_language_intervention","No proven benefit to dropping the little words when modeling. Why the talker speaks full sentences.","q5","n"],
+      ["Construction grammar approaches for learners who use talkers (2026)","https://pmc.ncbi.nlm.nih.gov/articles/PMC13724842","Cautions that children can miss learning to build language if whole phrases are always entered for them.","q6","n"]
     ]],
     ["Word endings", [
-      ["Teaching grammatical word endings to children who use talkers (Binger, Maguire-Marshall, Kent-Walsh 2011)","https://pubs.asha.org/doi/10.1044/1092-4388(2010/09-0163)","Three children quickly began using endings after adults modeled and recast them on the talker. They kept the skill only once correct and incorrect forms were contrasted.","e1"],
-      ["Plain summary of the word-endings study (NWACS)","https://stafford-casey.squarespace.com/blog/2019/10/aacademics-october-2019","Notes that people who use talkers often speak in a few key words, and that talkers lacking endings are part of the problem.","e2"]
+      ["Teaching grammatical word endings to children who use talkers (Binger, Maguire-Marshall, Kent-Walsh 2011)","https://pubs.asha.org/doi/10.1044/1092-4388(2010/09-0163)","Three children readily began using endings after adult models and recasts, but none kept the first one. After the endings were taught side by side, in contrast with each other, they kept all of them.","e1","a"],
+      ["Plain summary of the word-endings study (NWACS)","https://stafford-casey.squarespace.com/blog/2019/10/aacademics-october-2019","Notes that people who use talkers tend toward messages of a few key words, and that missing endings in the device are one of several causes.","e2","f"]
     ]],
     ["Numbers", [
-      ["Early numeracy for children with severe disabilities and complex communication needs (Wright and others 2020)","https://eric.ed.gov/?id=EJ1264157","Four children who could not rely on speech improved early math skills with a structured numeracy program. The authors say research in this area is scarce.","n1"],
-      ["Early numeracy using voice-output devices (research summary, Texas Education Agency)","https://spedsupport.tea.texas.gov/resource-library/complex-access-needs-research-summaries/mathematics","Three students with severe multiple disabilities answered number questions through voice-output devices and learned early numeracy skills.","n2"],
-      ["Using math and science lessons to teach vocabulary to students who use talkers (ASHA 2012)","https://pubs.asha.org/doi/10.1044/aac21.3.99","Argues that class math content is a good place to teach words and sentence building, if the talker has the words.","n3"],
-      ["Numeracy for learners with disabilities (Avaz, practice article)","https://www.avazapp.com/blog/numeracy-for-learners-with-disabilities-strategies-for-teaching-maths/","Practice advice, not a study: a talker needs words for numbers, measurement, time and money. Basis for the Numbers page.","n4"]
+      ["Early numeracy for children with severe disabilities and complex communication needs (Wright and others 2020)","https://eric.ed.gov/?id=EJ1264157","Four children who could not rely on speech improved early math skills with a structured numeracy program. The authors say research in this area is scarce.","n1","n"],
+      ["Early numeracy using voice-output devices (research summary, Texas Education Agency)","https://spedsupport.tea.texas.gov/resource-library/complex-access-needs-research-summaries/mathematics","Three students with severe multiple disabilities answered number questions through voice-output devices and learned early numeracy skills.","n2","n"],
+      ["Using math and science lessons to teach vocabulary to students who use talkers (ASHA 2012)","https://pubs.asha.org/doi/10.1044/aac21.3.99","Argues that class math content is a good place to teach words and sentence building, if the talker has the words.","n3","n"],
+      ["Numeracy for learners with disabilities (Avaz, practice article)","https://www.avazapp.com/blog/numeracy-for-learners-with-disabilities-strategies-for-teaching-maths/","Practice advice, not a study: a talker needs words for numbers, measurement, time and money. Basis for the Numbers page.","n4","n"]
     ]],
     ["Words for teens and adults (Stage 6)", [
-      ["500 most used words of five adults who use talkers (Beukelman, Yorkston, Poblete, Naranjo 1984), reprinted in this essay","https://ttac.odu.edu/ATN/Core/CoreVocabularyEssay_Cannon.pdf","The adult half of the Stage 6 words comes from the top 150 of this list.","s1"],
-      ["100 frequently used core words (PRC-Saltillo AAC Language Lab)","https://aaclanguagelab.com/materials/100highfrequencycorewords21.pdf","A one-page list by word type, used as a cross-check.","s2"],
-      ["Top 100 words of school-aged children, grades 2 to 8 (Boenisch and Soto, University of Cologne page)","https://www.hf.uni-koeln.de/36605","The authors' own free page with the ranked list. Stage 6 covers this list except a few words that came from the recording itself.","s3"],
-      ["Core vocabulary of school-aged children (Boenisch and Soto 2015, journal abstract)","https://informahealthcare.com/doi/abs/10.3109/07434618.2014.1001521","The study behind that list: 30 children recorded through a school day.","s4"],
-      ["Vocabulary selection: applying core vocabulary (handout)","https://ksha.org/docs/autism_intervention_handout_3.pdf","Summarises several studies: a few hundred words make up most of what people say at every age.","s5"]
+      ["500 most used words of five adults who use talkers (Beukelman, Yorkston, Poblete, Naranjo 1984), reprinted in this essay","https://ttac.odu.edu/ATN/Core/CoreVocabularyEssay_Cannon.pdf","The adult half of the Stage 6 words comes from the top 150 of this list.","s1","n"],
+      ["100 frequently used core words (PRC-Saltillo AAC Language Lab)","https://aaclanguagelab.com/materials/100highfrequencycorewords21.pdf","A one-page list by word type, used as a cross-check.","s2","n"],
+      ["Top 100 words of school-aged children, grades 2 to 8 (Boenisch and Soto, University of Cologne page)","https://www.hf.uni-koeln.de/36605","The authors' own free page with the ranked list. Stage 6 covers this list except a few words that came from the recording itself.","s3","n"],
+      ["Core vocabulary of school-aged children (Boenisch and Soto 2015, journal abstract)","https://informahealthcare.com/doi/abs/10.3109/07434618.2014.1001521","The study behind that list: 30 children recorded through a school day.","s4","n"],
+      ["Vocabulary selection: applying core vocabulary (handout)","https://ksha.org/docs/autism_intervention_handout_3.pdf","Summarises several studies: a few hundred words make up most of what people say at every age.","s5","n"]
     ]],
     ["Listening and question pop-ups", [
-      ["Context-aware AAC with just-in-time response options (Holyfield and colleagues)","https://par.nsf.gov/biblio/10574893-preliminary-investigation-context-aware-augmentative-alternative-communication-automated-just-time-cloze-phrase-response-options-social-participation-from-children-autism-spectrum","The closest study to this talker: answers offered from what a partner just said. Three children, prototype, early evidence.","l1"],
-      ["Context-aware AAC for academic participation (preschoolers)","https://synapsesocial.com/papers/6975b2c8feba4585c2d6e4e8","Second small study: faster, more accurate answers with context-aware choices.","l2"]
+      ["Context-aware AAC with just-in-time response options (Holyfield and colleagues)","https://par.nsf.gov/biblio/10574893-preliminary-investigation-context-aware-augmentative-alternative-communication-automated-just-time-cloze-phrase-response-options-social-participation-from-children-autism-spectrum","The closest study to this talker: answers offered from what a partner just said. Three children, prototype, early evidence.","l1","n"],
+      ["Context-aware AAC for academic participation (preschoolers)","https://synapsesocial.com/papers/6975b2c8feba4585c2d6e4e8","Second small study: faster, more accurate answers with context-aware choices.","l2","n"]
     ]],
     ["Page layout, button size and color", [
-      ["Performance of 2 and a half year olds on talkers with different layouts (Drager, Light and others 2003)","https://pubs.asha.org/doi/10.1044/1092-4388(2003/024)","Thirty typical toddlers did poorly on every layout, and found more words in a photo-like scene than in grids sorted by category.","d1"],
-      ["A model to estimate the best touchscreen layout for children with dyskinetic cerebral palsy (Bertucco and Sanger 2018)","https://pmc.ncbi.nlm.nih.gov/articles/PMC6101246","Button size, number and spacing change how fast a child with a movement disorder can communicate. Matching them to the child improves it.","d2"],
-      ["Background color cues and attention to single symbols (Wilkinson and Weiss 2017)","https://aac.psu.edu/?p=4007","Background color had little effect on finding a single symbol, for people with Down syndrome and for young children without disabilities.","d3"],
-      ["What decisions do therapists make when designing displays? (Thistle and Wilkinson, 2014 talk)","https://isaac-online.org/wp-content/uploads/Thistle-Wilkinson-SLP-Decisions-ISAAC-2014.pdf","A caution: these researchers listed background color coding by word type, and motor planning, among common practices that lacked an evidence base at the time.","d4"]
+      ["Performance of 2 and a half year olds on talkers with different layouts (Drager, Light and others 2003)","https://pubs.asha.org/doi/10.1044/1092-4388(2003/024)","Thirty typical toddlers did poorly on every layout. The abstract reports they found more words in a photo-like scene than in either grid. See the critical review below before relying on this.","d1","a"],
+      ["Critical review: scenes versus grids for preschoolers (Kaempffer, Western University, 2012-13)","https://www.uwo.ca/fhs/lwm/teaching/EBP/2012_13/Kaempffer_A.pdf","A student's critical review of six papers. In the toddler study the scene was not significantly better than the activity-based grid; both beat the category grid. Found no reliable evidence that scenes beat grids, noted possible bias toward scenes among the main authors, and one study with children who need talkers where grids did as well or better.","d5","f"],
+      ["A model to estimate the best touchscreen layout for children with dyskinetic cerebral palsy (Bertucco and Sanger 2018)","https://pmc.ncbi.nlm.nih.gov/articles/PMC6101246","A model study: button size, number and spacing predict how fast a child with a movement disorder can communicate, and matching them to the child should improve it. The full paper could not be opened to check how many children took part.","d2","a"],
+      ["Background color cues and attention to single symbols (Wilkinson and Weiss 2017)","https://aac.psu.edu/?p=4007","A conference poster, not a journal article. Background color had little effect on finding a single symbol, for people with Down syndrome and for language-matched children without disabilities.","d3","s"],
+      ["What decisions do therapists make when designing displays? (Thistle and Wilkinson, 2014 talk)","https://isaac-online.org/wp-content/uploads/Thistle-Wilkinson-SLP-Decisions-ISAAC-2014.pdf","A caution: these researchers listed background color coding by word type, and motor planning, among practices lacking an evidence base, adding that they may or may not work.","d4","f"]
     ]],
     ["Giving time to answer", [
-      ["Partner pause time and the communication of young people who use talkers (2011)","https://informahealthcare.com/doi/full/10.3109/17549507.2011.524709","Eight young people answered more often, and with longer messages, when the partner waited longer (2, 10 or 45 seconds were compared).","g1"],
-      ["Response time of young children with complex communication needs (Exceptional Children)","https://exceptionalchildren.org/journal/response-time-young-children-complex-communication-needs-following-communication","Children answered faster after a choice or a question than after a comment. The authors advise waiting instead of repeating the question.","g2"]
+      ["Partner pause time and the communication of young people who use talkers (2011)","https://informahealthcare.com/doi/full/10.3109/17549507.2011.524709","Eight young people answered more often, and with longer messages, when the partner waited longer (2, 10 or 45 seconds were compared).","g1","a"],
+      ["Response time of young children with complex communication needs (Exceptional Children)","https://exceptionalchildren.org/journal/response-time-young-children-complex-communication-needs-following-communication","Children answered faster after a choice or a question than after a comment (2023). The authors advise waiting instead of repeating, and using questions, choices and modeling.","g2","a"]
     ]],
     ["Photo scenes", [
-      ["Visual scene displays for beginning communicators (Penn State)","https://rerc2009.aac-learning-center.org/index.php/projects/show/id/1","Real photos with touchable spots suit very young children.","p1"],
-      ["Scenes compared with grids (2024)","https://e-space.mmu.ac.uk/636277","Both worked about equally in this trial. Why the talker has scenes and a grid, not one or the other.","p2"],
-      ["Click AAC: vocabulary generated from photographs","https://cacm.acm.org/research-highlights/aac-with-automated-vocabulary-from-photographs-insights-from-school-and-speech-language-therapy-settings","Words suggested from a photo cut the work for adults. Basis for Suggest words.","p3"],
-      ["QuickPic: topic boards from photographs","https://escholarship.mcgill.ca/downloads/jq085r838","Therapists rated AI-suggested words from photos as more fitting than older methods.","p4"]
+      ["Visual scene displays for beginning communicators (Penn State)","https://rerc2009.aac-learning-center.org/index.php/projects/show/id/1","Real photos with touchable spots suit very young children.","p1","n"],
+      ["Scenes compared with grids (2024)","https://e-space.mmu.ac.uk/636277","Both worked about equally in this trial. Why the talker has scenes and a grid, not one or the other.","p2","n"],
+      ["Click AAC: vocabulary generated from photographs","https://cacm.acm.org/research-highlights/aac-with-automated-vocabulary-from-photographs-insights-from-school-and-speech-language-therapy-settings","Words suggested from a photo cut the work for adults. Basis for Suggest words.","p3","n"],
+      ["QuickPic: topic boards from photographs","https://escholarship.mcgill.ca/downloads/jq085r838","Therapists rated AI-suggested words from photos as more fitting than older methods.","p4","n"]
     ]],
     ["Early reading", [
-      ["Transition to Literacy feature and sight words","https://pmc.ncbi.nlm.nih.gov/articles/PMC9214510","A written word that appears as the picture is spoken taught sight words in small studies. Used on photo spots and on the main board (the Written words switch).","r1"],
-      ["Transition to Literacy software features (RESNA)","https://www.resna.org/sites/default/files/conference/2018/cac/Mandak.html","Small static labels on pictures have no evidence of teaching reading.","r2"],
-      ["Evidence-based literacy instruction for a student who required a talker (Light, McNaughton and others 2008, case study)","https://www.thieme-connect.de/products/ejournals/pdf/10.1055/s-2008-1079126.pdf","One 8-year-old with multiple disabilities learned 20 letter sounds and to read 60 words with adapted teaching. Reading and spelling are reachable goals, which is why a typing line exists.","r3"]
+      ["Transition to Literacy feature and sight words","https://pmc.ncbi.nlm.nih.gov/articles/PMC9214510","A written word that appears as the picture is spoken taught sight words in small studies. Used on photo spots and on the main board (the Written words switch).","r1","n"],
+      ["Transition to Literacy software features (RESNA)","https://www.resna.org/sites/default/files/conference/2018/cac/Mandak.html","Small static labels on pictures have no evidence of teaching reading.","r2","n"],
+      ["Evidence-based literacy instruction for a student who required a talker (Light, McNaughton and others 2008, case study)","https://www.thieme-connect.de/products/ejournals/pdf/10.1055/s-2008-1079126.pdf","One 8-year-old with multiple disabilities learned 20 letter sounds and to read 60 words with adapted teaching. Reading and spelling are reachable goals, which is why a typing line exists.","r3","a"]
     ]],
     ["Tracking progress", [
-      ["A language activity monitor for evidence-based practice (Hill and Romich 2001)","https://informahealthcare.com/doi/abs/10.1080/10400435.2001.10132030","Argues that good practice needs a record of what the person actually says with the talker, collected automatically.","o1"]
+      ["A language activity monitor for evidence-based practice (Hill and Romich 2001)","https://informahealthcare.com/doi/abs/10.1080/10400435.2001.10132030","Argues that good practice needs a record of what the person actually says with the talker, collected automatically.","o1","a"]
     ]],
     ["Voice", [
-      ["Child speech synthesis for talkers (ICPhS 2023 paper)","https://guarant.cz/icphs2023/293.pdf","Background: the voices in talkers often do not match the child's age, gender or accent. It does not test whether a matching voice helps a child.","c1"]
+      ["Child speech synthesis for talkers (ICPhS 2023 paper)","https://guarant.cz/icphs2023/293.pdf","Background: the voices in talkers do not always match the child's age, gender or accent. It does not test whether a matching voice helps a child.","c1","f"]
     ]],
     ["Touch and access", [
-      ["Proloquo2Go access method settings","https://assistiveware.com/support/proloquo2go/alternative-access/access-method","Hold time and ignoring repeat taps are standard in leading talkers.","t1"],
-      ["Aided AAC for people with visual impairments, a meta-analysis (2025)","https://pubs.asha.org/doi/10.1044/2024_AJSLP-24-00242","Adjusting the display for vision was largely effective. Basis for the Seeing and hearing settings.","t2"]
+      ["Proloquo2Go access method settings","https://assistiveware.com/support/proloquo2go/alternative-access/access-method","Hold time and ignoring repeat taps are standard in leading talkers.","t1","n"],
+      ["Aided AAC for people with visual impairments, a meta-analysis (2025)","https://pubs.asha.org/doi/10.1044/2024_AJSLP-24-00242","Adjusting the display for vision was largely effective. Basis for the Seeing and hearing settings.","t2","n"]
     ]],
     ["Cautions about AI in talkers", [
-      ["A thoughtful approach to AI and AAC (AssistiveWare)","https://download.assistiveware.com/assistiveware/files/let%27s-look-before-we-leap-a-thoughtful-approach-to-ai-and-aac.pdf","Risks: whose words are they, privacy, and getting in the way of learning. Why answers are choices the child picks, not text written for them.","a1"],
-      ["The less I type, the better (Google Research)","https://research.google/pubs/the-less-i-type-the-better-how-ai-language-models-can-enhance-or-impede-communication-for-aac-users/","Adult users accept some AI help for speed but want control of their voice.","a2"]
+      ["A thoughtful approach to AI and AAC (AssistiveWare)","https://download.assistiveware.com/assistiveware/files/let%27s-look-before-we-leap-a-thoughtful-approach-to-ai-and-aac.pdf","Risks: whose words are they, privacy, and getting in the way of learning. Why answers are choices the child picks, not text written for them.","a1","n"],
+      ["The less I type, the better (Google Research)","https://research.google/pubs/the-less-i-type-the-better-how-ai-language-models-can-enhance-or-impede-communication-for-aac-users/","Adult users accept some AI help for speed but want control of their voice.","a2","n"]
     ]],
     ["Safety standards", [
-      ["Three flashes or below threshold (W3C accessibility guideline 2.3.1)","https://www.w3.org/WAI/WCAG22/Understanding/three-flashes-or-below-threshold.html","Flashing content can trigger seizures. Basis for no flashing or animation anywhere.","x1"],
-      ["Safe listening devices and systems (WHO and ITU standard)","https://who.int/publications/i/item/9789241515276","Sets a children's listening level of 75 decibels for 40 hours a week on personal audio devices. A guide for the wristband's loudness limit, though a wrist speaker is not what the standard was written for.","x2"]
+      ["Three flashes or below threshold (W3C accessibility guideline 2.3.1)","https://www.w3.org/WAI/WCAG22/Understanding/three-flashes-or-below-threshold.html","Flashing content can trigger seizures. Basis for no flashing or animation anywhere.","x1","f"],
+      ["Safe listening devices and systems (WHO and ITU standard)","https://who.int/publications/i/item/9789241515276","Sets a children's listening level of 75 decibels for 40 hours a week on personal audio devices. A guide for the wristband's loudness limit, though a wrist speaker is not what the standard was written for.","x2","f"]
     ]],
     ["Wearables", [
-      ["Just-in-time visual supports on a smartwatch (O'Brien and others 2016, summary page)","https://behavioristbookclub.com/aba-research/autism-developmental/brief-report--just-in-time-visual-supports-to-children-with-autism-via/","A small feasibility study of showing picture cues on a watch to children with autism. The nearest study found; it is not a talking wristband.","y1"]
+      ["Just-in-time visual supports on a smartwatch (O'Brien and others 2016, summary page)","https://behavioristbookclub.com/aba-research/autism-developmental/brief-report--just-in-time-visual-supports-to-children-with-autism-via/","Five children with autism followed more directions when picture or video cues appeared on a watch. The nearest study found; it is not a talking wristband.","y1","s"]
     ]]
   ];
   /* Every feature and what backs it: [name, level, note, study keys, maker's thinking].
@@ -2668,10 +2682,10 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
      prac = common practice in talkers, not studied; none = no research found, a design decision; tool = practical tool. */
   var FEATURES = [
     ["The board and its words", [
-      ["Home words that never move (10 words, then 20)","yes","A small set of common words covers much of what young children say, and a word kept in one place is found faster. One review cautions that it is not known whether common words first is best for children who are just starting.",["w1","s5","v3","k1","k2","v4"]],
+      ["Home words that never move (10 words, then 20)","part","A small set of common words covers much of what young children say; that part is well supported. Keeping each word in one place rests on one study of typical preschoolers, and researchers listed it as lacking evidence in 2014. One review cautions that common words first may not be best for children who are just starting.",["w1","s5","v3","k1","k2","v4"]],
       ["Room to grow past early words","yes","Children with Coffin-Siris syndrome usually understand more than they can say, so the vocabulary is not capped low.",["cs1","cs2"]],
       ["Six stages that add words in the order language usually grows","part","Following typical language development comes from research. These exact six stages are the maker's design and have not been tested.",["w4"]],
-      ["Word pages sorted by kind (People, Food, Feelings, Places, Things), from Stage 3","part","Standard in talkers, but toddlers in one study found category grids hard. That is why pages wait until Stage 3 and pop-ups bring answers forward.",["d1","v3"]],
+      ["Word pages sorted by kind (People, Food, Feelings, Places, Things), from Stage 3","part","Standard in talkers, but the category grid was the weakest layout for toddlers in one study. That is why pages wait until Stage 3 and pop-ups bring answers forward.",["d1","d5","v3"]],
       ["Key colors by kind of word","prac","Used in most talkers. Studies of color are mixed, and researchers have listed color coding by word type as lacking evidence.",["d3","d4"]],
       ["One tap says a whole sentence at Stages 1 to 3 (can be switched off)","part","Studies disagree. One argues adults should model full sentences. Others warn that children can miss learning to build language if whole phrases are always made for them.",["q5","w3","q6"]],
       ["Building sentences word by word (Stage 4: I, you, it, not)","yes","Children need practice putting words together themselves.",["w2","q2","w3","q6"]],
@@ -2680,15 +2694,15 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       ["Grown-up wording switch (bathroom for potty, and so on)","none","No research was looked up for the word swaps. They were chosen by judgment.",[]],
       ["Numbers page and joining digits","part","Small studies show children can learn and answer early number questions through a talker. This page's layout is untested.",["n1","n2","n3","n4"]],
       ["Questions page (whole questions to ask)","yes","People who use talkers tend to answer more than they ask. Stored whole questions helped them ask about their partner.",["q1","q3","q4"]],
-      ["Word endings by holding a word (play, plays, playing, played)","part","Children who use talkers can learn word endings when adults model and contrast them, and they need the endings in the device. Reaching them by holding a word is untested.",["e1","e2"]],
-      ["Added words go on the end, so nothing changes places","yes","Moving symbols has a cost for the hand's memory of where a word is.",["k1","k2"]]
+      ["Word endings by holding a word (play, plays, playing, played)","part","Three children learned word endings when adults modeled them and taught them in contrast with each other; the endings have to be in the device. Reaching them by holding a word is untested.",["e1","e2"]],
+      ["Added words go on the end, so nothing changes places","part","Follows from the same single study of typical preschoolers. Not yet shown with children who use talkers.",["k1","k2"]]
     ]],
     ["Making it the child's own", [
       ["About your child questions","yes","Families' own words differ widely, and a tested questionnaire approach exists. These eight questions are the maker's own and are untested.",["v1","v2","v3"]],
       ["Add or rename words, and use your own photos with cropping","part","Personal words matter. Cropping and renaming themselves were not researched.",["v2","v3","p1"]],
       ["Offer these: a grown-up picks the answers to show first","part","Follows from the research on personal vocabulary. The picker itself is untested.",["v2","v3"]],
       ["Picture library (emoji and ARASAAC symbols)","none","No research was looked up on which picture set works best for this app.",[]],
-      ["Photo scenes with touchable spots","yes","Real photos with touchable spots suit very young children, and worked about as well as grids in a trial.",["p1","p2","d1"]],
+      ["Photo scenes with touchable spots","part","Toddlers in one study found more words in a photo-like scene than in category grids. A critical review calls that evidence inconclusive, and a 2024 trial found scenes and grids about equal. Scenes are a sound option to offer, not a proven better one.",["d1","d5","p1","p2"]],
       ["Suggest words from a photo (AI)","yes","Words suggested from a photo saved adults work and were rated as fitting.",["p3","p4"]]
     ]],
     ["Listening and answering", [
@@ -2701,16 +2715,16 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       ["The name question, and answering only when the child's name is heard","none","No research found. Design decisions.",[]],
       ["Answers appear early, from the first words of a question","none","No study of answering speed in a listening talker was found.",[]],
       ["A pop-up stays up while people keep talking (up to 25 seconds)","part","Waiting longer brought more and longer answers. Advice from one study is to wait instead of repeating the question. The 25 seconds is the maker's choice.",["g1","g2"]],
-      ["Answer display: a few very big buttons","part","Bigger, fewer, well-spaced buttons help children with movement difficulties. Not tested for pop-up answers.",["d2"]],
+      ["Answer display: a few very big buttons","part","A model study predicts that bigger, fewer, well-spaced buttons help children with movement difficulties. Not tested for pop-up answers.",["d2"]],
       ["Answer display: each answer in its board place","part","A word kept in one place was found faster in one study of typical preschoolers. Not yet shown with children who use talkers.",["k1","k2"]],
-      ["Answer display: the whole page opens","none","No research found for this choice. Note that toddlers in one study found category pages hard to search.",["d1"]],
+      ["Answer display: the whole page opens","none","No research found for this choice. Note that toddlers in one study found category grids the hardest layout to search.",["d1","d5"]],
       ["Build the answer word by word (I, not, want, like)","yes","Children need practice building sentences, with adult models only a little longer than their own.",["w2","w3","q2","q6"]],
       ["The family's own eating places for where-should-we-eat questions","part","Follows from the research on personal vocabulary.",["v1","v2"]],
       ["AI help for harder questions (off by default)","none","No study shows AI-chosen answers help children. Two papers urge care, which is why it is off by default and only offers choices.",["a1","a2"]],
       ["Real restaurant chain names in AI answers","none","No research. Asked for by the maker.",[]]
     ]],
     ["Teaching helpers", [
-      ["Show me, and Glow-along","yes","Adults pointing to pictures while they talk is the best-proven teaching method. Doing the pointing automatically is untested.",["m1","m2"]],
+      ["Show me, and Glow-along","yes","A partner using the talker while speaking was highly effective across 28 studies. Doing the pointing automatically is untested.",["m1","m2"]],
       ["How-to card for grown-ups","yes","Training the adults around the child is where talkers succeed or fail.",["m2"]],
       ["Written words that appear as a picture is spoken","yes","Taught sight words in small studies. Small fixed labels alone have no such evidence.",["r1","r2"]],
       ["Progress log and report","part","Good practice needs a record of what the child really says. This simple log is far less than the tools in that work.",["o1"]]
@@ -2764,6 +2778,9 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       box.appendChild(d);
     });
     box.appendChild(el('h4', 'The studies, and which features use each one'));
+    var CHK = {f:'Checked 18 Nov 2026 against the full text or the page itself.', a:'Checked 18 Nov 2026 against the abstract only; the full paper is behind a paywall or could not be opened.', s:'Checked 18 Nov 2026 against a summary page, not the paper.', n:'Not re-checked since it was first added.'}, nChk = 0, nAll = 0;
+    RESEARCH.forEach(function(g){ g[1].forEach(function(r){ nAll++; if(r[4] && r[4]!=='n') nChk++; }); });
+    box.appendChild(el('span', nChk+' of the '+nAll+' sources were re-checked against the source on 18 Nov 2026; each one says how. The rest carry the note written when they were first read.', 'rsum'));
     RESEARCH.forEach(function(group){
       var d = el('details'), sm = el('summary', group[0]+' ('+group[1].length+')'); d.appendChild(sm);
       group[1].forEach(function(r){
@@ -2771,6 +2788,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
         a.href = r[1]; a.target = '_blank'; a.rel = 'noopener noreferrer';
         p.appendChild(a); p.appendChild(el('span', r[2]));
         p.appendChild(el('span', usedFor[r[3]] ? 'Used for: '+usedFor[r[3]].join('; ')+'.' : 'Background reading. No single feature rests on it.', 'rused'));
+        p.appendChild(el('span', CHK[r[4]] || CHK.n, 'rchk'));
         d.appendChild(p);
       });
       box.appendChild(d);
