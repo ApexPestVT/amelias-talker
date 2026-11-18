@@ -1471,7 +1471,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v80) ---'+
+      dbgText = '\n--- Listening check (v81) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -2679,6 +2679,25 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     ]],
     ["Wearables", [
       ["Just-in-time visual supports on a smartwatch (O'Brien and others 2016, summary page)","https://behavioristbookclub.com/aba-research/autism-developmental/brief-report--just-in-time-visual-supports-to-children-with-autism-via/","Five children with autism followed more directions when picture or video cues appeared on a watch. The nearest study found; it is not a talking wristband.","y1","s"]
+    ]],
+    ["Design choices looked up on 18 Nov 2026", [
+      ["Iconicity and ease of learning of ARASAAC symbols (Cabello and Mazón 2018)","https://www.elsevier.es/es-revista-revista-logopedia-foniatria-audiologia-309-articulo-iconicidad-facilidad-aprendizaje-simbolos-pictograficos-S021446031830041X","24 children aged 3 to 5 with language delay or autism: ARASAAC pictures were rated closer to their meaning than two other well-known sets, though it varied by type of word.","e1","a"],
+      ["How guessable are 1,525 ARASAAC pictures? (Díez and others 2024)","https://www.frontiersin.org/articles/10.3389/fpsyg.2024.1467796/full","521 people: meanings were fairly hard to guess from the picture alone, but the pictures fit well once the word was known. Naming words did best.","e2","a"],
+      ["AAC terminology survey (AssistiveWare)","https://assistiveware.com/blog/aac-terminology-survey","A maker's survey write-up: childish terms pushed on older users are noticed and resented. It names the word \"talker\" as one that can feel childish to teens and adults.","e3","x"],
+      ["Words teens use with friends (2024)","https://informahealthcare.com/doi/abs/10.1080/22000259.2024.2317470","Typical teenagers' words in talk with friends; argues the words on a talker need to change with age.","e4","x"],
+      ["Children's color words (O'Hanlon and Roberson)","https://repository.essex.ac.uk/12973/1/O%26%2339%3BHanlon%2520%2526%2520Roberson.pdf","Reports earlier findings that many children can name the best examples of eleven color words by age four.","e5","x"],
+      ["Brand logo recognition in 3 to 5 year olds (McAlister and Cornwell 2010, news report)","https://www.nbcnews.com/health/health-news/even-3-year-old-knows-brands-flna1c9443417","38 children aged 3 to 5 recognised many brand logos, fast food among them. A news report of the study, which tested logos, not spoken or written names.","e6","s"],
+      ["Fast food logo recognition among children (2009)","https://link.springer.com/doi/10.1007/s10900-008-9119-3","Older children recognised fast food restaurant logos more often than other food logos.","e7","a"],
+      ["Speech output and learning picture symbols (Schlosser and others 1995, summary page)","https://behavioristbookclub.com/aba-research/aba-fundamentals/the-effects-of-speech-output-technology-in-the-learning-of-graphic-sym/","Adults with severe intellectual disability learned symbols faster and with fewer errors when the device spoke the word on each touch.","e8","s"],
+      ["Rate and pitch of synthesized speech (1991)","https://scilit.com/publications/6749752d02515c1fe70fea94161092ba","Slowing an early speech synthesizer raised word intelligibility by more than 10%. The authors say users need to be able to change the rate.","e9","a"],
+      ["Synthesized speech and children, a scoping review (2010)","https://pubs.asha.org/doi/10.1044/1058-0360(2010/09-0024)","Only ten studies: children understood synthesized speech less well than adults. The review calls the research thin.","e10","a"],
+      ["Smart Touch: touch accuracy for people with motor impairments (Mott and others 2016)","https://www.microsoft.com/en-us/research/?p=675027","People with motor impairments often touch with several parts of the hand at once, which standard touch screens misread. A different fix from this talker's, on a lab table.","e11","a"],
+      ["Multi-touch gestures for pre-kindergarten children (Nacher and others 2015)","https://riunet.upv.es/bitstream/10251/64752/3/VersionAutor.pdf","Children aged 2 to 3 managed many gestures, but double tap and long press caused problems. Later work by the same group raised success with design changes.","e12","x"],
+      ["Talker screens for children with cortical visual impairment, two focus groups (2024)","https://pubs.asha.org/doi/10.1044/2024_AJSLP-24-00318","Eight teachers of the visually impaired and one optometrist: dark backgrounds and strong but natural contrast help. Opinion from professionals, not a test with children.","e13","a"],
+      ["AAC and CVI: Can we chat? (PrAACtical AAC)","https://praacticalaac.org/praactical/aac-cvi-can-we-chat/","A caution from two specialists: bright symbols on black are not right for every child with this condition and can add clutter.","e14","x"],
+      ["Supporting visual needs in a talker (Communication Matrix post)","https://communicationmatrix.org/Community/Posts/Content/15817","Practice advice: a yellow or red outline can help draw visual attention for children with cortical visual impairment.","e15","x"],
+      ["Developing prompt awareness in the AAC team (USSAAC)","https://www.ussaac.org/speakup/developing-prompt-awareness-in-the-aac-team/","Practice advice: give the least help that works, to avoid children waiting to be prompted.","e16","x"],
+      ["AllyAAC: a wrist-worn sensor paired with a phone (2026)","https://pure.psu.edu/en/publications/giving-meaning-to-movements-challenges-and-opportunities-in-expan/","14 participants: a wrist sensor turned their own body movements into spoken messages. Wrist-worn, but a different idea from a band with keys.","e17","a"]
     ]]
   ];
   /* Every feature and what backs it: [name, level, note, study keys, maker's thinking].
@@ -2695,7 +2714,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       ["Building sentences word by word (Stage 4: I, you, it, not)","yes","Trials and small studies show young children who use talkers can learn to build longer, rule-following messages when adults model them.",["w2","q2","w3","q6"]],
       ["Typing line and saved sentences (Stage 5)","part","Reading and spelling are reachable for people who use talkers. This typing line itself has not been studied.",["r3","q1"]],
       ["Teen and adult words (Stage 6)","yes","The 96 words come from published lists of the words older children and adults use most.",["s1","s2","s3","s4","s5"]],
-      ["Grown-up wording switch (bathroom for potty, and so on)","none","No research was looked up for the word swaps. They were chosen by judgment.",[]],
+      ["Grown-up wording switch (bathroom for potty, and so on)","part","A maker's survey and a 2024 study of teenagers both say words should fit the user's age, and that childish terms are noticed. The particular word swaps here were chosen by judgment.",["e3","e4"]],
       ["Numbers page and joining digits","part","Two small studies taught early number skills to children who cannot rely on speech, one of them through voice-output switches. Their results could not be read in what was available, and this page's layout is untested.",["n1","n2","n3","n4"]],
       ["Questions page (whole questions to ask)","yes","People who use talkers tend to answer more than they ask. Stored whole questions helped them ask about their partner.",["q1","q3","q4"]],
       ["Word endings by holding a word (play, plays, playing, played)","part","Three children learned word endings when adults modeled them and taught them in contrast with each other; the endings have to be in the device. Reaching them by holding a word is untested.",["e1","e2"]],
@@ -2705,7 +2724,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       ["About your child questions","yes","Families' own words differ widely, and a tested questionnaire approach exists. These eight questions are the maker's own and are untested.",["v1","v2","v3"]],
       ["Add or rename words, and use your own photos with cropping","part","Personal words matter. Cropping and renaming themselves were not researched.",["v2","v3","p1"]],
       ["Offer these: a grown-up picks the answers to show first","part","Follows from the research on personal vocabulary. The picker itself is untested.",["v2","v3"]],
-      ["Picture library (emoji and ARASAAC symbols)","none","No research was looked up on which picture set works best for this app.",[]],
+      ["Picture library (emoji and ARASAAC symbols)","part","ARASAAC pictures were rated closer to their meaning than two other sets by young children with language delay, but a larger study found many are hard to guess unaided. Emoji have not been studied for talkers.",["e1","e2"]],
       ["Photo scenes with touchable spots","part","Toddlers in one study found more words in a photo-like scene than in category grids. A critical review calls that evidence inconclusive, and a 2024 trial found scenes and grids about equal. Scenes are a sound option to offer, not a proven better one.",["d1","d5","p1","p2"]],
       ["Suggest words from a photo (AI)","part","Therapists who tried photo-to-words tools said it cut their workload and rated one highly usable. Neither study measured what children gained.",["p3","p4"]]
     ]],
@@ -2714,18 +2733,18 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       ["This-or-that and open questions (eat, drink, who, where, what to do)","part","In one small study children answered faster and more accurately when the talker offered answers to the question just asked. The question types used here were not studied.",["l1","l2","g2"]],
       ["Answers are choices the child picks, with Something else","part","Papers on AI in talkers raise authorship: the words should be the user's own. Offering choices is the maker's way to respect that; it has not been tested.",["a1","a2","l1"]],
       ["A yes or no answer says a full sentence","part","Follows the argument for full-sentence models. Not studied for yes or no answers.",["q8","q7","q5"]],
-      ["Color questions offer the 8 basic colors","none","No research was looked up. A design decision.",[]],
+      ["Color questions offer the 8 basic colors","part","Many children can name the main color words by about age four. Offering these eight as answers is the maker's choice and was not studied.",["e5"]],
       ["Number and school-math questions offer 1 to 10","part","Three students in one study answered through single-switch voice-output devices during number lessons. Offering 1 to 10 as choices was not studied.",["n1","n2"]],
-      ["The name question, and answering only when the child's name is heard","none","No research found. Design decisions.",[]],
-      ["Answers appear early, from the first words of a question","none","No study of answering speed in a listening talker was found.",[]],
+      ["The name question, and answering only when the child's name is heard","none","Looked up on 18 Nov 2026. Research shows people notice their own name easily, but nothing was found on a talker that waits to hear the child's name. Design decisions.",[]],
+      ["Answers appear early, from the first words of a question","part","Young people who use talkers answered more often, and at greater length, when partners waited longer. Showing answers early gives the child more of that time. Early answers themselves were not studied.",["g1"]],
       ["A pop-up stays up while people keep talking (up to 25 seconds)","part","Waiting longer brought more and longer answers. Advice from one study is to wait instead of repeating the question. The 25 seconds is the maker's choice.",["g1","g2"]],
       ["Answer display: a few very big buttons","part","A model study predicts that bigger, fewer, well-spaced buttons help children with movement difficulties. Not tested for pop-up answers.",["d2"]],
       ["Answer display: each answer in its board place","part","A word kept in one place was found faster in one study of typical preschoolers. Not yet shown with children who use talkers.",["k1","k2"]],
-      ["Answer display: the whole page opens","none","No research found for this choice. Note that toddlers in one study found category grids the hardest layout to search.",["d1","d5"]],
+      ["Answer display: the whole page opens","prac","Follows the common advice to give the least help that works, so the child finds the word in its usual place. Not studied as an answer display. Toddlers in one study found category grids the hardest layout to search.",["e16","d1","d5"]],
       ["Build the answer word by word (I, not, want, like)","yes","Trials and small studies show young children who use talkers can learn to build their own messages when adults model on the talker.",["w2","w3","q2","q6"]],
       ["The family's own eating places for where-should-we-eat questions","part","Follows from the research on personal vocabulary.",["v1","v2"]],
       ["AI help for harder questions (off by default)","none","No study shows AI-chosen answers help children. Two papers urge care, which is why it is off by default and only offers choices.",["a1","a2"]],
-      ["Real restaurant chain names in AI answers","none","No research. Asked for by the maker.",[]]
+      ["Real restaurant chain names in AI answers","part","Children aged 3 to 5 recognise many brand logos, fast food among them. Those studies tested logos; this talker shows the name with a plain food picture, which was not studied.",["e6","e7"]]
     ]],
     ["Teaching helpers", [
       ["Show me, and Glow-along","yes","A partner using the talker while speaking was highly effective across 28 studies, and a review found 29 studies in which parents, staff and classmates did it. Doing the pointing automatically is untested.",["m1","m2","m3"]],
@@ -2735,23 +2754,23 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     ]],
     ["Voice", [
       ["Child voices (girl and boy)","part","Talker voices often do not match the child. No study was found showing a matching voice helps.",["c1"]],
-      ["Each word is spoken as it is tapped; speed and repeat settings","none","No research was looked up for these settings.",[]]
+      ["Each word is spoken as it is tapped; speed and repeat settings","part","Hearing the word on each touch helped adults with severe intellectual disability learn symbols, and slowing synthesized speech made it easier to understand. A review found only ten studies with children and calls the research thin.",["e8","e9","e10"]]
     ]],
     ["Touch", [
       ["Hold time and ignoring extra taps","prac","Standard settings in a leading talker and in the iPad itself. The source is a maker's help page, not a study.",["t1"]],
-      ["Ignored edge strip and resting-hand rule","none","No research found. Built from watching how one child holds the tablet.",[]],
+      ["Ignored edge strip and resting-hand rule","part","Research confirms the problem: people with motor impairments often touch with several parts of the hand and standard screens misread it. This talker's own rule came from watching one child and has not been tested.",["e11"]],
       ["Child lock","prac","Common in talkers and tablets. Not researched here.",[]],
-      ["Vibrate on each tap","none","No research was looked up.",[]]
+      ["Vibrate on each tap","none","Looked up on 18 Nov 2026. Nothing was found on vibration helping children hit the right button.",[]]
     ]],
     ["Seeing and hearing", [
       ["High contrast, bigger pictures or words, wider spacing","part","A review found talkers adapted for people with visual impairments helped, but those were mostly low-tech adaptations; it did not test screen settings like these. A model study predicts that size and spacing matter for accuracy.",["t2","d2"]],
       ["No flashing or animation anywhere","yes","A web accessibility standard, because flashing can trigger seizures.",["x1"]],
-      ["Dark pictures are lightened automatically in high contrast","none","No research. A design decision.",[]],
-      ["Yellow frame while the talker is speaking","none","No research was looked up.",[]]
+      ["Dark pictures are lightened automatically in high contrast","part","Vision professionals in one study recommended dark backgrounds with strong, natural contrast. Two specialists caution that this is not right for every child. Lightening pictures automatically was not studied.",["e13","e14"]],
+      ["Yellow frame while the talker is speaking","prac","A yellow or red outline is common advice for drawing visual attention. Using it to show that the talker is speaking was not studied.",["e15"]]
     ]],
     ["My Turn To-Go wristband", [
-      ["A four-key talking wristband","none","No study of a talking wristband was found. The nearest is a small study of picture cues on a smartwatch.",["y1"]],
-      ["Three levels: tap, press and hold, double tap","none","No research found. Whether holding is easier than double tapping is a question for a therapist.",[]],
+      ["A four-key talking wristband","part","Wrist-worn talkers are sold, and a 2026 study built a wrist sensor that speaks for the wearer. No study of a band with a few talking keys was found. The nearest child study is of picture cues on a smartwatch.",["e17","y1"]],
+      ["Three levels: tap, press and hold, double tap","part","A study of children aged 2 to 3 found double tap and long press were the gestures that caused problems, though design changes later raised success. A reason to keep single tap as the default and ask a therapist about the other two.",["e12"]],
       ["Loudness limit","part","Guided by a children's safe-listening level for personal audio. The wristband's real loudness has not been measured.",["x2"]]
     ]],
     ["Practical tools", [
