@@ -31,4 +31,16 @@ if 'MainViewController' not in t:
         sys.exit('Main.storyboard does not look as expected:\n' + t)
     io.open(b, 'w', encoding='utf-8').write(n[0])
 
-print('ios project patched')
+# 4. The My Turn icon and launch screen replace the wrapper's stock ones.
+import glob, shutil
+icons = glob.glob(os.path.join(app, 'Assets.xcassets', 'AppIcon.appiconset', '*.png'))
+if len(icons) != 1:
+    sys.exit('Expected one app icon file in the template, found: %r' % icons)
+shutil.copyfile('native/ios/AppIcon-1024.png', icons[0])
+splashes = glob.glob(os.path.join(app, 'Assets.xcassets', 'Splash.imageset', '*.png'))
+if not splashes:
+    sys.exit('No launch screen pictures found in the template')
+for f in splashes:
+    shutil.copyfile('native/ios/Splash-2732.png', f)
+
+print('ios project patched (icon 1, launch pictures %d)' % len(splashes))

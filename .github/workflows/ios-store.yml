@@ -1,0 +1,121 @@
+name: iPad store build
+# Builds the signed iPad/iPhone app on a Mac at GitHub and sends it to TestFlight (App Store Connect).
+# Started by hand only: Actions > iPad store build > Run workflow.
+#
+# Needs four repository secrets (Settings > Secrets and variables > Actions). Never put these anywhere else:
+#   APPLE_TEAM_ID        the 10-character Team ID shown under Membership details at developer.apple.com/account
+#   APPLE_API_ISSUER_ID  Issuer ID from App Store Connect > Users and Access > Integrations
+#   APPLE_API_KEY_ID     Key ID of the API key made there. The key must have the ADMIN role, or Apple refuses to sign
+#   APPLE_API_KEY_P8     the whole text of the downloaded AuthKey_XXXX.p8 file
+# The app must already exist in App Store Connect (Apps > +) with the same bundle ID as mobile/capacitor.config.json.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version people see in the store (for example 1.0)'
+        required: true
+        default: '1.0'
+      dry_run:
+        description: 'Practice run: build the store version without signing or uploading'
+        type: boolean
+        default: false
+concurrency:
+  group: ios-store
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    env:
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+      KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+      DRY: ${{ inputs.dry_run }}
+      VERSION: ${{ inputs.version }}
+      BUILD: ${{ github.run_number }}
+    steps:
+      - name: Check the Apple secrets are in place
+        run: |
+          if [ "$DRY" = "true" ]; then echo "Practice run: nothing is signed or uploaded."; exit 0; fi
+          miss=""
+          [ -n "$TEAM_ID" ] || miss="$miss APPLE_TEAM_ID"
+          [ -n "$ISSUER_ID" ] || miss="$miss APPLE_API_ISSUER_ID"
+          [ -n "$KEY_ID" ] || miss="$miss APPLE_API_KEY_ID"
+          [ -n "$KEY_P8" ] || miss="$miss APPLE_API_KEY_P8"
+          if [ -n "$miss" ]; then echo "::error::Missing repository secrets:$miss"; exit 1; fi
+          echo "All four Apple secrets are present."
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pick the newest Xcode 26 on this Mac
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -vi beta | sort -V | tail -1)
+          if [ -n "$X" ]; then sudo xcode-select -s "$X"; fi
+          xcodebuild -version
+      - name: Install the wrapper
+        working-directory: mobile
+        run: |
+          npm install --no-audit --no-fund
+          npm uninstall --no-audit --no-fund @capacitor-community/speech-recognition
+      - name: Copy the app pages in
+        working-directory: mobile
+        run: rm -rf www && cp -r ../public www
+      - name: Create the iOS project
+        working-directory: mobile
+        run: |
+          npx cap add ios
+          python3 patch-ios.py
+          npx cap sync ios
+          echo "Bundle ID: $(grep -m1 PRODUCT_BUNDLE_IDENTIFIER ios/App/App.xcodeproj/project.pbxproj)"
+          echo "Version $VERSION, build $BUILD"
+      - name: Build the store version (not signed yet)
+        working-directory: mobile/ios/App
+        run: |
+          set -o pipefail
+          xcodebuild archive -project App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/App.xcarchive -derivedDataPath build/dd \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" 2>&1 | tee archive.log | grep -E "error|ARCHIVE|warning: unre" | tail -60
+          ls build/App.xcarchive/Products/Applications
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" -c "Print :CFBundleVersion" -c "Print :CFBundleIdentifier" build/App.xcarchive/Products/Applications/App.app/Info.plist
+      - name: Sign it with the Apple key and make the store file
+        if: ${{ inputs.dry_run != true }}
+        working-directory: mobile/ios/App
+        run: |
+          set -o pipefail
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$KEY_P8" > ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8
+          cat > export.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>export</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>uploadSymbols</key><true/>
+          </dict></plist>
+          PLIST
+          sed -i '' 's/^          //' export.plist
+          xcodebuild -exportArchive -archivePath build/App.xcarchive -exportPath build/out -exportOptionsPlist export.plist \
+            -allowProvisioningUpdates -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8 \
+            -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER_ID" 2>&1 | tee export.log | grep -E "error|EXPORT|Exported" | tail -40
+          ls -la build/out
+      - name: Send it to TestFlight
+        if: ${{ inputs.dry_run != true }}
+        working-directory: mobile/ios/App
+        run: |
+          IPA=$(ls build/out/*.ipa | head -1)
+          xcrun altool --upload-app -f "$IPA" -t ios --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID" 2>&1 | tee upload.log | tail -30
+          grep -qi "error" upload.log && exit 1 || true
+      - name: Remove the Apple key from this Mac
+        if: always()
+        run: rm -rf ~/.appstoreconnect
+      - name: Show the end of the logs if it failed
+        if: failure()
+        working-directory: mobile/ios/App
+        run: |
+          for f in archive.log export.log upload.log; do [ -f $f ] && { echo "==== $f"; tail -80 $f; }; done; true
