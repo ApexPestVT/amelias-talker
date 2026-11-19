@@ -1561,7 +1561,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v88) ---'+
+      dbgText = '\n--- Listening check (v89) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -3884,23 +3884,28 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       acctOn = !!(st && st.enabled); $('acOpen').hidden = !acctOn && !acct.token;
       if(!acctOn){ then(); return; }
       if(acct.token && acct.childId){ then(); acctCheck(); acctDirty(); return; }      // signed in: also make sure this device has a saved copy
-      if(!firstUse && !acctLaterOk()){ then(); return; }
+      if(!firstUse && !acctLaterOk() && !(acctWaiting() && !acct.token)){ then(); return; }
       acctAfter = then; $('acLater').hidden = firstUse;          // only a tablet already in use may put it off
-      if(acct.token) acctLoadKids(); else { $('acMail').value = ''; acctOpenPanel('acEmail'); }
+      if(acct.token) acctLoadKids(); else acctAskEmail();
     }, function(){ $('acOpen').hidden = !acct.token; then(); });
   }
   function acctCheck(){ acctCall('me', {token:acct.token}).then(function(j){ acctKids = j.children || []; acct.email = j.email || acct.email; var mine = acctKids.filter(function(k){ return k.id===acct.childId; })[0]; if(!mine){ acct.childId = 0; acct.deviceId = 0; acctKeep(); } else if(!mine.devices.some(function(d){ return d.id===acct.deviceId; })){ acct.deviceId = 0; acctKeep(); acctDirty(); } },
     function(e){ if(e.status===401){ acct = ACCT_NONE(); acctKeep(); } }); }
+  /* A code was asked for and not used yet. Kept so that leaving to read the email, and the page starting again, comes back to the code screen. */
+  function acctWaitSet(m){ try{ if(m) localStorage.setItem('talker-acct-wait', JSON.stringify({email:m, at:Date.now()})); else localStorage.removeItem('talker-acct-wait'); }catch(e){} }
+  function acctWaiting(){ try{ var w = JSON.parse(localStorage.getItem('talker-acct-wait') || 'null'); if(w && w.email && Date.now() - w.at < 14*60*1000) return String(w.email); }catch(e){} return ''; }
+  function acctCodeScreen(m){ acctMail = m; $('acSentTo').textContent = 'We sent 6 numbers to ' + m + '. Check spam too.'; $('acNum').value = ''; acctShow('acCode'); }
+  function acctAskEmail(){ var w = acctWaiting(); if(w){ acctOpenPanel('acCode'); acctCodeScreen(w); } else { $('acMail').value = ''; acctOpenPanel('acEmail'); } }
   function acctSend(){
     var m = $('acMail').value.trim(); if(!/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(m)){ $('acMsg1').textContent = 'Type your email address.'; return; }
     if(acctBusy) return; acctBusy = true; $('acMsg1').textContent = '';
-    acctCall('start', {email:m}).then(function(){ acctBusy = false; acctMail = m; $('acSentTo').textContent = 'We sent 6 numbers to ' + m + '. Check spam too.'; $('acNum').value = ''; acctShow('acCode'); try{ $('acNum').focus(); }catch(e){} },
+    acctCall('start', {email:m}).then(function(){ acctBusy = false; acctWaitSet(m); acctCodeScreen(m); try{ $('acNum').focus(); }catch(e){} },
       function(e){ acctBusy = false; acctErr('acMsg1', e, function(){ acctShow('acEmail'); }); });
   }
   function acctVerify(){
     var c = $('acNum').value.replace(/\D/g,''); if(c.length!==6){ $('acMsg2').textContent = 'Type the 6 numbers from the email.'; return; }
     if(acctBusy) return; acctBusy = true;
-    acctCall('verify', {email:acctMail, code:c}).then(function(j){ acctBusy = false; acct = ACCT_NONE(); acct.token = j.token; acct.email = j.email; acctKeep(); acctKids = j.children || []; acctAfterSignIn(); },
+    acctCall('verify', {email:acctMail, code:c}).then(function(j){ acctBusy = false; acctWaitSet(''); acct = ACCT_NONE(); acct.token = j.token; acct.email = j.email; acctKeep(); acctKids = j.children || []; acctAfterSignIn(); },
       function(e){ acctBusy = false; acctErr('acMsg2', e, function(){ acctShow('acCode'); }); });
   }
   function acctLoadKids(){ acctCall('me', {token:acct.token}).then(function(j){ acctKids = j.children || []; acctOpenPanel('acPick'); acctAfterSignIn(); },
@@ -4032,7 +4037,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   function acctManageFill(){ return acctCall('me', {token:acct.token}).then(function(j){ acctKids = j.children || []; acct.email = j.email || acct.email; acctManageText(); if(!acct.childId) acctAfterSignIn(); },
       function(e){ if(e.status===401){ acct = ACCT_NONE(); acctKeep(); acctManage(); } else $('acMsg6').textContent = e.net ? 'Could not reach the server just now.' : e.message; }); }
   function acctManage(){
-    if(!acct.token){ acctAfter = null; $('acLater').hidden = false; $('acMail').value = ''; acctOpenPanel('acEmail'); return; }
+    if(!acct.token){ acctAfter = null; $('acLater').hidden = false; acctAskEmail(); return; }
     acctOpenPanel('acManage'); $('acErase2').hidden = true; $('acProg2').textContent = ''; acctManageText(); acctManageFill();
   }
   function acctSignOut(erase){
@@ -4045,7 +4050,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   $('acCheck').addEventListener('click', acctVerify);
   $('acNum').addEventListener('keydown', function(e){ if(e.key==='Enter') acctVerify(); });
   $('acAgain').addEventListener('click', function(){ $('acMail').value = acctMail; acctShow('acEmail'); acctSend(); });
-  $('acOther').addEventListener('click', function(){ acctShow('acEmail'); });
+  $('acOther').addEventListener('click', function(){ acctWaitSet(''); acctShow('acEmail'); });
   $('acLater').addEventListener('click', function(){ try{ localStorage.setItem('talker-acct-later', String(Date.now())); }catch(e){} acctClose(); });
   $('acGo').addEventListener('click', acctClose);
   $('acNew').addEventListener('click', function(){ acctChildForm(0); });
