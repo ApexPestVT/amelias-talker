@@ -784,8 +784,7 @@ body.typing .scrollcue{display:none}
   <div class="sheet wb">
     <div id="acEmail">
       <h2>Sign in to My Turn</h2>
-      <p>For a grown-up. My Turn is free. To keep it free, we tell the people who fund it how many children it helps, their age range and the kind of condition. Never names.</p>
-      <small>Signing in also saves this setup, so it can be put on another tablet. We email you a 6-number code; there is no password. <a href="privacy.html" target="_blank" rel="noopener">How we handle your information</a></small>
+      <small>We'll email you a 6-number code. <a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a></small>
       <label for="acMail"><b>Your email</b></label>
       <input type="email" id="acMail" maxlength="254" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false">
       <small id="acMsg1" role="status"></small>
@@ -813,14 +812,13 @@ body.typing .scrollcue{display:none}
     </div>
     <div id="acChild" hidden>
       <h2 id="acChT">About the person who will use My Turn</h2>
-      <small>This is what we count for funders, as totals only. Pick "Prefer not to say" for anything you would rather keep private.</small>
-      <label for="acLabel"><b>First name or nickname</b> (so you can tell setups apart; you can leave it empty)</label>
+      <label for="acLabel"><b>First name or nickname</b> (optional)</label>
       <input type="text" id="acLabel" maxlength="30" autocomplete="off">
       <label for="acAge"><b>Age range</b></label>
       <select id="acAge"></select>
       <b id="acCondT">Condition (tick all that fit)</b>
       <div id="acConds" role="group" aria-labelledby="acCondT"></div>
-      <label class="check" id="acAgreeRow"><input type="checkbox" id="acAgree"> I am this person's parent or guardian, or I am the adult who will use it, and I agree to My Turn storing this as described.</label>
+      <label class="check" id="acAgreeRow"><input type="checkbox" id="acAgree"> <span>I am the parent, guardian or adult user, and I agree to the <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a>.</span></label>
       <small id="acMsg5" role="status"></small>
       <div class="inline wbfoot"><button class="btn" id="acChBack" type="button" hidden>Back</button><button class="btn primary" id="acChSave" type="button">Save</button></div>
     </div>
@@ -1554,7 +1552,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v86) ---'+
+      dbgText = '\n--- Listening check (v87) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -3885,7 +3883,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   function acctSend(){
     var m = $('acMail').value.trim(); if(!/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(m)){ $('acMsg1').textContent = 'Type your email address.'; return; }
     if(acctBusy) return; acctBusy = true; $('acMsg1').textContent = '';
-    acctCall('start', {email:m}).then(function(){ acctBusy = false; acctMail = m; $('acSentTo').textContent = 'We sent 6 numbers to ' + m + '. It can take a minute. Look in spam or junk too.'; $('acNum').value = ''; acctShow('acCode'); try{ $('acNum').focus(); }catch(e){} },
+    acctCall('start', {email:m}).then(function(){ acctBusy = false; acctMail = m; $('acSentTo').textContent = 'We sent 6 numbers to ' + m + '. Check spam too.'; $('acNum').value = ''; acctShow('acCode'); try{ $('acNum').focus(); }catch(e){} },
       function(e){ acctBusy = false; acctErr('acMsg1', e, function(){ acctShow('acEmail'); }); });
   }
   function acctVerify(){
@@ -3944,7 +3942,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       acctUseChild(j.id, false);
     }, function(e){ acctBusy = false; acctErr('acMsg5', e, function(){ acctShow('acChild'); }); });
   }
-  function acctFinish(text){ $('acOpen').hidden = false; $('acDoneP').textContent = text + ' From now on My Turn works with or without the internet.'; acctShow('acDone'); }
+  function acctFinish(text){ $('acOpen').hidden = false; $('acDoneP').textContent = text; acctShow('acDone'); }
   /* What is saved: the settings and the added words. Never photos, never the sign-in key. */
   function acctData(){ var st = null; try{ st = JSON.parse(localStorage.getItem('talker-settings') || 'null'); }catch(e){} return {v:1, settings:st, custom:custom, labels:labels}; }
   /* `acct` is still empty while the page is starting up, hence the first check */
