@@ -1469,7 +1469,7 @@ if(typeof module!=='undefined') module.exports = {wordForms:wordForms, eatOutQue
 <script>
 /* Inside the tablet app (iPad or Android wrapper) the pages are stored in the app, so the server has to be named in full. */
 var NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-var API = NATIVE ? 'https://amelias-talker-production.up.railway.app/' : '';
+var API = NATIVE ? 'https://myturntotalk.org/' : '';
 var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpers (listening and voice); empty on the web
 (function(){
   var $ = function(id){ return document.getElementById(id); };
@@ -1561,7 +1561,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v89) ---'+
+      dbgText = '\n--- Listening check (v90) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
