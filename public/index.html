@@ -326,6 +326,11 @@ body.typing .scrollcue{display:none}
 .wbdot svg{width:30px;height:30px}
 .wbfoot{justify-content:flex-end}
 .qzchips{display:flex;flex-wrap:wrap;gap:8px}
+#acConds{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:2px 14px}
+#acct input[type=text],#acct input[type=email],#acct select{font:inherit;font-size:18px;padding:10px 12px;border-radius:12px;border:2px solid var(--line);background:var(--paper);color:var(--ink);min-height:48px;width:100%}
+#acNum{letter-spacing:.3em;max-width:14em}
+#acct small[role=status]:empty{display:none}
+#acct small[role=status]{color:#a02020;font-weight:700}
 .qzchips .btn{min-height:44px}
 .qzchips .btn b{margin-left:8px;color:#b8321f}
 #qzIn,#qzName{flex:1;min-width:0}
@@ -413,6 +418,7 @@ body.typing .scrollcue{display:none}
     <div class="row">
       <small>A short list of questions about your child's people, favorite foods, the places you eat and go. The answers become your child's own words and answer choices.</small>
       <button class="btn" id="qzOpen" type="button">About your child: favorites</button>
+      <button class="btn" id="acOpen" type="button" hidden>Account and saved setup</button>
     </div>
     </details>
     <details class="sec">
@@ -770,6 +776,73 @@ body.typing .scrollcue{display:none}
       <label class="check"><input type="checkbox" id="wbSleep"> Sleep after 2 minutes of no taps (any key wakes it)</label>
       <button class="btn" id="wbReset" type="button">Put all wristband settings back to the start</button>
       <small id="wbSetMsg">Saved on this tablet. Sent to the wristband when one is connected.</small>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="acct" role="dialog" aria-label="Sign in">
+  <div class="sheet wb">
+    <div id="acEmail">
+      <h2>Sign in to My Turn</h2>
+      <p>For a grown-up. My Turn is free. To keep it free, we tell the people who fund it how many children it helps, their age range and the kind of condition. Never names.</p>
+      <small>Signing in also saves this setup, so it can be put on another tablet. We email you a 6-number code; there is no password. <a href="privacy.html" target="_blank" rel="noopener">How we handle your information</a></small>
+      <label for="acMail"><b>Your email</b></label>
+      <input type="email" id="acMail" maxlength="254" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false">
+      <small id="acMsg1" role="status"></small>
+      <div class="inline wbfoot"><button class="btn" id="acLater" type="button" hidden>Not now</button><button class="btn primary" id="acSend" type="button">Email me a code</button></div>
+    </div>
+    <div id="acCode" hidden>
+      <h2>Check your email</h2>
+      <p id="acSentTo"></p>
+      <label for="acNum"><b>The 6 numbers</b></label>
+      <input type="text" id="acNum" maxlength="8" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]*">
+      <small id="acMsg2" role="status"></small>
+      <div class="inline wbfoot"><button class="btn" id="acOther" type="button">Use a different email</button><button class="btn" id="acAgain" type="button">Send a new code</button><button class="btn primary" id="acCheck" type="button">Sign in</button></div>
+    </div>
+    <div id="acPick" hidden>
+      <h2>Who uses this tablet?</h2>
+      <div class="qzchips" id="acKids"></div>
+      <small id="acMsg3" role="status"></small>
+      <div class="inline wbfoot"><button class="btn primary" id="acNew" type="button">Add a child</button></div>
+    </div>
+    <div id="acRestore" hidden>
+      <h2 id="acResT">Use the saved setup?</h2>
+      <p id="acResP"></p>
+      <small id="acMsg4" role="status"></small>
+      <div class="inline wbfoot"><button class="btn" id="acKeep" type="button">Keep this tablet's setup</button><button class="btn primary" id="acUse" type="button">Use the saved setup</button></div>
+    </div>
+    <div id="acChild" hidden>
+      <h2 id="acChT">About the person who will use My Turn</h2>
+      <small>This is what we count for funders, as totals only. Pick "Prefer not to say" for anything you would rather keep private.</small>
+      <label for="acLabel"><b>First name or nickname</b> (so you can tell setups apart; you can leave it empty)</label>
+      <input type="text" id="acLabel" maxlength="30" autocomplete="off">
+      <label for="acAge"><b>Age range</b></label>
+      <select id="acAge"></select>
+      <b id="acCondT">Condition (tick all that fit)</b>
+      <div id="acConds" role="group" aria-labelledby="acCondT"></div>
+      <label class="check" id="acAgreeRow"><input type="checkbox" id="acAgree"> I am this person's parent or guardian, or I am the adult who will use it, and I agree to My Turn storing this as described.</label>
+      <small id="acMsg5" role="status"></small>
+      <div class="inline wbfoot"><button class="btn" id="acChBack" type="button" hidden>Back</button><button class="btn primary" id="acChSave" type="button">Save</button></div>
+    </div>
+    <div id="acDone" hidden>
+      <h2>You are signed in</h2>
+      <p id="acDoneP"></p>
+      <div class="inline wbfoot"><button class="btn primary" id="acOk" type="button">Done</button></div>
+    </div>
+    <div id="acOff" hidden>
+      <h2>Sign-in is not reachable</h2>
+      <p id="acOffP"></p>
+      <div class="inline wbfoot"><button class="btn" id="acRetry" type="button">Try again</button><button class="btn primary" id="acGo" type="button">Use My Turn now</button></div>
+    </div>
+    <div id="acManage" hidden>
+      <h2>Account and saved setup</h2>
+      <p id="acWho"></p>
+      <div class="qzchips" id="acMKids"></div>
+      <small id="acSaved"></small>
+      <small id="acMsg6" role="status"></small>
+      <div class="inline"><button class="btn" id="acSaveNow" type="button">Save now</button><button class="btn" id="acEdit" type="button">Change age or condition</button><button class="btn" id="acOut" type="button">Sign out</button></div>
+      <div class="inline"><button class="btn" id="acErase" type="button">Delete my account and everything saved</button><button class="btn" id="acErase2" type="button" hidden>Yes, delete it all. This cannot be undone.</button></div>
+      <div class="inline wbfoot"><button class="btn primary" id="acClose" type="button">Close</button></div>
     </div>
   </div>
 </div>
@@ -1444,7 +1517,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       if(saved.ask==='any'||saved.ask==='name'||saved.ask==='off') state.ask=saved.ask;
     }
   }catch(e){}
-  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,names:state.names,onDevice:state.onDevice,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz,photosOn:state.photosOn,scrollPages:state.scrollPages,about:state.about,aboutSeen:state.aboutSeen,ansMode:state.ansMode,buildAns:state.buildAns,endings:state.endings})); }catch(e){} }
+  function save(){ try{ localStorage.setItem('talker-settings', JSON.stringify({name:state.name,sentences:state.sentences,listen:state.listen,rate:state.rate,stage:state.stage,typing:state.typing,kiosk:state.kiosk,glow:state.glow,words:state.words,modelBtn:state.modelBtn,log:state.log,repeat:state.repeat,names:state.names,onDevice:state.onDevice,hold:state.hold,edge:state.edge,favs:state.favs,ask:state.ask,voiceName:state.voiceName,questions:state.questions,mine:state.mine,older:state.older,smart:state.smart,hc:state.hc,size:state.size,gap:state.gap,seeTalk:state.seeTalk,buzz:state.buzz,photosOn:state.photosOn,scrollPages:state.scrollPages,about:state.about,aboutSeen:state.aboutSeen,ansMode:state.ansMode,buildAns:state.buildAns,endings:state.endings})); }catch(e){}  acctDirty(); }
 
   var dbp = null;
   function db(){
@@ -1466,7 +1539,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       tx.onerror = tx.onabort = function(){ rej(tx.error); };
     }); });
   }
-  function idbSet(k, v){ return idb('readwrite', function(s){ return s.put(v, k); }); }
+  function idbSet(k, v){ if(k==='custom' || k==='labels') acctDirty(); return idb('readwrite', function(s){ return s.put(v, k); }); }
   function idbDel(k){ return idb('readwrite', function(s){ return s.delete(k); }); }
   function idbGet(k){ return idb('readonly', function(s){ return s.get(k); }); }
   function idbLoad(){
@@ -1481,7 +1554,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v85) ---'+
+      dbgText = '\n--- Listening check (v86) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -3074,7 +3147,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   document.addEventListener('fullscreenchange', function(){ kioskNote(); });
   document.addEventListener('visibilitychange', function(){ if(!document.hidden) keepAwake(); });
   window.addEventListener('popstate', function(){ if(state.kiosk){ try{ history.pushState({talker:1}, ''); }catch(e){} } });   // back button does nothing
-  window.addEventListener('beforeunload', function(e){ if(state.kiosk && !hosted){ e.preventDefault(); e.returnValue = ''; } });
+  window.addEventListener('beforeunload', function(e){ if(acctReloading) return; if(state.kiosk && !hosted){ e.preventDefault(); e.returnValue = ''; } });
   ['gesturestart','gesturechange'].forEach(function(ev){ document.addEventListener(ev, function(e){ e.preventDefault(); }); });   // no pinch zoom on iPad
   document.addEventListener('touchmove', function(e){ if(e.touches && e.touches.length>1) e.preventDefault(); }, {passive:false});
 
@@ -3776,6 +3849,152 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     {id:'fun', page:'things', fav:'things', find:true, pic:'⭐', t:'Favorite toys, shows and things to do', hint:'', ex:'trampoline'}
   ];
   var QZ_MAX = 8, qzAt = 0;
+  /* ----- Family account: sign in by emailed code, one saved setup per child -----
+     Rules that protect the child: the app never waits on the network to work. If the server has accounts switched off, or cannot be
+     reached, nothing is asked. A tablet that was already in use before sign-in existed can always choose "Not now". The sign-in key
+     is kept apart from the settings, so it is never part of what gets saved to the server. Photos are never sent. */
+  var ACCT_AGES = {under3:'Under 3', '3to5':'3 to 5', '6to8':'6 to 8', '9to12':'9 to 12', '13to17':'13 to 17', '18plus':'18 or older', unsaid:'Prefer not to say'};
+  var ACCT_CONDS = {autism:'Autism', cp:'Cerebral palsy', down:'Down syndrome', genetic:'Another genetic syndrome', apraxia:'Apraxia of speech', delay:'Developmental delay', injury:'Brain injury or stroke', hearing:'Hearing loss', other:'Something else', unsaid:'Prefer not to say'};
+  var acct = {token:'', email:'', childId:0, savedAt:''}, acctOn = false, acctKids = [], acctAfter = null, acctMail = '', acctEditing = 0, acctT = null, acctBusy = false, acctReloading = false, acctPick = null;
+  try{ var a0 = JSON.parse(localStorage.getItem('talker-acct') || 'null'); if(a0 && a0.token) acct = {token:String(a0.token), email:String(a0.email||''), childId:+a0.childId||0, savedAt:String(a0.savedAt||'')}; }catch(e){}
+  function acctKeep(){ try{ localStorage.setItem('talker-acct', JSON.stringify(acct)); }catch(e){} }
+  function acctCall(path, body, ms){
+    var ctl = window.AbortController ? new AbortController() : null, t = setTimeout(function(){ if(ctl) ctl.abort(); }, ms || 15000);
+    return fetch(API + 'api/acct/' + path, {method: body ? 'POST' : 'GET', headers: body ? {'Content-Type':'application/json'} : {}, body: body ? JSON.stringify(body) : undefined, signal: ctl ? ctl.signal : undefined})
+      .then(function(r){ return r.json().then(function(j){ if(!r.ok){ var e = new Error(j && j.error || 'The server said no.'); e.status = r.status; throw e; } return j; }, function(){ var e = new Error('The server gave an answer that could not be read.'); e.status = r.status; throw e; }); })
+      .then(function(j){ clearTimeout(t); return j; }, function(e){ clearTimeout(t); if(!e.status) e.net = true; throw e; });
+  }
+  function acctShow(v){ ['acEmail','acCode','acPick','acRestore','acChild','acDone','acOff','acManage'].forEach(function(id){ $(id).hidden = id!==v; }); ['acMsg1','acMsg2','acMsg3','acMsg4','acMsg5','acMsg6'].forEach(function(id){ $(id).textContent = ''; }); document.querySelector('#acct .sheet').scrollTop = 0; }
+  function acctOpenPanel(v){ $('acct').classList.add('open'); acctShow(v); }
+  function acctClose(){ $('acct').classList.remove('open'); var f = acctAfter; acctAfter = null; if(f) f(); }
+  function acctErr(id, e, back){ if(e && e.net){ $('acOffP').textContent = 'My Turn could not reach its sign-in service. Check the internet connection. You can use My Turn now; it will ask again the next time it opens.'; acctShow('acOff'); $('acRetry').onclick = back; return; } $(id).textContent = (e && e.message) || 'That did not work. Please try again.'; }
+  function acctLaterOk(){ try{ return Date.now() - (+localStorage.getItem('talker-acct-later') || 0) > 20*3600*1000; }catch(e){ return true; } }
+  /* Called once at start. `then` runs when sign-in is finished, skipped, or was never needed. */
+  function acctBegin(then){
+    acctCall('status', null, 6000).then(function(st){
+      acctOn = !!(st && st.enabled); $('acOpen').hidden = !acctOn && !acct.token;
+      if(!acctOn){ then(); return; }
+      if(acct.token && acct.childId){ then(); acctCheck(); return; }
+      if(!firstUse && !acctLaterOk()){ then(); return; }
+      acctAfter = then; $('acLater').hidden = firstUse;          // only a tablet already in use may put it off
+      if(acct.token) acctLoadKids(); else { $('acMail').value = ''; acctOpenPanel('acEmail'); }
+    }, function(){ $('acOpen').hidden = !acct.token; then(); });
+  }
+  function acctCheck(){ acctCall('me', {token:acct.token}).then(function(j){ acctKids = j.children || []; acct.email = j.email || acct.email; if(!acctKids.some(function(k){ return k.id===acct.childId; })){ acct.childId = 0; acctKeep(); } },
+    function(e){ if(e.status===401){ acct = {token:'', email:'', childId:0, savedAt:''}; acctKeep(); } }); }
+  function acctSend(){
+    var m = $('acMail').value.trim(); if(!/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(m)){ $('acMsg1').textContent = 'Type your email address.'; return; }
+    if(acctBusy) return; acctBusy = true; $('acMsg1').textContent = '';
+    acctCall('start', {email:m}).then(function(){ acctBusy = false; acctMail = m; $('acSentTo').textContent = 'We sent 6 numbers to ' + m + '. It can take a minute. Look in spam or junk too.'; $('acNum').value = ''; acctShow('acCode'); try{ $('acNum').focus(); }catch(e){} },
+      function(e){ acctBusy = false; acctErr('acMsg1', e, function(){ acctShow('acEmail'); }); });
+  }
+  function acctVerify(){
+    var c = $('acNum').value.replace(/\D/g,''); if(c.length!==6){ $('acMsg2').textContent = 'Type the 6 numbers from the email.'; return; }
+    if(acctBusy) return; acctBusy = true;
+    acctCall('verify', {email:acctMail, code:c}).then(function(j){ acctBusy = false; acct = {token:j.token, email:j.email, childId:0, savedAt:''}; acctKeep(); acctKids = j.children || []; acctAfterSignIn(); },
+      function(e){ acctBusy = false; acctErr('acMsg2', e, function(){ acctShow('acCode'); }); });
+  }
+  function acctLoadKids(){ acctCall('me', {token:acct.token}).then(function(j){ acctKids = j.children || []; acctOpenPanel('acPick'); acctAfterSignIn(); },
+    function(e){ if(e.status===401){ acct = {token:'', email:'', childId:0, savedAt:''}; acctKeep(); $('acMail').value = ''; acctOpenPanel('acEmail'); } else { var f = acctAfter; acctAfter = null; if(f) f(); } }); }
+  function acctKidName(k){ return (k.label || 'No name') + ' · ' + (ACCT_AGES[k.ageBand] || ''); }
+  function acctAfterSignIn(){
+    if(!acctKids.length){ acctChildForm(0); return; }
+    var box = $('acKids'); box.textContent = '';
+    acctKids.forEach(function(k){ var b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = acctKidName(k); b.addEventListener('click', function(){ acctChoose(k); }); box.appendChild(b); });
+    acctShow('acPick');
+  }
+  function acctChoose(k){
+    acctPick = k;
+    if(!k.savedAt){ acctUseChild(k.id, false); return; }
+    $('acResP').textContent = 'A setup for ' + (k.label || 'this child') + ' was saved on ' + acctWhen(k.savedAt) + '. Using it replaces the settings and added words on this tablet. Photos are not part of it.';
+    acctShow('acRestore');
+  }
+  function acctWhen(iso){ try{ return new Date(iso).toLocaleString([], {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'}); }catch(e){ return iso; } }
+  function acctUseChild(id, restore){
+    acct.childId = id; acct.savedAt = ''; acctKeep();
+    if(!restore){ acctFinish('This tablet\'s setup will be saved for ' + ((acctKids.filter(function(k){ return k.id===id; })[0] || {}).label || 'this child') + '.'); acctPush(true); return; }
+    acctCall('load', {token:acct.token, id:id}).then(function(j){
+      if(!j.data || !j.data.settings){ acctFinish('Nothing had been saved yet, so this tablet keeps its own setup.'); acctPush(true); return; }
+      try{ localStorage.setItem('talker-settings', JSON.stringify(j.data.settings)); }catch(e){}
+      acct.savedAt = j.savedAt || ''; acctKeep(); acctSkipPush = true;
+      var after = function(){ acctReloading = true; location.reload(); };
+      Promise.all([idb('readwrite', function(s){ return s.put(Array.isArray(j.data.custom) ? j.data.custom : [], 'custom'); }), idb('readwrite', function(s){ return s.put(j.data.labels && typeof j.data.labels==='object' ? j.data.labels : {}, 'labels'); })]).then(after, after);
+    }, function(e){ acctErr('acMsg4', e, function(){ acctShow('acRestore'); }); });
+  }
+  var acctSkipPush = false;
+  function acctChildForm(id){
+    acctEditing = id; var k = acctKids.filter(function(x){ return x.id===id; })[0];
+    var sel = $('acAge'); if(!sel.options.length){ var o0 = document.createElement('option'); o0.value = ''; o0.textContent = 'Choose'; sel.appendChild(o0); Object.keys(ACCT_AGES).forEach(function(a){ var o = document.createElement('option'); o.value = a; o.textContent = ACCT_AGES[a]; sel.appendChild(o); }); }
+    var box = $('acConds'); if(!box.children.length) Object.keys(ACCT_CONDS).forEach(function(c){ var l = document.createElement('label'); l.className = 'check'; var i = document.createElement('input'); i.type = 'checkbox'; i.value = c; l.appendChild(i); l.appendChild(document.createTextNode(' ' + ACCT_CONDS[c])); box.appendChild(l); });
+    $('acLabel').value = k ? k.label : (state.name || ''); sel.value = k ? k.ageBand : '';
+    Array.prototype.forEach.call(box.querySelectorAll('input'), function(i){ i.checked = !!(k && k.conditions.indexOf(i.value) >= 0); });
+    $('acAgreeRow').hidden = !!k; $('acAgree').checked = false; $('acChBack').hidden = !(k || acctKids.length);
+    $('acChT').textContent = k ? 'Change age or condition' : 'About the person who will use My Turn';
+    acctShow('acChild');
+  }
+  function acctChildSave(){
+    var conds = Array.prototype.filter.call($('acConds').querySelectorAll('input'), function(i){ return i.checked; }).map(function(i){ return i.value; });
+    if(!$('acAge').value){ $('acMsg5').textContent = 'Choose an age range.'; return; }
+    if(!conds.length){ $('acMsg5').textContent = 'Tick at least one, or "Prefer not to say".'; return; }
+    if(!acctEditing && !$('acAgree').checked){ $('acMsg5').textContent = 'Please tick the box to agree.'; return; }
+    if(acctBusy) return; acctBusy = true;
+    acctCall('child', {token:acct.token, id:acctEditing || undefined, label:$('acLabel').value, ageBand:$('acAge').value, conditions:conds, consent:acctEditing ? undefined : true}).then(function(j){
+      acctBusy = false; acctKids = j.children || [];
+      if(acctEditing){ acctManage(); return; }
+      acctUseChild(j.id, false);
+    }, function(e){ acctBusy = false; acctErr('acMsg5', e, function(){ acctShow('acChild'); }); });
+  }
+  function acctFinish(text){ $('acOpen').hidden = false; $('acDoneP').textContent = text + ' From now on My Turn works with or without the internet.'; acctShow('acDone'); }
+  /* What is saved: the settings and the added words. Never photos, never the sign-in key. */
+  function acctData(){ var st = null; try{ st = JSON.parse(localStorage.getItem('talker-settings') || 'null'); }catch(e){} return {v:1, settings:st, custom:custom, labels:labels}; }
+  /* `acct` is still empty while the page is starting up, hence the first check */
+  function acctDirty(){ if(!acct || !acct.token || !acct.childId || acctReloading) return; clearTimeout(acctT); acctT = setTimeout(function(){ acctPush(false); }, 8000); }
+  function acctPush(now){
+    if(!acct.token || !acct.childId) return Promise.resolve(false);
+    clearTimeout(acctT);
+    var d = acctData(); if(!d.settings) return Promise.resolve(false);
+    return acctCall('save', {token:acct.token, id:acct.childId, data:d}, 20000).then(function(j){ acct.savedAt = j.savedAt || ''; acctKeep(); if(!$('acManage').hidden) acctManageText(); return true; },
+      function(e){ if(e.status===401){ acct.token = ''; acctKeep(); } if(now && !$('acManage').hidden) $('acMsg6').textContent = e.net ? 'Could not reach the server. It will try again after the next change.' : e.message; return false; });
+  }
+  function acctManageText(){
+    $('acWho').textContent = 'Signed in as ' + acct.email + '.';
+    $('acSaved').textContent = acct.savedAt ? 'This tablet\'s setup was last saved on ' + acctWhen(acct.savedAt) + '. It saves by itself a few seconds after any change. Photos are not saved.' : 'Not saved yet.';
+    var box = $('acMKids'); box.textContent = '';
+    acctKids.forEach(function(k){ var s = document.createElement('span'); s.className = 'btn'; s.textContent = acctKidName(k) + (k.id===acct.childId ? ' (this tablet)' : ''); box.appendChild(s); });
+  }
+  function acctManage(){
+    if(!acct.token){ acctAfter = null; $('acLater').hidden = false; $('acMail').value = ''; acctOpenPanel('acEmail'); return; }
+    acctOpenPanel('acManage'); $('acErase2').hidden = true; acctManageText();
+    acctCall('me', {token:acct.token}).then(function(j){ acctKids = j.children || []; acct.email = j.email || acct.email; acctManageText(); if(!acct.childId) acctAfterSignIn(); },
+      function(e){ if(e.status===401){ acct = {token:'', email:'', childId:0, savedAt:''}; acctKeep(); acctManage(); } else $('acMsg6').textContent = e.net ? 'Could not reach the server just now.' : e.message; });
+  }
+  function acctSignOut(erase){
+    var tk = acct.token; var done = function(){ acct = {token:'', email:'', childId:0, savedAt:''}; acctKeep(); acctKids = []; $('acct').classList.remove('open'); $('acOpen').hidden = !acctOn; };
+    if(erase){ acctCall('erase', {token:tk}).then(done, function(e){ $('acMsg6').textContent = e.net ? 'Could not reach the server, so nothing was deleted. Try again when the internet is back.' : e.message; }); }
+    else { acctCall('signout', {token:tk}).then(done, done); }
+  }
+  $('acSend').addEventListener('click', acctSend);
+  $('acMail').addEventListener('keydown', function(e){ if(e.key==='Enter') acctSend(); });
+  $('acCheck').addEventListener('click', acctVerify);
+  $('acNum').addEventListener('keydown', function(e){ if(e.key==='Enter') acctVerify(); });
+  $('acAgain').addEventListener('click', function(){ $('acMail').value = acctMail; acctShow('acEmail'); acctSend(); });
+  $('acOther').addEventListener('click', function(){ acctShow('acEmail'); });
+  $('acLater').addEventListener('click', function(){ try{ localStorage.setItem('talker-acct-later', String(Date.now())); }catch(e){} acctClose(); });
+  $('acGo').addEventListener('click', acctClose);
+  $('acNew').addEventListener('click', function(){ acctChildForm(0); });
+  $('acChBack').addEventListener('click', function(){ if(acctEditing) acctManage(); else acctAfterSignIn(); });
+  $('acChSave').addEventListener('click', acctChildSave);
+  $('acKeep').addEventListener('click', function(){ if(acctPick) acctUseChild(acctPick.id, false); });
+  $('acUse').addEventListener('click', function(){ if(acctPick) acctUseChild(acctPick.id, true); });
+  $('acOk').addEventListener('click', acctClose);
+  $('acClose').addEventListener('click', function(){ $('acct').classList.remove('open'); });
+  $('acOpen').addEventListener('click', acctManage);
+  $('acSaveNow').addEventListener('click', function(){ $('acMsg6').textContent = ''; acctPush(true).then(function(ok){ if(ok) acctManageText(); }); });
+  $('acEdit').addEventListener('click', function(){ if(acct.childId) acctChildForm(acct.childId); });
+  $('acOut').addEventListener('click', function(){ acctSignOut(false); });
+  $('acErase').addEventListener('click', function(){ $('acErase2').hidden = false; });
+  $('acErase2').addEventListener('click', function(){ acctSignOut(true); });
+
   function qzShow(v){ ['qzHello','qzStep','qzEnd'].forEach(function(id){ $(id).hidden = id!==v; }); document.querySelector('#qz .sheet').scrollTop = 0; }
   function qzIds(st){ return (state.about[st.id]||[]).filter(function(id){ return LOOKUP[id] && LOOKUP[id].page===st.page; }); }
   function qzNp(st, label){                                  // a name ("Grandma's house", "Bluey") is said plainly; an ordinary word gets the page's usual lead-in
@@ -4108,7 +4327,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     if(all.labels && typeof all.labels==='object'){ labels = all.labels; setOlder(state.older, labels); Object.keys(labels).forEach(function(id){ if(LOOKUP[id]) LOOKUP[id].label = labels[id]; }); }
     diag.store = 'kept on this device ('+Object.keys(pics).length+' photos, '+custom.length+' added words)';
     renderAll(); showDiag(); cvWarm();
-    if(firstUse && !state.aboutSeen && !custom.length) qzOpen(true);   // a brand-new device: ask the grown-up the starting questions once
+    acctBegin(function(){ if(firstUse && !state.aboutSeen && !custom.length) qzOpen(true); });   // sign-in first (when the server offers it), then a brand-new device gets the starting questions once
   }, function(){ cv.loaded = true; diag.store = 'not available in this view. Photos last until the page closes.'; showDiag(); cvWarm(); });
 
   if(hosted) wireHosted();

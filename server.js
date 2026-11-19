@@ -36,6 +36,22 @@ function sameSite(req) {
   return req.headers['sec-fetch-site'] === 'same-origin';
 }
 function json(res, code, body) { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); }
+// ---- Family accounts (sign-in by emailed code, saved setups, totals for grants). See accounts.js. ----
+// Everything here is optional: with no database or no mail key, accounts are simply off and the rest of the server is untouched.
+const { makeAccounts, resendMailer } = require('./accounts');
+let acctPool = null;
+if (process.env.DATABASE_URL) {
+  try {
+    const { Pool } = require('pg');
+    const local = /@(localhost|127\.0\.0\.1)|\.railway\.internal/.test(process.env.DATABASE_URL);
+    acctPool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5, connectionTimeoutMillis: 8000, ssl: local ? false : { rejectUnauthorized: false } });
+    acctPool.on('error', e => console.error('database connection error:', e.message));
+  } catch (e) { console.error('accounts are off: the database module could not be loaded:', e.message); }
+}
+if (process.env.TALKER_TEST && process.env.ACCT_POOL_MODULE) acctPool = require(process.env.ACCT_POOL_MODULE);   // tests only: an in-memory database
+const MAIL_ON = !!(process.env.RESEND_API_KEY && process.env.MAIL_FROM);
+const accounts = makeAccounts({ pool: acctPool, mailOn: MAIL_ON, adminKey: process.env.ADMIN_KEY, reviewEmail: process.env.REVIEW_EMAIL, reviewCode: process.env.REVIEW_CODE,
+  sendMail: resendMailer(process.env.RESEND_API_KEY, process.env.MAIL_FROM, process.env.MAIL_ENDPOINT) });
 async function sttToken() {
   if (STT_PROVIDER === 'deepgram') {
     const r = await fetch('https://api.deepgram.com/v1/auth/grant', {
@@ -438,6 +454,17 @@ const handle = (req, res) => {
     if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   }
   let p = decodeURIComponent((req.url || '/').split('?')[0]);
+  if (p.startsWith('/api/acct/') || p === '/api/admin/stats') {
+    const ipA = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    if (p !== '/api/acct/status' && !sameSite(req)) return json(res, 403, { error: 'wrong site' });
+    const run = body => accounts.route(p, req.method, body, ipA).then(a => json(res, 200, a), e => {
+      if (!e.code) console.error('account request failed:', p, e.message);
+      json(res, e.code || 500, { error: e.code ? e.message : 'Something went wrong on the server. Please try again.' });
+    });
+    if (req.method !== 'POST') return run(null);
+    return readBody(req, accounts.MAX_BODY).then(b => { let o; try { o = JSON.parse(b); } catch (e) { return json(res, 400, { error: 'bad request' }); } return run(o); },
+      () => { try { json(res, 413, { error: 'too large' }); } catch (e) {} });
+  }
   if (p === '/api/stt/status') return json(res, 200, { enabled: !!STT_KEY, provider: STT_PROVIDER === 'deepgram' ? 'deepgram' : 'assemblyai ' + STT_MODEL });
   if (p === '/api/vision/status') return json(res, 200, { enabled: !!VISION_KEY });
   if (p === '/api/vision/last') return json(res, 200, lastVision || { note: 'no photo suggestion has run since the server last restarted' });

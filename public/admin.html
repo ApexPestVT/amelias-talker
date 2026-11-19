@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>My Turn totals</title>
+<style>body{font:17px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#16223a;background:#f3f6fb;margin:0;padding:20px}main{max-width:640px;margin:0 auto;background:#fff;border-radius:16px;padding:22px}h1{font-size:24px;margin:0 0 10px}input,button{font:inherit;padding:10px 12px;border-radius:10px;border:2px solid #d5dcea}button{background:#16223a;color:#fff;border-color:#16223a;font-weight:700}table{border-collapse:collapse;width:100%;margin:10px 0}td,th{border-bottom:1px solid #d5dcea;padding:7px 4px;text-align:left}td:last-child,th:last-child{text-align:right}small{color:#5b6780}#err{color:#a02020;font-weight:700}textarea{width:100%;height:150px;font:14px/1.4 ui-monospace,monospace;box-sizing:border-box}</style></head>
+<body><main>
+<h1>My Turn totals</h1>
+<p><small>Totals for grant reports. No names, emails or saved words are shown here or sent to this page.</small></p>
+<p><input type="password" id="key" placeholder="Admin key" autocomplete="off" style="width:60%"> <button id="go" type="button">Show totals</button></p>
+<p id="err" role="status"></p>
+<div id="out" hidden>
+  <p id="asof"></p>
+  <table id="top"></table>
+  <h2 style="font-size:18px">By age range</h2><table id="age"></table>
+  <h2 style="font-size:18px">By condition</h2><table id="cond"></table>
+  <p><small id="note"></small></p>
+  <p><b>Copy for a report</b></p><textarea id="txt" readonly></textarea>
+</div>
+<script>
+(function(){
+  var AGES = {under3:'Under 3','3to5':'3 to 5','6to8':'6 to 8','9to12':'9 to 12','13to17':'13 to 17','18plus':'18 or older',unsaid:'Prefer not to say'};
+  var CONDS = {autism:'Autism',cp:'Cerebral palsy',down:'Down syndrome',genetic:'Another genetic syndrome',apraxia:'Apraxia of speech',delay:'Developmental delay',injury:'Brain injury or stroke',hearing:'Hearing loss',other:'Something else',unsaid:'Prefer not to say'};
+  function $(i){ return document.getElementById(i); }
+  function rows(t, list){ t.textContent = ''; list.forEach(function(r){ var tr = document.createElement('tr'); r.forEach(function(c){ var td = document.createElement('td'); td.textContent = c; tr.appendChild(td); }); t.appendChild(tr); }); }
+  function show(){
+    $('err').textContent = ''; $('out').hidden = true;
+    fetch('api/admin/stats', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({key:$('key').value})})
+      .then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || 'The server said no.'); return j; }); })
+      .then(function(j){
+        var when = new Date(j.asOf).toLocaleString();
+        $('asof').textContent = 'As of ' + when;
+        var top = [['Children', j.children], ['Children added in the last 30 days', j.childrenAdded30Days], ['Families signed in', j.families], ['Families active in the last 30 days', j.familiesActive30Days]];
+        var age = Object.keys(AGES).map(function(k){ return [AGES[k], j.byAge[k] || 0]; }), cond = Object.keys(CONDS).map(function(k){ return [CONDS[k], j.byCondition[k] || 0]; });
+        rows($('top'), top); rows($('age'), age); rows($('cond'), cond); $('note').textContent = j.note;
+        $('txt').value = ['My Turn totals as of ' + when, ''].concat(top.map(function(r){ return r[0] + ': ' + r[1]; }), ['', 'By age range'], age.map(function(r){ return '  ' + r[0] + ': ' + r[1]; }), ['', 'By condition (a child can have more than one)'], cond.map(function(r){ return '  ' + r[0] + ': ' + r[1]; })).join('\n');
+        $('out').hidden = false;
+      }, function(e){ $('err').textContent = e.message; });
+  }
+  $('go').addEventListener('click', show); $('key').addEventListener('keydown', function(e){ if(e.key === 'Enter') show(); });
+})();
+</script>
+</main></body></html>
