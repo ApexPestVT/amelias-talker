@@ -19,14 +19,29 @@ const assert=require('assert'); const { makeAccounts, cleanEmail } = require('..
   ok((await bad(R('/api/acct/child',{token:T,ageBand:'6to8',conditions:['made-up'],consent:true}))).code===400,'unknown condition refused');
   let c=await R('/api/acct/child',{token:T,ageBand:'6to8',conditions:['genetic','apraxia','x'],consent:true,label:' <b>Amelia</b> '}); ok(c.id && c.children[0].label==='bAmelia/b' && c.children[0].conditions.length===2,'child saved, label cleaned: '+c.children[0].label);
   let c2=await R('/api/acct/child',{token:T,ageBand:'3to5',conditions:['unsaid'],consent:true,label:'Sam'}); ok(c2.children.length===2,'second child');
-  ok((await bad(R('/api/acct/save',{token:T,id:c.id,data:'x'}))).code===400,'save needs an object');
-  let s=await R('/api/acct/save',{token:T,id:c.id,data:{settings:{stage:3},custom:[{id:'custom:1',label:'taco'}]}}); ok(s.savedAt,'setup saved');
-  let l=await R('/api/acct/load',{token:T,id:c.id}); ok(l.data.settings.stage===3 && l.data.custom[0].label==='taco','setup loads back');
-  ok((await bad(R('/api/acct/save',{token:T,id:c.id,data:{big:'x'.repeat(500000)}}))).code===413,'oversize setup refused');
+  // devices: each keeps its own setup and photos; the child is still one child
+  let d1=await R('/api/acct/device',{token:T,childId:c.id,name:'iPad',platform:'ipad'}); ok(d1.deviceId>0 && d1.children[0].devices.length===1,'first device added');
+  let d2=await R('/api/acct/device',{token:T,childId:c.id,name:'Android <b>tablet',platform:'android'}); ok(d2.children[0].devices.length===2 && d2.children[0].devices[1].name==='Android btablet','second device added, name cleaned');
+  ok((await bad(R('/api/acct/device',{token:T,childId:99999,name:'x'}))).code===404,'device for an unknown child refused');
+  ok((await bad(R('/api/acct/save',{token:T,device:d1.deviceId,data:'x'}))).code===400,'save needs an object');
+  const PIC='data:image/jpeg;base64,'+'A'.repeat(2000);
+  let s=await R('/api/acct/save',{token:T,device:d1.deviceId,data:{settings:{stage:3},custom:[{id:'custom:1',label:'taco'}]},keys:['pic:mom','sceneimg:s1']}); ok(s.savedAt && Object.keys(s.have).length===0,'setup saved; server says it has no photos yet');
+  await R('/api/acct/file',{token:T,device:d1.deviceId,key:'pic:mom',body:PIC}); await R('/api/acct/file',{token:T,device:d1.deviceId,key:'sceneimg:s1',body:PIC+'BBBB'});
+  ok((await bad(R('/api/acct/file',{token:T,device:d1.deviceId,key:'../etc',body:PIC}))).code===400 && (await bad(R('/api/acct/file',{token:T,device:d1.deviceId,key:'pic:x',body:'<script>'}))).code===400,'odd photo names and non-pictures refused');
+  ok((await bad(R('/api/acct/file',{token:T,device:d1.deviceId,key:'pic:big',body:'data:image/jpeg;base64,'+'A'.repeat(3200000)}))).code===413,'oversize photo refused');
+  await R('/api/acct/save',{token:T,device:d2.deviceId,data:{settings:{stage:5},custom:[]},keys:[]});
+  let l=await R('/api/acct/load',{token:T,device:d1.deviceId}); ok(l.data.settings.stage===3 && l.data.custom[0].label==='taco' && l.files.length===2,'first device loads back its own setup and 2 photos');
+  let l2=await R('/api/acct/load',{token:T,device:d2.deviceId}); ok(l2.data.settings.stage===5 && l2.files.length===0,'second device has its own, different setup');
+  ok((await R('/api/acct/file/get',{token:T,device:d1.deviceId,key:'pic:mom'})).body===PIC,'photo comes back unchanged');
+  s=await R('/api/acct/save',{token:T,device:d1.deviceId,data:{settings:{stage:3}},keys:['pic:mom']}); ok(s.have['pic:mom']===PIC.length && !s.have['sceneimg:s1'],'a photo removed on the device is dropped on the server');
+  ok((await R('/api/acct/me',{token:T})).children[0].devices[0].photos===1,'photo count shown per device');
+  ok((await bad(R('/api/acct/save',{token:T,device:d1.deviceId,data:{big:'x'.repeat(500000)}}))).code===413,'oversize setup refused');
+  await R('/api/acct/device/rename',{token:T,device:d1.deviceId,name:'Kitchen iPad'}); ok((await R('/api/acct/me',{token:T})).children[0].devices[0].name==='Kitchen iPad','device renamed');
   ok((await bad(R('/api/acct/me',{token:'x'.repeat(43)}))).code===401,'made-up token refused');
-  // a second family cannot touch the first one's child
+  // a second family cannot touch the first one's child, device or photos
   clock+=120e3; await R('/api/acct/start',{email:'other@example.com'}); let v2=await R('/api/acct/verify',{email:'other@example.com',code:mails[1].code});
-  ok((await bad(R('/api/acct/load',{token:v2.token,id:c.id}))).code===404 && (await bad(R('/api/acct/save',{token:v2.token,id:c.id,data:{a:1}}))).code===404 && (await bad(R('/api/acct/child/delete',{token:v2.token,id:c.id}))).code===404,'another family cannot read, write or delete this child');
+  const X=v2.token, no=async(p,b)=>((await bad(R(p,Object.assign({token:X},b))))||{}).code===404;
+  ok(await no('/api/acct/load',{device:d1.deviceId}) && await no('/api/acct/save',{device:d1.deviceId,data:{a:1}}) && await no('/api/acct/file',{device:d1.deviceId,key:'pic:mom',body:PIC}) && await no('/api/acct/file/get',{device:d1.deviceId,key:'pic:mom'}) && await no('/api/acct/device/rename',{device:d1.deviceId,name:'x'}) && await no('/api/acct/device/remove',{device:d1.deviceId}) && await no('/api/acct/device',{childId:c.id,name:'x'}) && await no('/api/acct/child/delete',{id:c.id}),'another family cannot read, write, rename, remove or attach to this child or its devices');
   // wrong tries lock the code
   clock+=120e3; await R('/api/acct/start',{email:'dad@example.com'}); for(let i=0;i<5;i++) await bad(R('/api/acct/verify',{email:'dad@example.com',code:'111111'}));
   e=await bad(R('/api/acct/verify',{email:'dad@example.com',code:mails[2].code})); ok(e && /Too many wrong/.test(e.message),'five wrong tries kills the code, even for the right one');
@@ -38,14 +53,15 @@ const assert=require('assert'); const { makeAccounts, cleanEmail } = require('..
   mailFail=true; clock+=3700e3; e=await bad(R('/api/acct/start',{email:'fail@example.com'})); ok(e.code===502,'mail failure reported'); mailFail=false;
   // stats
   ok((await bad(R('/api/admin/stats',{key:'wrong'}))).code===403,'stats: wrong key refused');
-  let st=await R('/api/admin/stats',{key:'a-long-admin-key-123'}); ok(st.families===2 && st.children===2 && st.byAge['6to8']===1 && st.byAge['3to5']===1 && st.byCondition.genetic===1 && st.byCondition.apraxia===1 && st.byCondition.unsaid===1,'stats totals right: '+JSON.stringify([st.families,st.children,st.byAge,st.byCondition]));
-  ok(!/example\.com|Amelia|taco/.test(JSON.stringify(st)),'stats carry no email, name or saved words');
+  let st=await R('/api/admin/stats',{key:'a-long-admin-key-123'}); ok(st.families===2 && st.children===2 && st.devices===2 && st.byPlatform.ipad===1 && st.byPlatform.android===1 && st.devicesActive30Days===2 && st.byAge['6to8']===1 && st.byAge['3to5']===1 && st.byCondition.genetic===1 && st.byCondition.apraxia===1 && st.byCondition.unsaid===1,'stats: 2 families, 2 children, 2 devices for one child counted once: '+JSON.stringify([st.families,st.children,st.devices,st.byPlatform]));
+  ok(!/example\.com|Amelia|taco|Kitchen|AAAA/.test(JSON.stringify(st)),'stats carry no email, name, device name, saved words or photos');
   // edit, delete child, sign out, erase
   let ed=await R('/api/acct/child',{token:T,id:c.id,ageBand:'9to12',conditions:['genetic'],label:'Amelia'}); ok(ed.children[0].ageBand==='9to12','child details edited without a new consent');
   let dc=await R('/api/acct/child/delete',{token:T,id:c2.id}); ok(dc.children.length===1,'one child removed');
+  let dr=await R('/api/acct/device/remove',{token:T,device:d2.deviceId}); ok(dr.children[0].devices.length===1,'one device removed');
   await R('/api/acct/signout',{token:v2.token}); ok((await bad(R('/api/acct/me',{token:v2.token}))).code===401,'signed-out token is dead');
   await R('/api/acct/erase',{token:T}); ok((await bad(R('/api/acct/me',{token:T}))).code===401,'erased account: token dead');
-  st=await R('/api/admin/stats',{key:'a-long-admin-key-123'}); ok(st.families===1 && st.children===0,'erased account gone from the totals');
+  st=await R('/api/admin/stats',{key:'a-long-admin-key-123'}); ok(st.families===1 && st.children===0 && st.devices===0,'erased account, its devices and photos gone from the totals');
   ok((await bad(A.route('/api/acct/me','GET',null,'1'))).code===405 && A.route('/api/other','GET')===null,'routing: GET refused, other paths passed on');
   const off=makeAccounts({pool:null,mailOn:true}); await off.init; ok(off.status().enabled===false && (await bad(off.route('/api/acct/start','POST',{email:'a@b.co'}))).code===503,'no database: accounts off, clear answer');
   console.log(process.exitCode?'FAILED':'ALL '+n+' PASS');

@@ -4,7 +4,7 @@
 <style>body{font:17px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#16223a;background:#f3f6fb;margin:0;padding:20px}main{max-width:640px;margin:0 auto;background:#fff;border-radius:16px;padding:22px}h1{font-size:24px;margin:0 0 10px}input,button{font:inherit;padding:10px 12px;border-radius:10px;border:2px solid #d5dcea}button{background:#16223a;color:#fff;border-color:#16223a;font-weight:700}table{border-collapse:collapse;width:100%;margin:10px 0}td,th{border-bottom:1px solid #d5dcea;padding:7px 4px;text-align:left}td:last-child,th:last-child{text-align:right}small{color:#5b6780}#err{color:#a02020;font-weight:700}textarea{width:100%;height:150px;font:14px/1.4 ui-monospace,monospace;box-sizing:border-box}</style></head>
 <body><main>
 <h1>My Turn totals</h1>
-<p><small>Totals for grant reports. No names, emails or saved words are shown here or sent to this page.</small></p>
+<p><small>Totals for grant reports. A child is counted once, however many devices they use. No names, emails, saved words or photos are shown here or sent to this page.</small></p>
 <p><input type="password" id="key" placeholder="Admin key" autocomplete="off" style="width:60%"> <button id="go" type="button">Show totals</button></p>
 <p id="err" role="status"></p>
 <div id="out" hidden>
@@ -28,7 +28,8 @@
       .then(function(j){
         var when = new Date(j.asOf).toLocaleString();
         $('asof').textContent = 'As of ' + when;
-        var top = [['Children', j.children], ['Children added in the last 30 days', j.childrenAdded30Days], ['Families signed in', j.families], ['Families active in the last 30 days', j.familiesActive30Days]];
+        var P = {ipad:'iPad', iphone:'iPhone', android:'Android', web:'Web browser'};
+        var top = [['Children', j.children], ['Children added in the last 30 days', j.childrenAdded30Days], ['Families signed in', j.families], ['Families active in the last 30 days', j.familiesActive30Days], ['Devices', j.devices], ['Devices active in the last 30 days', j.devicesActive30Days]].concat(Object.keys(P).map(function(k){ return ['Devices: ' + P[k], (j.byPlatform || {})[k] || 0]; }));
         var age = Object.keys(AGES).map(function(k){ return [AGES[k], j.byAge[k] || 0]; }), cond = Object.keys(CONDS).map(function(k){ return [CONDS[k], j.byCondition[k] || 0]; });
         rows($('top'), top); rows($('age'), age); rows($('cond'), cond); $('note').textContent = j.note;
         $('txt').value = ['My Turn totals as of ' + when, ''].concat(top.map(function(r){ return r[0] + ': ' + r[1]; }), ['', 'By age range'], age.map(function(r){ return '  ' + r[0] + ': ' + r[1]; }), ['', 'By condition (a child can have more than one)'], cond.map(function(r){ return '  ' + r[0] + ': ' + r[1]; })).join('\n');

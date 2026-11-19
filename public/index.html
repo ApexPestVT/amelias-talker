@@ -329,7 +329,11 @@ body.typing .scrollcue{display:none}
 #acConds{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:2px 14px}
 #acct input[type=text],#acct input[type=email],#acct select{font:inherit;font-size:18px;padding:10px 12px;border-radius:12px;border:2px solid var(--line);background:var(--paper);color:var(--ink);min-height:48px;width:100%}
 #acNum{letter-spacing:.3em;max-width:14em}
-#acct small[role=status]:empty{display:none}
+#acct small[role=status]:empty,#acProg:empty,#acProg2:empty{display:none}
+#acDevs{display:flex;flex-direction:column;gap:8px}
+.acdev{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;border:2px solid var(--line);border-radius:12px;padding:8px 10px}
+.acdev b{font-size:16px}.acdev span{display:block;font-size:13px;color:var(--ink-soft)}
+#acDevName{flex:1;min-width:10em;width:auto}
 #acct small[role=status]{color:#a02020;font-weight:700}
 .qzchips .btn{min-height:44px}
 .qzchips .btn b{margin-left:8px;color:#b8321f}
@@ -802,13 +806,14 @@ body.typing .scrollcue{display:none}
       <h2>Who uses this tablet?</h2>
       <div class="qzchips" id="acKids"></div>
       <small id="acMsg3" role="status"></small>
-      <div class="inline wbfoot"><button class="btn primary" id="acNew" type="button">Add a child</button></div>
+      <div class="inline wbfoot"><button class="btn primary" id="acNew" type="button">Add a different child</button></div>
     </div>
     <div id="acRestore" hidden>
-      <h2 id="acResT">Use the saved setup?</h2>
-      <p id="acResP"></p>
+      <h2>Start this device from</h2>
+      <div class="qzchips" id="acFrom"></div>
+      <small id="acProg"></small>
       <small id="acMsg4" role="status"></small>
-      <div class="inline wbfoot"><button class="btn" id="acKeep" type="button">Keep this tablet's setup</button><button class="btn primary" id="acUse" type="button">Use the saved setup</button></div>
+      <div class="inline wbfoot"><button class="btn primary" id="acKeep" type="button">Keep what is on this device</button></div>
     </div>
     <div id="acChild" hidden>
       <h2 id="acChT">About the person who will use My Turn</h2>
@@ -835,8 +840,11 @@ body.typing .scrollcue{display:none}
     <div id="acManage" hidden>
       <h2>Account and saved setup</h2>
       <p id="acWho"></p>
-      <div class="qzchips" id="acMKids"></div>
+      <div id="acDevs"></div>
       <small id="acSaved"></small>
+      <label class="check"><input type="checkbox" id="acPhotos"> Save this device's photos too</label>
+      <div class="inline"><input type="text" id="acDevName" maxlength="40" autocomplete="off" aria-label="Name of this device"><button class="btn" id="acDevSave" type="button">Rename this device</button></div>
+      <small id="acProg2"></small>
       <small id="acMsg6" role="status"></small>
       <div class="inline"><button class="btn" id="acSaveNow" type="button">Save now</button><button class="btn" id="acEdit" type="button">Change age or condition</button><button class="btn" id="acOut" type="button">Sign out</button></div>
       <div class="inline"><button class="btn" id="acErase" type="button">Delete my account and everything saved</button><button class="btn" id="acErase2" type="button" hidden>Yes, delete it all. This cannot be undone.</button></div>
@@ -1537,8 +1545,9 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       tx.onerror = tx.onabort = function(){ rej(tx.error); };
     }); });
   }
-  function idbSet(k, v){ if(k==='custom' || k==='labels') acctDirty(); return idb('readwrite', function(s){ return s.put(v, k); }); }
-  function idbDel(k){ return idb('readwrite', function(s){ return s.delete(k); }); }
+  function acctWatch(k){ if(k==='custom' || k==='labels' || k==='scenes' || k.indexOf('pic:')===0 || k.indexOf('sceneimg:')===0) acctDirty(); }
+  function idbSet(k, v){ acctWatch(k); return idb('readwrite', function(s){ return s.put(v, k); }); }
+  function idbDel(k){ acctWatch(k); return idb('readwrite', function(s){ return s.delete(k); }); }
   function idbGet(k){ return idb('readonly', function(s){ return s.get(k); }); }
   function idbLoad(){
     return db().then(function(d){ return new Promise(function(res, rej){
@@ -1552,7 +1561,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     var dbgText = '';
     if(typeof cloud !== 'undefined' && mode==='cloud'){
       var d = cloud.dbg, kinds = Object.keys(d.msgs).map(function(k){ return k+' '+d.msgs[k]; }).join(', ') || 'none';
-      dbgText = '\n--- Listening check (v87) ---'+
+      dbgText = '\n--- Listening check (v88) ---'+
         '\nName help: '+(!state.names ? 'off' : (cloud.namesRefused ? 'REFUSED by the service, running without it' : (cloud.namesSent ? 'sent '+cloud.namesSent : 'nothing sent yet')))+
         '\nMic level now '+d.level.toFixed(3)+', loudest '+d.peak.toFixed(3)+' (voice trigger '+VOICE_RMS+')'+
         '\nAudio pieces: '+d.chunks+' captured, '+d.sent+' sent, '+d.skipped+' held back while talking'+
@@ -3847,14 +3856,16 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     {id:'fun', page:'things', fav:'things', find:true, pic:'⭐', t:'Favorite toys, shows and things to do', hint:'', ex:'trampoline'}
   ];
   var QZ_MAX = 8, qzAt = 0;
-  /* ----- Family account: sign in by emailed code, one saved setup per child -----
+  /* ----- Family account: sign in by emailed code, a saved setup for every device a child uses -----
      Rules that protect the child: the app never waits on the network to work. If the server has accounts switched off, or cannot be
      reached, nothing is asked. A tablet that was already in use before sign-in existed can always choose "Not now". The sign-in key
-     is kept apart from the settings, so it is never part of what gets saved to the server. Photos are never sent. */
+     is kept apart from the settings, so it is never part of what gets saved to the server. A child is one record however many devices
+     they use; each device is its own record with its own setup and photos, and one device can copy another's. */
   var ACCT_AGES = {under3:'Under 3', '3to5':'3 to 5', '6to8':'6 to 8', '9to12':'9 to 12', '13to17':'13 to 17', '18plus':'18 or older', unsaid:'Prefer not to say'};
   var ACCT_CONDS = {autism:'Autism', cp:'Cerebral palsy', down:'Down syndrome', genetic:'Another genetic syndrome', apraxia:'Apraxia of speech', delay:'Developmental delay', injury:'Brain injury or stroke', hearing:'Hearing loss', other:'Something else', unsaid:'Prefer not to say'};
-  var acct = {token:'', email:'', childId:0, savedAt:''}, acctOn = false, acctKids = [], acctAfter = null, acctMail = '', acctEditing = 0, acctT = null, acctBusy = false, acctReloading = false, acctPick = null;
-  try{ var a0 = JSON.parse(localStorage.getItem('talker-acct') || 'null'); if(a0 && a0.token) acct = {token:String(a0.token), email:String(a0.email||''), childId:+a0.childId||0, savedAt:String(a0.savedAt||'')}; }catch(e){}
+  var ACCT_NONE = function(){ return {token:'', email:'', childId:0, deviceId:0, savedAt:'', photos:true}; };
+  var acct = ACCT_NONE(), acctOn = false, acctKids = [], acctAfter = null, acctMail = '', acctEditing = 0, acctT = null, acctBusy = false, acctReloading = false, acctPick = null, acctSaving = false, acctAgain = false;
+  try{ var a0 = JSON.parse(localStorage.getItem('talker-acct') || 'null'); if(a0 && a0.token) acct = {token:String(a0.token), email:String(a0.email||''), childId:+a0.childId||0, deviceId:+a0.deviceId||0, savedAt:String(a0.savedAt||''), photos:a0.photos!==false}; }catch(e){}
   function acctKeep(){ try{ localStorage.setItem('talker-acct', JSON.stringify(acct)); }catch(e){} }
   function acctCall(path, body, ms){
     var ctl = window.AbortController ? new AbortController() : null, t = setTimeout(function(){ if(ctl) ctl.abort(); }, ms || 15000);
@@ -3862,7 +3873,7 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
       .then(function(r){ return r.json().then(function(j){ if(!r.ok){ var e = new Error(j && j.error || 'The server said no.'); e.status = r.status; throw e; } return j; }, function(){ var e = new Error('The server gave an answer that could not be read.'); e.status = r.status; throw e; }); })
       .then(function(j){ clearTimeout(t); return j; }, function(e){ clearTimeout(t); if(!e.status) e.net = true; throw e; });
   }
-  function acctShow(v){ ['acEmail','acCode','acPick','acRestore','acChild','acDone','acOff','acManage'].forEach(function(id){ $(id).hidden = id!==v; }); ['acMsg1','acMsg2','acMsg3','acMsg4','acMsg5','acMsg6'].forEach(function(id){ $(id).textContent = ''; }); document.querySelector('#acct .sheet').scrollTop = 0; }
+  function acctShow(v){ ['acEmail','acCode','acPick','acRestore','acChild','acDone','acOff','acManage'].forEach(function(id){ $(id).hidden = id!==v; }); ['acMsg1','acMsg2','acMsg3','acMsg4','acMsg5','acMsg6','acProg','acProg2'].forEach(function(id){ $(id).textContent = ''; }); document.querySelector('#acct .sheet').scrollTop = 0; }
   function acctOpenPanel(v){ $('acct').classList.add('open'); acctShow(v); }
   function acctClose(){ $('acct').classList.remove('open'); var f = acctAfter; acctAfter = null; if(f) f(); }
   function acctErr(id, e, back){ if(e && e.net){ $('acOffP').textContent = 'My Turn could not reach its sign-in service. Check the internet connection. You can use My Turn now; it will ask again the next time it opens.'; acctShow('acOff'); $('acRetry').onclick = back; return; } $(id).textContent = (e && e.message) || 'That did not work. Please try again.'; }
@@ -3872,14 +3883,14 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     acctCall('status', null, 6000).then(function(st){
       acctOn = !!(st && st.enabled); $('acOpen').hidden = !acctOn && !acct.token;
       if(!acctOn){ then(); return; }
-      if(acct.token && acct.childId){ then(); acctCheck(); return; }
+      if(acct.token && acct.childId){ then(); acctCheck(); acctDirty(); return; }      // signed in: also make sure this device has a saved copy
       if(!firstUse && !acctLaterOk()){ then(); return; }
       acctAfter = then; $('acLater').hidden = firstUse;          // only a tablet already in use may put it off
       if(acct.token) acctLoadKids(); else { $('acMail').value = ''; acctOpenPanel('acEmail'); }
     }, function(){ $('acOpen').hidden = !acct.token; then(); });
   }
-  function acctCheck(){ acctCall('me', {token:acct.token}).then(function(j){ acctKids = j.children || []; acct.email = j.email || acct.email; if(!acctKids.some(function(k){ return k.id===acct.childId; })){ acct.childId = 0; acctKeep(); } },
-    function(e){ if(e.status===401){ acct = {token:'', email:'', childId:0, savedAt:''}; acctKeep(); } }); }
+  function acctCheck(){ acctCall('me', {token:acct.token}).then(function(j){ acctKids = j.children || []; acct.email = j.email || acct.email; var mine = acctKids.filter(function(k){ return k.id===acct.childId; })[0]; if(!mine){ acct.childId = 0; acct.deviceId = 0; acctKeep(); } else if(!mine.devices.some(function(d){ return d.id===acct.deviceId; })){ acct.deviceId = 0; acctKeep(); acctDirty(); } },
+    function(e){ if(e.status===401){ acct = ACCT_NONE(); acctKeep(); } }); }
   function acctSend(){
     var m = $('acMail').value.trim(); if(!/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(m)){ $('acMsg1').textContent = 'Type your email address.'; return; }
     if(acctBusy) return; acctBusy = true; $('acMsg1').textContent = '';
@@ -3889,11 +3900,11 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   function acctVerify(){
     var c = $('acNum').value.replace(/\D/g,''); if(c.length!==6){ $('acMsg2').textContent = 'Type the 6 numbers from the email.'; return; }
     if(acctBusy) return; acctBusy = true;
-    acctCall('verify', {email:acctMail, code:c}).then(function(j){ acctBusy = false; acct = {token:j.token, email:j.email, childId:0, savedAt:''}; acctKeep(); acctKids = j.children || []; acctAfterSignIn(); },
+    acctCall('verify', {email:acctMail, code:c}).then(function(j){ acctBusy = false; acct = ACCT_NONE(); acct.token = j.token; acct.email = j.email; acctKeep(); acctKids = j.children || []; acctAfterSignIn(); },
       function(e){ acctBusy = false; acctErr('acMsg2', e, function(){ acctShow('acCode'); }); });
   }
   function acctLoadKids(){ acctCall('me', {token:acct.token}).then(function(j){ acctKids = j.children || []; acctOpenPanel('acPick'); acctAfterSignIn(); },
-    function(e){ if(e.status===401){ acct = {token:'', email:'', childId:0, savedAt:''}; acctKeep(); $('acMail').value = ''; acctOpenPanel('acEmail'); } else { var f = acctAfter; acctAfter = null; if(f) f(); } }); }
+    function(e){ if(e.status===401){ acct = ACCT_NONE(); acctKeep(); $('acMail').value = ''; acctOpenPanel('acEmail'); } else { var f = acctAfter; acctAfter = null; if(f) f(); } }); }
   function acctKidName(k){ return (k.label || 'No name') + ' · ' + (ACCT_AGES[k.ageBand] || ''); }
   function acctAfterSignIn(){
     if(!acctKids.length){ acctChildForm(0); return; }
@@ -3901,30 +3912,59 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     acctKids.forEach(function(k){ var b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = acctKidName(k); b.addEventListener('click', function(){ acctChoose(k); }); box.appendChild(b); });
     acctShow('acPick');
   }
+  function acctWhen(iso){ try{ return new Date(iso).toLocaleString([], {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'}); }catch(e){ return iso; } }
+  function acctDevLine(d){ return (d.savedAt ? 'Saved ' + acctWhen(d.savedAt) : 'Nothing saved yet') + (d.photos ? ' · ' + d.photos + (d.photos===1 ? ' photo' : ' photos') : ''); }
+  function acctPlatform(){ var u = navigator.userAgent || ''; if(/iPad/.test(u) || (/Macintosh/.test(u) && navigator.maxTouchPoints > 1)) return 'ipad'; if(/iPhone|iPod/.test(u)) return 'iphone'; if(/Android/.test(u)) return 'android'; return 'web'; }
+  function acctDevDefault(k){ var base = {ipad:'iPad', iphone:'iPhone', android:'Android tablet', web:'Web browser'}[acctPlatform()], names = (k && k.devices || []).map(function(d){ return d.name; }), n = 1, name = base; while(names.indexOf(name) >= 0){ n++; name = base + ' ' + n; } return name; }
+  /* A child was picked on this device. If other devices of theirs have a saved setup, offer to start from one. */
   function acctChoose(k){
-    acctPick = k;
-    if(!k.savedAt){ acctUseChild(k.id, false); return; }
-    $('acResP').textContent = 'A setup for ' + (k.label || 'this child') + ' was saved on ' + acctWhen(k.savedAt) + '. Using it replaces the settings and added words on this tablet. Photos are not part of it.';
+    acctPick = k; var saved = k.devices.filter(function(d){ return d.savedAt; });
+    if(!saved.length){ acctUseChild(k.id, 0); return; }
+    var box = $('acFrom'); box.textContent = ''; $('acProg').textContent = '';
+    saved.forEach(function(d){ var b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = d.name + ' · ' + acctDevLine(d); b.addEventListener('click', function(){ acctUseChild(k.id, d.id); }); box.appendChild(b); });
     acctShow('acRestore');
   }
-  function acctWhen(iso){ try{ return new Date(iso).toLocaleString([], {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'}); }catch(e){ return iso; } }
-  function acctUseChild(id, restore){
-    acct.childId = id; acct.savedAt = ''; acctKeep();
-    if(!restore){ acctFinish('This tablet\'s setup will be saved for ' + ((acctKids.filter(function(k){ return k.id===id; })[0] || {}).label || 'this child') + '.'); acctPush(true); return; }
-    acctCall('load', {token:acct.token, id:id}).then(function(j){
-      if(!j.data || !j.data.settings){ acctFinish('Nothing had been saved yet, so this tablet keeps its own setup.'); acctPush(true); return; }
-      try{ localStorage.setItem('talker-settings', JSON.stringify(j.data.settings)); }catch(e){}
-      acct.savedAt = j.savedAt || ''; acctKeep(); acctSkipPush = true;
-      var after = function(){ acctReloading = true; location.reload(); };
-      Promise.all([idb('readwrite', function(s){ return s.put(Array.isArray(j.data.custom) ? j.data.custom : [], 'custom'); }), idb('readwrite', function(s){ return s.put(j.data.labels && typeof j.data.labels==='object' ? j.data.labels : {}, 'labels'); })]).then(after, after);
-    }, function(e){ acctErr('acMsg4', e, function(){ acctShow('acRestore'); }); });
+  /* Registers this device for the child (each device is counted once and keeps its own saved setup), then copies from `from` if asked. */
+  function acctUseChild(id, from){
+    if(acctBusy) return; acctBusy = true;
+    var k = acctKids.filter(function(x){ return x.id===id; })[0];
+    acctCall('device', {token:acct.token, childId:id, name:acctDevDefault(k), platform:acctPlatform()}).then(function(j){
+      acctBusy = false; acct.childId = id; acct.deviceId = j.deviceId; acct.savedAt = ''; acctKeep(); acctKids = j.children || acctKids;
+      if(from){ acctImport(from, 'acProg', 'acMsg4'); return; }
+      acctFinish('This device is set up for ' + ((k && k.label) || 'this child') + '.'); acctPush(true);
+    }, function(e){ acctBusy = false; acctErr($('acRestore').hidden ? 'acMsg3' : 'acMsg4', e, function(){ acctAfterSignIn(); }); });
   }
-  var acctSkipPush = false;
+  /* Copies another device's setup, added words and photos onto this one, replacing what is here, then starts the app again. */
+  function acctImport(from, progId, msgId){
+    var prog = $(progId); prog.textContent = 'Getting the setup…';
+    acctCall('load', {token:acct.token, device:from}, 30000).then(function(j){
+      if(!j.data || !j.data.settings) throw new Error('That device has nothing saved yet.');
+      var files = j.files || [], got = {}, i = 0;
+      var next = function(){
+        if(i >= files.length) return Promise.resolve();
+        var f = files[i++]; prog.textContent = 'Copying photo ' + i + ' of ' + files.length + '…';
+        return acctCall('file/get', {token:acct.token, device:from, key:f.key}, 30000).then(function(r){ got[f.key] = r.body; return next(); });
+      };
+      return next().then(function(){
+        prog.textContent = 'Putting it on this device…';
+        return idbLoad().then(function(all){
+          var gone = Object.keys(all).filter(function(k){ return k.indexOf('pic:')===0 || k.indexOf('picsrc:')===0 || k.indexOf('sceneimg:')===0; });
+          var put = function(v, k){ return idb('readwrite', function(st){ return st.put(v, k); }); }, del = function(k){ return idb('readwrite', function(st){ return st.delete(k); }); };
+          acctReloading = true;                      // from here on nothing this page does may be saved over the copy
+          return Promise.all(gone.map(del)).then(function(){
+            return Promise.all(Object.keys(got).map(function(k){ return put(got[k], k); }).concat([
+              put(Array.isArray(j.data.custom) ? j.data.custom : [], 'custom'), put(j.data.labels && typeof j.data.labels==='object' ? j.data.labels : {}, 'labels'),
+              put(Array.isArray(j.data.scenes) ? j.data.scenes : [], 'scenes')]));
+          });
+        });
+      }).then(function(){ try{ localStorage.setItem('talker-settings', JSON.stringify(j.data.settings)); }catch(e){} location.reload(); });
+    }).then(null, function(e){ acctReloading = false; prog.textContent = ''; $(msgId).textContent = e.net ? 'Could not reach the server. Nothing on this device was changed.' : ((e && e.message) || 'That did not work.'); });
+  }
   function acctChildForm(id){
     acctEditing = id; var k = acctKids.filter(function(x){ return x.id===id; })[0];
     var sel = $('acAge'); if(!sel.options.length){ var o0 = document.createElement('option'); o0.value = ''; o0.textContent = 'Choose'; sel.appendChild(o0); Object.keys(ACCT_AGES).forEach(function(a){ var o = document.createElement('option'); o.value = a; o.textContent = ACCT_AGES[a]; sel.appendChild(o); }); }
     var box = $('acConds'); if(!box.children.length) Object.keys(ACCT_CONDS).forEach(function(c){ var l = document.createElement('label'); l.className = 'check'; var i = document.createElement('input'); i.type = 'checkbox'; i.value = c; l.appendChild(i); l.appendChild(document.createTextNode(' ' + ACCT_CONDS[c])); box.appendChild(l); });
-    $('acLabel').value = k ? k.label : (state.name || ''); sel.value = k ? k.ageBand : '';
+    $('acLabel').value = k ? k.label : (acctKids.length ? '' : (state.name || '')); sel.value = k ? k.ageBand : '';
     Array.prototype.forEach.call(box.querySelectorAll('input'), function(i){ i.checked = !!(k && k.conditions.indexOf(i.value) >= 0); });
     $('acAgreeRow').hidden = !!k; $('acAgree').checked = false; $('acChBack').hidden = !(k || acctKids.length);
     $('acChT').textContent = k ? 'Change age or condition' : 'About the person who will use My Turn';
@@ -3939,35 +3979,64 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
     acctCall('child', {token:acct.token, id:acctEditing || undefined, label:$('acLabel').value, ageBand:$('acAge').value, conditions:conds, consent:acctEditing ? undefined : true}).then(function(j){
       acctBusy = false; acctKids = j.children || [];
       if(acctEditing){ acctManage(); return; }
-      acctUseChild(j.id, false);
+      acctUseChild(j.id, 0);
     }, function(e){ acctBusy = false; acctErr('acMsg5', e, function(){ acctShow('acChild'); }); });
   }
   function acctFinish(text){ $('acOpen').hidden = false; $('acDoneP').textContent = text; acctShow('acDone'); }
-  /* What is saved: the settings and the added words. Never photos, never the sign-in key. */
-  function acctData(){ var st = null; try{ st = JSON.parse(localStorage.getItem('talker-settings') || 'null'); }catch(e){} return {v:1, settings:st, custom:custom, labels:labels}; }
-  /* `acct` is still empty while the page is starting up, hence the first check */
+  /* What is saved for this device: the settings, the added words, the list of photo scenes, and (unless switched off) the photos.
+     Never the sign-in key. */
+  function acctData(){ var st = null; try{ st = JSON.parse(localStorage.getItem('talker-settings') || 'null'); }catch(e){} return {v:2, settings:st, custom:custom, labels:labels, scenes:scenes}; }
+  function acctFiles(){ var f = {}; if(acct.photos === false) return f; Object.keys(pics).forEach(function(id){ if(typeof pics[id]==='string') f['pic:'+id] = pics[id]; }); scenes.forEach(function(sc){ if(typeof sceneImg[sc.id]==='string') f['sceneimg:'+sc.id] = sceneImg[sc.id]; }); return f; }
   function acctDirty(){ if(!acct || !acct.token || !acct.childId || acctReloading) return; clearTimeout(acctT); acctT = setTimeout(function(){ acctPush(false); }, 8000); }
   function acctPush(now){
-    if(!acct.token || !acct.childId) return Promise.resolve(false);
+    if(!acct.token || !acct.childId || acctReloading) return Promise.resolve(false);
     clearTimeout(acctT);
+    if(acctSaving){ acctAgain = true; return Promise.resolve(false); }
     var d = acctData(); if(!d.settings) return Promise.resolve(false);
-    return acctCall('save', {token:acct.token, id:acct.childId, data:d}, 20000).then(function(j){ acct.savedAt = j.savedAt || ''; acctKeep(); if(!$('acManage').hidden) acctManageText(); return true; },
-      function(e){ if(e.status===401){ acct.token = ''; acctKeep(); } if(now && !$('acManage').hidden) $('acMsg6').textContent = e.net ? 'Could not reach the server. It will try again after the next change.' : e.message; return false; });
+    acctSaving = true; acctAgain = false;
+    var say = function(t){ if(!$('acManage').hidden) $('acProg2').textContent = t; };
+    var start = acct.deviceId ? Promise.resolve() : acctCall('device', {token:acct.token, childId:acct.childId, name:acctDevDefault(acctKids.filter(function(k){ return k.id===acct.childId; })[0]), platform:acctPlatform()}).then(function(j){ acct.deviceId = j.deviceId; acctKids = j.children || acctKids; acctKeep(); });
+    return start.then(function(){
+      var files = acctFiles(), keys = Object.keys(files);
+      return acctCall('save', {token:acct.token, device:acct.deviceId, data:d, keys:keys}, 20000).then(function(j){
+        acct.savedAt = j.savedAt || ''; acctKeep();
+        var todo = keys.filter(function(k){ return (j.have || {})[k] !== files[k].length; }), i = 0, sent = 0;
+        var next = function(){
+          if(i >= todo.length || acctReloading) return Promise.resolve();
+          var k = todo[i++]; say('Saving photo ' + i + ' of ' + todo.length + '…');
+          return acctCall('file', {token:acct.token, device:acct.deviceId, key:k, body:files[k]}, 60000).then(function(){ sent++; return next(); }, function(e){ if(e.net || e.status===401) throw e; return next(); });   // one photo the server will not take must not stop the rest
+        };
+        return next();
+      });
+    }).then(function(){ acctSaving = false; say(''); if(!$('acManage').hidden) acctManageFill(); if(acctAgain) acctDirty(); return true; },
+      function(e){ acctSaving = false; say(''); if(e.status===401){ acct.token = ''; acctKeep(); } if(e.status===404){ acct.deviceId = 0; acctKeep(); } if(now && !$('acManage').hidden) $('acMsg6').textContent = e.net ? 'Could not reach the server. It will try again after the next change.' : e.message; return false; });
   }
   function acctManageText(){
     $('acWho').textContent = 'Signed in as ' + acct.email + '.';
-    $('acSaved').textContent = acct.savedAt ? 'This tablet\'s setup was last saved on ' + acctWhen(acct.savedAt) + '. It saves by itself a few seconds after any change. Photos are not saved.' : 'Not saved yet.';
-    var box = $('acMKids'); box.textContent = '';
-    acctKids.forEach(function(k){ var s = document.createElement('span'); s.className = 'btn'; s.textContent = acctKidName(k) + (k.id===acct.childId ? ' (this tablet)' : ''); box.appendChild(s); });
+    var kid = acctKids.filter(function(k){ return k.id===acct.childId; })[0], box = $('acDevs'); box.textContent = '';
+    $('acSaved').textContent = kid ? 'Devices for ' + (kid.label || 'this child') + '. Each keeps its own setup and saves by itself after a change.' : '';
+    $('acPhotos').checked = acct.photos !== false;
+    (kid ? kid.devices : []).forEach(function(d){
+      var row = document.createElement('div'); row.className = 'acdev'; var t = document.createElement('div'), b = document.createElement('b'), sp = document.createElement('span');
+      b.textContent = d.name + (d.id===acct.deviceId ? ' (this device)' : ''); sp.textContent = acctDevLine(d); t.appendChild(b); t.appendChild(sp); row.appendChild(t);
+      if(d.id===acct.deviceId){ if(document.activeElement !== $('acDevName')) $('acDevName').value = d.name; }
+      else { var acts = document.createElement('div'); acts.className = 'inline';
+        if(d.savedAt){ var c = document.createElement('button'); c.type = 'button'; c.className = 'btn'; c.textContent = 'Copy to this device'; c.addEventListener('click', function(){ acctCopyAsk(d, c); }); acts.appendChild(c); }
+        var r = document.createElement('button'); r.type = 'button'; r.className = 'btn'; r.textContent = 'Remove'; r.addEventListener('click', function(){ acctRemoveAsk(d, r); }); acts.appendChild(r); row.appendChild(acts); }
+      box.appendChild(row);
+    });
   }
+  function acctCopyAsk(d, btn){ if(btn.dataset.sure){ acctImport(d.id, 'acProg2', 'acMsg6'); return; } btn.dataset.sure = '1'; btn.textContent = 'Yes, replace this device\'s setup and photos'; }
+  function acctRemoveAsk(d, btn){ if(!btn.dataset.sure){ btn.dataset.sure = '1'; btn.textContent = 'Yes, remove it and what it saved'; return; }
+    acctCall('device/remove', {token:acct.token, device:d.id}).then(function(j){ acctKids = j.children || acctKids; acctManageText(); }, function(e){ $('acMsg6').textContent = e.net ? 'Could not reach the server.' : e.message; }); }
+  function acctManageFill(){ return acctCall('me', {token:acct.token}).then(function(j){ acctKids = j.children || []; acct.email = j.email || acct.email; acctManageText(); if(!acct.childId) acctAfterSignIn(); },
+      function(e){ if(e.status===401){ acct = ACCT_NONE(); acctKeep(); acctManage(); } else $('acMsg6').textContent = e.net ? 'Could not reach the server just now.' : e.message; }); }
   function acctManage(){
     if(!acct.token){ acctAfter = null; $('acLater').hidden = false; $('acMail').value = ''; acctOpenPanel('acEmail'); return; }
-    acctOpenPanel('acManage'); $('acErase2').hidden = true; acctManageText();
-    acctCall('me', {token:acct.token}).then(function(j){ acctKids = j.children || []; acct.email = j.email || acct.email; acctManageText(); if(!acct.childId) acctAfterSignIn(); },
-      function(e){ if(e.status===401){ acct = {token:'', email:'', childId:0, savedAt:''}; acctKeep(); acctManage(); } else $('acMsg6').textContent = e.net ? 'Could not reach the server just now.' : e.message; });
+    acctOpenPanel('acManage'); $('acErase2').hidden = true; $('acProg2').textContent = ''; acctManageText(); acctManageFill();
   }
   function acctSignOut(erase){
-    var tk = acct.token; var done = function(){ acct = {token:'', email:'', childId:0, savedAt:''}; acctKeep(); acctKids = []; $('acct').classList.remove('open'); $('acOpen').hidden = !acctOn; };
+    var tk = acct.token; var done = function(){ acct = ACCT_NONE(); acctKeep(); acctKids = []; $('acct').classList.remove('open'); $('acOpen').hidden = !acctOn; };
     if(erase){ acctCall('erase', {token:tk}).then(done, function(e){ $('acMsg6').textContent = e.net ? 'Could not reach the server, so nothing was deleted. Try again when the internet is back.' : e.message; }); }
     else { acctCall('signout', {token:tk}).then(done, done); }
   }
@@ -3982,12 +4051,13 @@ var NSP = NATIVE && window.Capacitor.Plugins || {};       // the app's own helpe
   $('acNew').addEventListener('click', function(){ acctChildForm(0); });
   $('acChBack').addEventListener('click', function(){ if(acctEditing) acctManage(); else acctAfterSignIn(); });
   $('acChSave').addEventListener('click', acctChildSave);
-  $('acKeep').addEventListener('click', function(){ if(acctPick) acctUseChild(acctPick.id, false); });
-  $('acUse').addEventListener('click', function(){ if(acctPick) acctUseChild(acctPick.id, true); });
+  $('acKeep').addEventListener('click', function(){ if(acctPick) acctUseChild(acctPick.id, 0); });
   $('acOk').addEventListener('click', acctClose);
   $('acClose').addEventListener('click', function(){ $('acct').classList.remove('open'); });
   $('acOpen').addEventListener('click', acctManage);
-  $('acSaveNow').addEventListener('click', function(){ $('acMsg6').textContent = ''; acctPush(true).then(function(ok){ if(ok) acctManageText(); }); });
+  $('acSaveNow').addEventListener('click', function(){ $('acMsg6').textContent = ''; acctPush(true); });
+  $('acPhotos').addEventListener('change', function(){ acct.photos = this.checked; acctKeep(); acctPush(true); });
+  $('acDevSave').addEventListener('click', function(){ var n = $('acDevName').value.trim(); if(!n || !acct.deviceId) return; acctCall('device/rename', {token:acct.token, device:acct.deviceId, name:n}).then(function(j){ acctKids = j.children || acctKids; acctManageText(); }, function(e){ $('acMsg6').textContent = e.net ? 'Could not reach the server.' : e.message; }); });
   $('acEdit').addEventListener('click', function(){ if(acct.childId) acctChildForm(acct.childId); });
   $('acOut').addEventListener('click', function(){ acctSignOut(false); });
   $('acErase').addEventListener('click', function(){ $('acErase2').hidden = false; });

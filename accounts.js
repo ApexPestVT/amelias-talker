@@ -1,4 +1,4 @@
-// My Turn: family accounts. Sign-in by emailed code, one saved setup per child, and totals for grant reports.
+// My Turn: family accounts. Sign-in by emailed code, a saved setup (with photos) for every device a child uses, and totals for grant reports.
 // Kept apart from server.js so it can be tested alone, and so a missing database or mail key switches
 // accounts OFF without touching anything else the tablets need (speech, voices, pictures).
 //
@@ -13,8 +13,11 @@ const crypto = require('crypto');
 const AGE_BANDS = ['under3', '3to5', '6to8', '9to12', '13to17', '18plus', 'unsaid'];
 const CONDITIONS = ['autism', 'cp', 'down', 'genetic', 'apraxia', 'delay', 'injury', 'hearing', 'other', 'unsaid'];
 const CODE_MINUTES = 15, CODE_TRIES = 5, SENDS_PER_HOUR = 5, SEND_GAP_MS = 45 * 1000;
-const MAX_DATA = 400 * 1024;      // one child's saved setup (settings, added words, questionnaire answers; never photos)
-const MAX_CHILDREN = 12;
+const MAX_DATA = 400 * 1024;      // one device's saved setup (settings, added words, questionnaire answers, the list of photo scenes)
+const MAX_CHILDREN = 12, MAX_DEVICES = 20;
+const MAX_FILE = 3 * 1024 * 1024, MAX_FILES = 400, MAX_FILE_TOTAL = 40 * 1024 * 1024;   // photos, kept per device
+const FILE_KEY = /^(pic|sceneimg):[A-Za-z0-9:._ \-]{1,90}$/;
+const PLATFORMS = ['ipad', 'iphone', 'android', 'web'];
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS families (
@@ -23,8 +26,16 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS children (
      id SERIAL PRIMARY KEY, family_id INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
      label TEXT NOT NULL DEFAULT '', age_band TEXT NOT NULL, conditions TEXT NOT NULL DEFAULT '[]',
-     consent_at TIMESTAMPTZ NOT NULL DEFAULT now(), data TEXT, data_at TIMESTAMPTZ,
-     created_at TIMESTAMPTZ NOT NULL DEFAULT now())`,
+     consent_at TIMESTAMPTZ NOT NULL DEFAULT now(), created_at TIMESTAMPTZ NOT NULL DEFAULT now())`,
+  // One row per tablet or phone a child uses. Each keeps its own setup, so two devices never overwrite each other.
+  `CREATE TABLE IF NOT EXISTS devices (
+     id SERIAL PRIMARY KEY, family_id INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+     child_id INTEGER NOT NULL REFERENCES children(id) ON DELETE CASCADE,
+     name TEXT NOT NULL DEFAULT '', platform TEXT NOT NULL DEFAULT 'web', data TEXT, data_at TIMESTAMPTZ,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT now(), last_seen TIMESTAMPTZ NOT NULL DEFAULT now())`,
+  `CREATE TABLE IF NOT EXISTS device_files (
+     device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE, key TEXT NOT NULL,
+     body TEXT NOT NULL, bytes INTEGER NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (device_id, key))`,
   `CREATE TABLE IF NOT EXISTS login_codes (
      email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL,
      tries INTEGER NOT NULL DEFAULT 0, sent_at TIMESTAMPTZ NOT NULL, sent_count INTEGER NOT NULL DEFAULT 1, window_at TIMESTAMPTZ NOT NULL)`,
@@ -128,9 +139,19 @@ function makeAccounts(opts) {
     return { fid: r.rows[0].fid, email: r.rows[0].email };
   }
   async function kids(fid) {
-    const r = await q('SELECT id, label, age_band, conditions, data_at FROM children WHERE family_id = $1 ORDER BY id', [fid]);
-    return r.rows.map(c => ({ id: c.id, label: c.label, ageBand: c.age_band, conditions: safeList(c.conditions), savedAt: c.data_at ? new Date(c.data_at).toISOString() : null }));
+    const r = await q('SELECT id, label, age_band, conditions FROM children WHERE family_id = $1 ORDER BY id', [fid]);
+    const d = await q('SELECT id, child_id, name, platform, data_at FROM devices WHERE family_id = $1 ORDER BY id', [fid]);
+    const f = await q('SELECT df.device_id AS did, COUNT(*) AS n FROM device_files df JOIN devices d ON d.id = df.device_id WHERE d.family_id = $1 GROUP BY df.device_id', [fid]);
+    const photos = {}; f.rows.forEach(x => photos[x.did] = Number(x.n));
+    return r.rows.map(c => ({ id: c.id, label: c.label, ageBand: c.age_band, conditions: safeList(c.conditions),
+      devices: d.rows.filter(x => x.child_id === c.id).map(x => ({ id: x.id, name: x.name, platform: x.platform, savedAt: x.data_at ? new Date(x.data_at).toISOString() : null, photos: photos[x.id] || 0 })) }));
   }
+  async function dev(token, id) {            // the device, only if it belongs to the signed-in family
+    const w = await who(token), r = await q('SELECT id, child_id FROM devices WHERE id = $1 AND family_id = $2', [Number(id), w.fid]);
+    if (!r.rows.length) throw fail(404, 'That device is not on this account.');
+    return { fid: w.fid, id: r.rows[0].id, childId: r.rows[0].child_id };
+  }
+  const cleanName = v => String(v || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 40);
   function safeList(s) { try { const a = JSON.parse(s); return Array.isArray(a) ? a.filter(x => CONDITIONS.includes(x)) : []; } catch (e) { return []; } }
   function childFields(b) {
     const ageBand = String(b.ageBand || ''), conditions = Array.isArray(b.conditions) ? [...new Set(b.conditions.map(String))].filter(x => CONDITIONS.includes(x)) : [];
@@ -157,31 +178,82 @@ function makeAccounts(opts) {
     return { ok: true, id: all[all.length - 1].id, children: all };
   }
 
+  async function deviceAdd(token, b) {
+    const w = await who(token), t = iso(now());
+    const c = await q('SELECT id FROM children WHERE id = $1 AND family_id = $2', [Number(b.childId), w.fid]);
+    if (!c.rows.length) throw fail(404, 'That child is not on this account.');
+    const n = await q('SELECT COUNT(*) AS n FROM devices WHERE family_id = $1', [w.fid]);
+    if (Number(n.rows[0].n) >= MAX_DEVICES) throw fail(400, 'This account already has the most devices it can hold. Remove one you no longer use.');
+    const platform = PLATFORMS.includes(b.platform) ? b.platform : 'web';
+    await q('INSERT INTO devices (family_id, child_id, name, platform, created_at, last_seen) VALUES ($1,$2,$3,$4,$5,$5)', [w.fid, Number(b.childId), cleanName(b.name) || 'Device', platform, t]);
+    const r = await q('SELECT MAX(id) AS id FROM devices WHERE family_id = $1', [w.fid]);
+    return { ok: true, deviceId: r.rows[0].id, children: await kids(w.fid) };
+  }
+  async function deviceRename(token, b) {
+    const d = await dev(token, b.device), name = cleanName(b.name);
+    if (!name) throw fail(400, 'Type a name for the device.');
+    await q('UPDATE devices SET name = $2 WHERE id = $1', [d.id, name]);
+    return { ok: true, children: await kids(d.fid) };
+  }
+  async function deviceRemove(token, b) {
+    const d = await dev(token, b.device);
+    await q('DELETE FROM device_files WHERE device_id = $1', [d.id]);
+    await q('DELETE FROM devices WHERE id = $1', [d.id]);
+    return { ok: true, children: await kids(d.fid) };
+  }
+  /* Saves this device's setup. `keys` is the list of photos the device has now: any other photo kept for it is dropped.
+     The answer lists what the server holds (key -> size) so the device can send only what is new or changed. */
   async function dataSave(token, b) {
-    const w = await who(token), text = JSON.stringify(b.data === undefined ? null : b.data);
+    const d = await dev(token, b.device), text = JSON.stringify(b.data === undefined ? null : b.data);
     if (!b.data || typeof b.data !== 'object') throw fail(400, 'Nothing to save.');
     if (text.length > MAX_DATA) throw fail(413, 'That setup is too large to save.');
     const t = iso(now());
-    const r = await q('UPDATE children SET data = $3, data_at = $4 WHERE id = $1 AND family_id = $2', [Number(b.id), w.fid, text, t]);
-    if (!r.rowCount) throw fail(404, 'That child is not on this account.');
-    return { ok: true, savedAt: t };
+    await q('UPDATE devices SET data = $2, data_at = $3, last_seen = $3 WHERE id = $1', [d.id, text, t]);
+    const have = {}, rows = (await q('SELECT key, bytes FROM device_files WHERE device_id = $1', [d.id])).rows;
+    if (Array.isArray(b.keys)) {
+      const want = new Set(b.keys.map(String));
+      for (const r of rows) { if (want.has(r.key)) have[r.key] = r.bytes; else await q('DELETE FROM device_files WHERE device_id = $1 AND key = $2', [d.id, r.key]); }
+    } else rows.forEach(r => have[r.key] = r.bytes);
+    return { ok: true, savedAt: t, have };
+  }
+  async function fileSave(token, b) {
+    const d = await dev(token, b.device), key = String(b.key || ''), body = String(b.body || '');
+    if (!FILE_KEY.test(key)) throw fail(400, 'That is not a photo this app saves.');
+    if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(body)) throw fail(400, 'That is not a picture.');
+    if (body.length > MAX_FILE) throw fail(413, 'That photo is too large to save.');
+    const tot = await q('SELECT COUNT(*) AS n, COALESCE(SUM(bytes), 0) AS b FROM device_files WHERE device_id = $1 AND key <> $2', [d.id, key]);
+    if (Number(tot.rows[0].n) >= MAX_FILES || Number(tot.rows[0].b) + body.length > MAX_FILE_TOTAL) throw fail(413, 'This device has reached the most photos that can be saved.');
+    await q('DELETE FROM device_files WHERE device_id = $1 AND key = $2', [d.id, key]);
+    await q('INSERT INTO device_files (device_id, key, body, bytes, updated_at) VALUES ($1,$2,$3,$4,$5)', [d.id, key, body, body.length, iso(now())]);
+    return { ok: true, bytes: body.length };
   }
   async function dataLoad(token, b) {
-    const w = await who(token);
-    const r = await q('SELECT data, data_at FROM children WHERE id = $1 AND family_id = $2', [Number(b.id), w.fid]);
-    if (!r.rows.length) throw fail(404, 'That child is not on this account.');
+    const d = await dev(token, b.device);
+    const r = await q('SELECT data, data_at FROM devices WHERE id = $1', [d.id]);
     let data = null; try { data = r.rows[0].data ? JSON.parse(r.rows[0].data) : null; } catch (e) {}
-    return { ok: true, data, savedAt: r.rows[0].data_at ? new Date(r.rows[0].data_at).toISOString() : null };
+    const files = (await q('SELECT key, bytes FROM device_files WHERE device_id = $1 ORDER BY key', [d.id])).rows.map(x => ({ key: x.key, bytes: x.bytes }));
+    return { ok: true, data, files, savedAt: r.rows[0].data_at ? new Date(r.rows[0].data_at).toISOString() : null };
+  }
+  async function fileLoad(token, b) {
+    const d = await dev(token, b.device);
+    const r = await q('SELECT body FROM device_files WHERE device_id = $1 AND key = $2', [d.id, String(b.key || '')]);
+    if (!r.rows.length) throw fail(404, 'That photo is not saved.');
+    return { ok: true, body: r.rows[0].body };
   }
   async function childDelete(token, b) {
     const w = await who(token);
-    const r = await q('DELETE FROM children WHERE id = $1 AND family_id = $2', [Number(b.id), w.fid]);
-    if (!r.rowCount) throw fail(404, 'That child is not on this account.');
+    const c = await q('SELECT id FROM children WHERE id = $1 AND family_id = $2', [Number(b.id), w.fid]);
+    if (!c.rows.length) throw fail(404, 'That child is not on this account.');
+    await q('DELETE FROM device_files WHERE device_id IN (SELECT id FROM devices WHERE child_id = $1)', [c.rows[0].id]);
+    await q('DELETE FROM devices WHERE child_id = $1', [c.rows[0].id]);
+    await q('DELETE FROM children WHERE id = $1', [c.rows[0].id]);
     return { ok: true, children: await kids(w.fid) };
   }
   async function signOut(token) { await q('DELETE FROM sessions WHERE token_hash = $1', [sha(String(token || ''))]); return { ok: true }; }
-  async function erase(token) {             // the whole account: every child, every saved setup, every sign-in
+  async function erase(token) {             // the whole account: every child, every device, every saved setup and photo, every sign-in
     const w = await who(token);
+    await q('DELETE FROM device_files WHERE device_id IN (SELECT id FROM devices WHERE family_id = $1)', [w.fid]);
+    await q('DELETE FROM devices WHERE family_id = $1', [w.fid]);
     await q('DELETE FROM children WHERE family_id = $1', [w.fid]);
     await q('DELETE FROM sessions WHERE family_id = $1', [w.fid]);
     await q('DELETE FROM login_codes WHERE email = $1', [w.email]);
@@ -200,7 +272,10 @@ function makeAccounts(opts) {
     const byAge = {}, byCond = {}; AGE_BANDS.forEach(a => byAge[a] = 0); CONDITIONS.forEach(c => byCond[c] = 0);
     let fresh = 0;
     rows.forEach(r => { if (byAge[r.age_band] !== undefined) byAge[r.age_band]++; safeList(r.conditions).forEach(c => byCond[c]++); if (new Date(r.created_at).getTime() >= t - 30 * 86400e3) fresh++; });
+    const devs = (await q('SELECT platform, last_seen FROM devices')).rows, byPlatform = {}; PLATFORMS.forEach(x => byPlatform[x] = 0);
+    let devActive = 0; devs.forEach(x => { if (byPlatform[x.platform] !== undefined) byPlatform[x.platform]++; if (new Date(x.last_seen).getTime() >= t - 30 * 86400e3) devActive++; });
     return { ok: true, asOf: iso(t), families: Number(fam.rows[0].n), familiesActive30Days: Number(act.rows[0].n), children: rows.length, childrenAdded30Days: fresh, byAge, byCondition: byCond,
+      devices: devs.length, devicesActive30Days: devActive, byPlatform,
       note: 'A child can have more than one condition, so the condition counts can add up to more than the number of children.' };
   }
 
@@ -217,13 +292,18 @@ function makeAccounts(opts) {
     if (p === '/api/acct/me') return me(b.token);
     if (p === '/api/acct/child') return childSave(b.token, b);
     if (p === '/api/acct/child/delete') return childDelete(b.token, b);
+    if (p === '/api/acct/device') return deviceAdd(b.token, b);
+    if (p === '/api/acct/device/rename') return deviceRename(b.token, b);
+    if (p === '/api/acct/device/remove') return deviceRemove(b.token, b);
     if (p === '/api/acct/save') return dataSave(b.token, b);
     if (p === '/api/acct/load') return dataLoad(b.token, b);
+    if (p === '/api/acct/file') return fileSave(b.token, b);
+    if (p === '/api/acct/file/get') return fileLoad(b.token, b);
     if (p === '/api/acct/signout') return signOut(b.token);
     if (p === '/api/acct/erase') return erase(b.token);
     return Promise.reject(fail(404, 'No such address.'));
   }
-  return { init, status, route, MAX_BODY: MAX_DATA + 4096 };
+  return { init, status, route, MAX_BODY: Math.max(MAX_DATA, MAX_FILE) + 8192 };
 }
 
 /* Sends one plain-text email through Resend. */
