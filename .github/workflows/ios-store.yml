@@ -76,9 +76,11 @@ jobs:
           set -o pipefail
           xcodebuild archive -project App.xcodeproj -scheme App -configuration Release \
             -destination 'generic/platform=iOS' -archivePath build/App.xcarchive -derivedDataPath build/dd \
-            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" TARGETED_DEVICE_FAMILY=2 \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" 2>&1 | tee archive.log | grep -E "error|ARCHIVE|warning: unre" | tail -60
           ls build/App.xcarchive/Products/Applications
+          # iPad only for the first release: iPhone can be added later, but Apple never lets a released app drop a device.
+          /usr/libexec/PlistBuddy -c "Print :UIDeviceFamily" build/App.xcarchive/Products/Applications/App.app/Info.plist
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" -c "Print :CFBundleVersion" -c "Print :CFBundleIdentifier" build/App.xcarchive/Products/Applications/App.app/Info.plist
       - name: Sign it with the Apple key and make the store file
         if: ${{ inputs.dry_run != true }}
