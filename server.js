@@ -29,6 +29,7 @@ function allowed(ip) {
 }
 // The tablet app (iPad and Android wrapper) serves its pages from these addresses and calls this server from there.
 const APP_ORIGINS = ['https://localhost', 'capacitor://localhost'];
+const LANDING_HOSTS = (process.env.LANDING_HOSTS || 'myturntotalk.org,www.myturntotalk.org').split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
 function sameSite(req) {
   const origin = req.headers.origin;
   if (origin && APP_ORIGINS.includes(origin)) return true;
@@ -448,6 +449,17 @@ async function picImage(id) {
 
 /* One bad request must never take the server down for every tablet. */
 const handle = (req, res) => {
+  // The app also lives under /app/ (same files, same /api). On the nonprofit's own address the bare address shows the nonprofit page instead of the app.
+  const rawPath = (req.url || '/').split('?')[0];
+  if (rawPath === '/app') { res.writeHead(302, { Location: '/app/' }); return res.end(); }
+  const underApp = rawPath.startsWith('/app/');
+  if (underApp) req.url = req.url.slice(4);
+  const hostName = String(req.headers.host || '').toLowerCase();
+  if (!underApp && LANDING_HOSTS.includes(hostName)) {
+    if (rawPath === '/' || rawPath === '/index.html') req.url = '/home.html';
+    // Anyone who opened the app at the bare address before it moved still has its offline helper there; this one removes itself so the nonprofit page shows.
+    if (rawPath === '/sw.js') { res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-cache' }); return res.end("self.addEventListener('install',()=>self.skipWaiting());self.addEventListener('activate',e=>e.waitUntil(self.registration.unregister().then(()=>self.clients.matchAll({type:'window'})).then(cs=>cs.forEach(c=>c.navigate(c.url)))));"); }
+  }
   if (req.headers.origin && APP_ORIGINS.includes(req.headers.origin) && String(req.url).startsWith('/api/')) {   // let the tablet app call the API
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin); res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');

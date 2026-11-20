@@ -1,20 +1,21 @@
 {
-  "name": "My Turn",
+  "name": "My Turn To Talk",
   "short_name": "My Turn",
-  "start_url": "/",
+  "start_url": ".",
+  "scope": ".",
   "display": "fullscreen",
   "orientation": "landscape",
   "background_color": "#f3f6fb",
   "theme_color": "#16223a",
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
