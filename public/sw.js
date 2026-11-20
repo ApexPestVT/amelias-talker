@@ -1,5 +1,5 @@
 // Keeps the device working with no internet (taps and voice). Listening still needs a connection.
-const CACHE = 'talker-v91';
+const CACHE = 'talker-v92';
 // Paths are relative to wherever this file is served from, so it works at the bare address and under /app/.
 const SHELL = ['./', 'index.html', 'band-codec.js', 'manifest.webmanifest', 'icon-192.png', 'icon-180.png', 'icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
