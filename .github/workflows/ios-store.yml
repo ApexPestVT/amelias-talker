@@ -112,7 +112,8 @@ jobs:
         run: |
           IPA=$(ls build/out/*.ipa | head -1)
           xcrun altool --upload-app -f "$IPA" -t ios --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID" 2>&1 | tee upload.log | tail -30
-          grep -qi "error" upload.log && exit 1 || true
+          # altool prints "UPLOAD SUCCEEDED with no errors", so looking for the word "error" wrongly failed run 44683912295
+          grep -q "UPLOAD SUCCEEDED" upload.log || { echo "::error::Upload did not report success"; exit 1; }
       - name: Remove the Apple key from this Mac
         if: always()
         run: rm -rf ~/.appstoreconnect
