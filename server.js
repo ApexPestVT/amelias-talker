@@ -458,7 +458,7 @@ const handle = (req, res) => {
   if (!underApp && LANDING_HOSTS.includes(hostName)) {
     if (rawPath === '/' || rawPath === '/index.html') req.url = '/home.html';
     // Anyone who opened the app at the bare address before it moved still has its offline helper there; this one removes itself so the nonprofit page shows.
-    if (rawPath === '/sw.js') { res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-cache' }); return res.end("self.addEventListener('install',()=>self.skipWaiting());self.addEventListener('activate',e=>e.waitUntil(self.registration.unregister().then(()=>self.clients.matchAll({type:'window'})).then(cs=>cs.forEach(c=>c.navigate(c.url)))));"); }
+    if (rawPath === '/sw.js') { res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'private, no-cache' }); return res.end("self.addEventListener('install',()=>self.skipWaiting());self.addEventListener('activate',e=>e.waitUntil(self.registration.unregister().then(()=>self.clients.matchAll({type:'window'})).then(cs=>cs.forEach(c=>c.navigate(c.url)))));"); }
   }
   if (req.headers.origin && APP_ORIGINS.includes(req.headers.origin) && String(req.url).startsWith('/api/')) {   // let the tablet app call the API
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin); res.setHeader('Vary', 'Origin');
@@ -588,7 +588,7 @@ const handle = (req, res) => {
     if (err) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Not found'); }
     res.writeHead(200, {
       'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'private, no-cache',
       'Permissions-Policy': 'microphone=(self), camera=(self)'
     });
     res.end(data);
