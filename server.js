@@ -30,6 +30,7 @@ function allowed(ip) {
 // The tablet app (iPad and Android wrapper) serves its pages from these addresses and calls this server from there.
 const APP_ORIGINS = ['https://localhost', 'capacitor://localhost'];
 const LANDING_HOSTS = (process.env.LANDING_HOSTS || 'myturntotalk.org,www.myturntotalk.org').split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
+const DONATE_URL = process.env.DONATE_URL || 'https://my-turn.givingafoundation.tech/p/my-turn-to-talk-a-free-voice-for-kids-who-can-t-speak-yet';   // where /donate forwards to
 function sameSite(req) {
   const origin = req.headers.origin;
   if (origin && APP_ORIGINS.includes(origin)) return true;
@@ -452,6 +453,8 @@ const handle = (req, res) => {
   // The app also lives under /app/ (same files, same /api). On the nonprofit's own address the bare address shows the nonprofit page instead of the app.
   const rawPath = (req.url || '/').split('?')[0];
   if (rawPath === '/app') { res.writeHead(302, { Location: '/app/' }); return res.end(); }
+  // A short address for flyers and boxes. It forwards to the fundraising page, so that page can move without the short address changing.
+  if (rawPath === '/donate' || rawPath === '/donate/') { res.writeHead(302, { Location: DONATE_URL, 'Cache-Control': 'private, no-cache' }); return res.end(); }
   const underApp = rawPath.startsWith('/app/');
   if (underApp) req.url = req.url.slice(4);
   const hostName = String(req.headers.host || '').toLowerCase();
