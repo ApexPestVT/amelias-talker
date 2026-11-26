@@ -1,25 +1,88 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>My Turn To Talk</title>
+<title>My Turn To Talk: a free voice for kids who can't speak yet</title>
 <meta name="description" content="A free talking picture board for people who do not speak, or who need help being understood.">
 <link rel="icon" type="image/png" href="/icon-192.png">
 <style>
-body{font:18px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#16223a;background:#f3f6fb;margin:0;padding:24px}
-main{max-width:720px;margin:0 auto;background:#fff;border-radius:16px;padding:32px 28px;text-align:center}
-img{width:120px;height:120px;border-radius:26px}
-h1{font-size:32px;margin:14px 0 6px}
-p{margin:10px auto;max-width:34em}
-.go{display:inline-block;margin:18px 0 6px;padding:16px 30px;border-radius:14px;background:#16223a;color:#fff;font-weight:700;font-size:20px;text-decoration:none}
-.give{background:#fff;color:#16223a;box-shadow:inset 0 0 0 3px #16223a;margin-left:10px}
-nav{margin-top:22px;font-size:16px}
-nav a{color:#1d4fd8;margin:0 10px}
+:root{--ink:#16223a;--soft:#51607a;--blue:#2563eb;--wash:#edf2fd;--line:#d9e2f3}
+*{box-sizing:border-box}
+body{font:18px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);background:var(--wash);margin:0}
+a{color:var(--blue)}
+.wrap{max-width:1040px;margin:0 auto;padding:0 22px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;max-width:1040px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;color:var(--ink);text-decoration:none}
+.brand img{width:40px;height:40px;border-radius:10px}
+header nav{display:flex;align-items:center;gap:18px;flex-wrap:wrap;justify-content:flex-end}
+header nav a{color:var(--ink);text-decoration:none;font-weight:600;font-size:16px}
+.btn{display:inline-block;padding:14px 26px;border-radius:999px;background:var(--blue);color:#fff;font-weight:700;text-decoration:none;font-size:18px}
+.btn.line{background:#fff;color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink)}
+header nav a.btn{color:#fff;padding:9px 18px;font-size:16px}
+.hero{text-align:center;padding:38px 0 8px}
+h1{font-size:clamp(34px,6.2vw,64px);line-height:1.08;margin:0 auto 16px;max-width:15em;letter-spacing:-.02em}
+.lede{font-size:clamp(18px,2.4vw,22px);color:var(--soft);max-width:32em;margin:0 auto 24px}
+.acts{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.small{font-size:15px;color:var(--soft);margin-top:12px}
+.banner{display:block;width:100%;height:auto;border-radius:22px;margin:30px 0 0}
+section{padding:54px 0 0}
+h2{font-size:clamp(26px,3.6vw,36px);line-height:1.15;margin:0 0 10px;letter-spacing:-.01em}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:22px}
+.card{background:#fff;border-radius:18px;padding:16px 16px 20px;border:1px solid var(--line)}
+.card img{display:block;width:100%;height:auto;border-radius:12px;border:1px solid var(--line)}
+.card h3{font-size:20px;margin:14px 0 4px}
+.card p{margin:0;color:var(--soft);font-size:16px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:6px}
+.panel{background:#fff;border-radius:18px;padding:26px;border:1px solid var(--line)}
+.panel p{margin:8px 0 0;color:var(--soft)}
+.tag{display:inline-block;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--blue);margin-bottom:6px}
+.give{background:var(--blue);color:#fff;border-radius:22px;text-align:center;padding:46px 22px;margin-top:54px}
+.give h2{color:#fff}
+.give p{max-width:30em;margin:0 auto 22px;color:#e4ecff}
+.give .btn{background:#fff;color:var(--blue)}
+footer{text-align:center;padding:34px 22px 44px;font-size:15px;color:var(--soft)}
+footer a{margin:0 10px}
+@media (max-width:760px){.cards,.two{grid-template-columns:1fr}header nav a.hide{display:none}section{padding-top:40px}}
 </style></head>
-<body><main>
-<img src="/icon-192.png" alt="My Turn To Talk logo">
-<h1>My Turn To Talk</h1>
-<p>A free talking picture board for people who do not speak, or who need help being understood. Tap a picture and the device says the word.</p>
-<p>Built by a dad for his daughter. Free, with no ads.</p>
-<a class="go" href="/app/">Open the app</a>
-<a class="go give" href="/donate">Donate</a>
-<nav><a href="/support.html">Help and support</a><a href="/privacy.html">Privacy</a></nav>
-</main></body></html>
+<body>
+<header>
+  <a class="brand" href="/"><img src="/icon-192.png" alt="">My Turn To Talk</a>
+  <nav><a class="hide" href="/app/">App</a><a class="hide" href="/support.html">Help</a><a class="hide" href="/privacy.html">Privacy</a><a class="btn" href="/donate">Donate</a></nav>
+</header>
+<main class="wrap">
+  <div class="hero">
+    <h1>A free voice for kids who can't speak yet</h1>
+    <p class="lede">My Turn To Talk is a free talking picture board. Tap a picture and the device says the word.</p>
+    <div class="acts">
+      <a class="btn" href="https://apps.apple.com/app/my-turn-to-talk/id6836837433">Get it for iPad</a>
+      <a class="btn line" href="/app/">Open in a browser</a>
+    </div>
+    <p class="small">Free, with no ads.</p>
+    <img class="banner" src="/site/hero.jpg" width="1600" height="600" alt="The My Turn logo beside two screens from the app: a board of picture words, and a yes or no answer to the question &quot;Do you want to go outside and play?&quot;">
+  </div>
+
+  <section>
+    <h2>How it works</h2>
+    <div class="cards">
+      <div class="card"><img src="/site/tap.jpg" width="1000" height="750" alt="A board of large picture words such as yes, no, more, play, eat and drink" loading="lazy"><h3>Tap to talk</h3><p>Big pictures, one tap each. The device says the word out loud.</p></div>
+      <div class="card"><img src="/site/question.jpg" width="1000" height="750" alt="The app showing two large answers, yes and no, under the question it heard" loading="lazy"><h3>It hears the question</h3><p>Ask a question out loud and the answers pop up, ready to tap.</p></div>
+      <div class="card"><img src="/site/sentences.jpg" width="1000" height="750" alt="A later stage of the board with more picture words, including I, you, it and not" loading="lazy"><h3>It grows with your child</h3><p>Six stages, from first words to full sentences.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="two">
+      <div class="panel"><span class="tag">Coming next</span><h2>My Turn To-Go</h2><p>A small wristband with four talking buttons, for the playground and everywhere a tablet can't go. It is being built and tested now and is not available yet.</p></div>
+      <div class="panel"><span class="tag">Who we are</span><h2>Built by a dad for his daughter</h2><p>My Turn started with one family in Vermont. It is a fiscally sponsored project of the Givinga Foundation, and it is free for every family.</p></div>
+    </div>
+  </section>
+
+  <div class="give">
+    <h2>Help keep it free</h2>
+    <p>Gifts keep the app free for every family and help get the wristband safely onto a child's wrist.</p>
+    <a class="btn" href="/donate">Donate</a>
+  </div>
+</main>
+<footer>
+  <a href="/app/">Open the app</a><a href="/support.html">Help and support</a><a href="/privacy.html">Privacy</a><a href="/donate">Donate</a>
+  <p>My Turn To Talk</p>
+</footer>
+</body></html>
