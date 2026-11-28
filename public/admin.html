@@ -11,7 +11,7 @@
   <p id="asof"></p>
   <table id="top"></table>
   <h2 style="font-size:18px">Who keeps using it</h2><table id="use"></table>
-  <p><small>Counted in families. A family is seen each time the app is opened while online. An app cannot report being deleted, so "gone quiet" is the closest measure. Your own household and the app store reviewer are included.</small></p>
+  <p><small>Counted in families. A family is seen each time the app is opened while online. An app cannot report being deleted, so "gone quiet" is the closest measure. This section leaves out your own sign-ins and the app store reviewer's. Yours are the email addresses listed in OWNER_EMAILS in Railway.</small></p>
   <h2 style="font-size:18px">By age range</h2><table id="age"></table>
   <h2 style="font-size:18px">By condition</h2><table id="cond"></table>
   <p><small id="note"></small></p>
@@ -34,6 +34,8 @@
         var top = [['Children', j.children], ['Children added in the last 30 days', j.childrenAdded30Days], ['Families signed in', j.families], ['Families active in the last 30 days', j.familiesActive30Days], ['Devices', j.devices], ['Devices active in the last 30 days', j.devicesActive30Days]].concat(Object.keys(P).map(function(k){ return ['Devices: ' + P[k], (j.byPlatform || {})[k] || 0]; }));
         var age = Object.keys(AGES).map(function(k){ return [AGES[k], j.byAge[k] || 0]; }), cond = Object.keys(CONDS).map(function(k){ return [CONDS[k], j.byCondition[k] || 0]; });
         var u = j.usage || {}, of = function(n, d){ return (n || 0) + ' of ' + (d || 0); };
+        var y = j.yours || {};
+        top = top.concat([['Families that are yours or the reviewer\'s', y.families || 0], ['Families that are not yours', j.familiesNotYours || 0], ['Children in families that are not yours', j.childrenNotYours || 0]]);
         var use = [['Used it in the last 24 hours', u.activeToday || 0], ['Used it in the last 7 days', u.active7Days || 0], ['Used it in the last 30 days', u.active30Days || 0],
           ['Tried it once and did not come back (of families who joined over a day ago)', of(u.onlyFirstDay, u.joinedOverADayAgo)],
           ['Still using it a week after joining (of families who joined over a week ago)', of(u.stillAfterAWeek, u.joinedOverAWeekAgo)],

@@ -277,7 +277,11 @@ function makeAccounts(opts) {
     /* Who keeps using it. Built only from each family's first and latest check-in times: no names, and nothing about what was tapped or said.
        A family checks in when the app is opened while online, so an app left open for days counts from when it was opened. */
     const DAY = 86400e3, use = { activeToday: 0, active7Days: 0, active30Days: 0, joinedOverADayAgo: 0, onlyFirstDay: 0, joinedOverAWeekAgo: 0, stillAfterAWeek: 0, joinedOverAMonthAgo: 0, stillAfterAMonth: 0, goneQuiet: 0 };
-    (await q('SELECT created_at, last_seen FROM families')).rows.forEach(f => {
+    /* The owner's own sign-ins (OWNER_EMAILS) and the store reviewer's are counted apart, so testing does not look like real use. Emails never leave the server. */
+    const mine = new Set(String(opts.ownerEmails || '').split(',').concat([opts.reviewEmail || '']).map(cleanEmail).filter(Boolean));
+    const famRows = (await q('SELECT id, email, created_at, last_seen FROM families')).rows, mineIds = new Set(famRows.filter(f => mine.has(cleanEmail(f.email))).map(f => f.id));
+    const kidsMine = (await q('SELECT family_id FROM children')).rows.filter(k => mineIds.has(k.family_id)).length;
+    famRows.filter(f => !mineIds.has(f.id)).forEach(f => {
       const c = new Date(f.created_at).getTime(), l = new Date(f.last_seen).getTime(), span = l - c;
       if (l >= t - DAY) use.activeToday++; if (l >= t - 7 * DAY) use.active7Days++; if (l >= t - 30 * DAY) use.active30Days++;
       if (c <= t - DAY) { use.joinedOverADayAgo++; if (span < DAY) use.onlyFirstDay++; }
@@ -287,6 +291,7 @@ function makeAccounts(opts) {
     });
     return { ok: true, asOf: iso(t), families: Number(fam.rows[0].n), familiesActive30Days: Number(act.rows[0].n), children: rows.length, childrenAdded30Days: fresh, byAge, byCondition: byCond,
       devices: devs.length, devicesActive30Days: devActive, byPlatform, usage: use,
+      yours: { families: mineIds.size, children: kidsMine, listed: mine.size }, familiesNotYours: famRows.length - mineIds.size, childrenNotYours: rows.length - kidsMine,
       note: 'A child can have more than one condition, so the condition counts can add up to more than the number of children.' };
   }
 

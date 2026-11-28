@@ -70,5 +70,16 @@ const assert=require('assert'); const { makeAccounts, cleanEmail } = require('..
   st=await R('/api/admin/stats',{key:'a-long-admin-key-123'}); ok(st.families===1 && st.children===0 && st.devices===0,'erased account, its devices and photos gone from the totals');
   ok((await bad(A.route('/api/acct/me','GET',null,'1'))).code===405 && A.route('/api/other','GET')===null,'routing: GET refused, other paths passed on');
   const off=makeAccounts({pool:null,mailOn:true}); await off.init; ok(off.status().enabled===false && (await bad(off.route('/api/acct/start','POST',{email:'a@b.co'}))).code===503,'no database: accounts off, clear answer');
+  // the owner's own sign-ins and the reviewer's are counted apart and left out of "who keeps using it"
+  { const m2=[]; const B=makeAccounts({pool:(()=>{ const { newDb } = require('pg-mem'); const { Pool } = newDb().adapters.createPg(); return new Pool(); })(), mailOn:true, adminKey:'a-long-admin-key-123', ownerEmails:' Me@Example.com , me2@example.com', reviewEmail:'review@example.com', reviewCode:'424242', now:()=>clock, sendMail:async(to,sub,text)=>{ m2.push(/\b(\d{6})\b/.exec(text)[1]); }});
+    await B.init; const RB=(p,body)=>B.route(p,'POST',body,'9.9.9.9');
+    await RB('/api/acct/start',{email:'me@example.com'}); const mine=await RB('/api/acct/verify',{email:'me@example.com',code:m2[0]});
+    await RB('/api/acct/child',{token:mine.token,ageBand:'3to5',conditions:['unsaid'],consent:true});
+    clock+=120e3; await RB('/api/acct/start',{email:'review@example.com'}); await RB('/api/acct/verify',{email:'review@example.com',code:'424242'});
+    clock+=120e3; await RB('/api/acct/start',{email:'family@example.com'}); const fam=await RB('/api/acct/verify',{email:'family@example.com',code:m2[1]});
+    await RB('/api/acct/child',{token:fam.token,ageBand:'6to8',conditions:['autism'],consent:true});
+    const s2=await RB('/api/admin/stats',{key:'a-long-admin-key-123'});
+    ok(s2.families===3 && s2.children===2 && s2.yours.families===2 && s2.yours.children===1 && s2.familiesNotYours===1 && s2.childrenNotYours===1 && s2.usage.activeToday===1 && s2.usage.active30Days===1,'own and reviewer sign-ins counted apart, usage counts only the other family: '+JSON.stringify([s2.yours,s2.familiesNotYours,s2.usage.activeToday]));
+    ok(!/example\.com/.test(JSON.stringify(s2)),'no email in the totals, own ones included'); }
   console.log(process.exitCode?'FAILED':'ALL '+n+' PASS');
 })().catch(e=>{ console.error('CRASH',e); process.exit(1); });

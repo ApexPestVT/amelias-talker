@@ -52,7 +52,7 @@ if (process.env.DATABASE_URL) {
 }
 if (process.env.TALKER_TEST && process.env.ACCT_POOL_MODULE) acctPool = require(process.env.ACCT_POOL_MODULE);   // tests only: an in-memory database
 const MAIL_ON = !!(process.env.RESEND_API_KEY && process.env.MAIL_FROM);
-const accounts = makeAccounts({ pool: acctPool, mailOn: MAIL_ON, adminKey: process.env.ADMIN_KEY, reviewEmail: process.env.REVIEW_EMAIL, reviewCode: process.env.REVIEW_CODE,
+const accounts = makeAccounts({ pool: acctPool, mailOn: MAIL_ON, adminKey: process.env.ADMIN_KEY, reviewEmail: process.env.REVIEW_EMAIL, reviewCode: process.env.REVIEW_CODE, ownerEmails: process.env.OWNER_EMAILS,
   sendMail: resendMailer(process.env.RESEND_API_KEY, process.env.MAIL_FROM, process.env.MAIL_ENDPOINT) });
 async function sttToken() {
   if (STT_PROVIDER === 'deepgram') {
