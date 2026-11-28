@@ -274,8 +274,19 @@ function makeAccounts(opts) {
     rows.forEach(r => { if (byAge[r.age_band] !== undefined) byAge[r.age_band]++; safeList(r.conditions).forEach(c => byCond[c]++); if (new Date(r.created_at).getTime() >= t - 30 * 86400e3) fresh++; });
     const devs = (await q('SELECT platform, last_seen FROM devices')).rows, byPlatform = {}; PLATFORMS.forEach(x => byPlatform[x] = 0);
     let devActive = 0; devs.forEach(x => { if (byPlatform[x.platform] !== undefined) byPlatform[x.platform]++; if (new Date(x.last_seen).getTime() >= t - 30 * 86400e3) devActive++; });
+    /* Who keeps using it. Built only from each family's first and latest check-in times: no names, and nothing about what was tapped or said.
+       A family checks in when the app is opened while online, so an app left open for days counts from when it was opened. */
+    const DAY = 86400e3, use = { activeToday: 0, active7Days: 0, active30Days: 0, joinedOverADayAgo: 0, onlyFirstDay: 0, joinedOverAWeekAgo: 0, stillAfterAWeek: 0, joinedOverAMonthAgo: 0, stillAfterAMonth: 0, goneQuiet: 0 };
+    (await q('SELECT created_at, last_seen FROM families')).rows.forEach(f => {
+      const c = new Date(f.created_at).getTime(), l = new Date(f.last_seen).getTime(), span = l - c;
+      if (l >= t - DAY) use.activeToday++; if (l >= t - 7 * DAY) use.active7Days++; if (l >= t - 30 * DAY) use.active30Days++;
+      if (c <= t - DAY) { use.joinedOverADayAgo++; if (span < DAY) use.onlyFirstDay++; }
+      if (c <= t - 7 * DAY) { use.joinedOverAWeekAgo++; if (span >= 7 * DAY) use.stillAfterAWeek++; }
+      if (c <= t - 30 * DAY) { use.joinedOverAMonthAgo++; if (span >= 30 * DAY) use.stillAfterAMonth++; }
+      if (span >= DAY && l < t - 30 * DAY) use.goneQuiet++;
+    });
     return { ok: true, asOf: iso(t), families: Number(fam.rows[0].n), familiesActive30Days: Number(act.rows[0].n), children: rows.length, childrenAdded30Days: fresh, byAge, byCondition: byCond,
-      devices: devs.length, devicesActive30Days: devActive, byPlatform,
+      devices: devs.length, devicesActive30Days: devActive, byPlatform, usage: use,
       note: 'A child can have more than one condition, so the condition counts can add up to more than the number of children.' };
   }
 

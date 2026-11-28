@@ -55,6 +55,12 @@ const assert=require('assert'); const { makeAccounts, cleanEmail } = require('..
   ok((await bad(R('/api/admin/stats',{key:'wrong'}))).code===403,'stats: wrong key refused');
   let st=await R('/api/admin/stats',{key:'a-long-admin-key-123'}); ok(st.families===2 && st.children===2 && st.devices===2 && st.byPlatform.ipad===1 && st.byPlatform.android===1 && st.devicesActive30Days===2 && st.byAge['6to8']===1 && st.byAge['3to5']===1 && st.byCondition.genetic===1 && st.byCondition.apraxia===1 && st.byCondition.unsaid===1,'stats: 2 families, 2 children, 2 devices for one child counted once: '+JSON.stringify([st.families,st.children,st.devices,st.byPlatform]));
   ok(!/example\.com|Amelia|taco|Kitchen|AAAA/.test(JSON.stringify(st)),'stats carry no email, name, device name, saved words or photos');
+  // who keeps using it
+  let u=st.usage; ok(u.activeToday===2 && u.active7Days===2 && u.active30Days===2 && u.joinedOverADayAgo===0 && u.onlyFirstDay===0 && u.goneQuiet===0,'usage: two new families, both active, nobody counted as dropped yet: '+JSON.stringify(u));
+  clock+=8*86400e3; await R('/api/acct/me',{token:T});
+  u=(await R('/api/admin/stats',{key:'a-long-admin-key-123'})).usage; ok(u.activeToday===1 && u.active7Days===1 && u.active30Days===2 && u.joinedOverAWeekAgo===2 && u.stillAfterAWeek===1 && u.joinedOverADayAgo===2 && u.onlyFirstDay===1 && u.goneQuiet===0,'usage after 8 days: one came back, one only used it the first day: '+JSON.stringify(u));
+  clock+=31*86400e3;
+  u=(await R('/api/admin/stats',{key:'a-long-admin-key-123'})).usage; ok(u.activeToday===0 && u.active30Days===0 && u.joinedOverAMonthAgo===2 && u.stillAfterAMonth===0 && u.goneQuiet===1 && u.onlyFirstDay===1,'usage after 39 days: the one who came back has gone quiet: '+JSON.stringify(u));
   // edit, delete child, sign out, erase
   let ed=await R('/api/acct/child',{token:T,id:c.id,ageBand:'9to12',conditions:['genetic'],label:'Amelia'}); ok(ed.children[0].ageBand==='9to12','child details edited without a new consent');
   let dc=await R('/api/acct/child/delete',{token:T,id:c2.id}); ok(dc.children.length===1,'one child removed');

@@ -10,6 +10,8 @@
 <div id="out" hidden>
   <p id="asof"></p>
   <table id="top"></table>
+  <h2 style="font-size:18px">Who keeps using it</h2><table id="use"></table>
+  <p><small>Counted in families. A family is seen each time the app is opened while online. An app cannot report being deleted, so "gone quiet" is the closest measure. Your own household and the app store reviewer are included.</small></p>
   <h2 style="font-size:18px">By age range</h2><table id="age"></table>
   <h2 style="font-size:18px">By condition</h2><table id="cond"></table>
   <p><small id="note"></small></p>
@@ -31,8 +33,15 @@
         var P = {ipad:'iPad', iphone:'iPhone', android:'Android', web:'Web browser'};
         var top = [['Children', j.children], ['Children added in the last 30 days', j.childrenAdded30Days], ['Families signed in', j.families], ['Families active in the last 30 days', j.familiesActive30Days], ['Devices', j.devices], ['Devices active in the last 30 days', j.devicesActive30Days]].concat(Object.keys(P).map(function(k){ return ['Devices: ' + P[k], (j.byPlatform || {})[k] || 0]; }));
         var age = Object.keys(AGES).map(function(k){ return [AGES[k], j.byAge[k] || 0]; }), cond = Object.keys(CONDS).map(function(k){ return [CONDS[k], j.byCondition[k] || 0]; });
+        var u = j.usage || {}, of = function(n, d){ return (n || 0) + ' of ' + (d || 0); };
+        var use = [['Used it in the last 24 hours', u.activeToday || 0], ['Used it in the last 7 days', u.active7Days || 0], ['Used it in the last 30 days', u.active30Days || 0],
+          ['Tried it once and did not come back (of families who joined over a day ago)', of(u.onlyFirstDay, u.joinedOverADayAgo)],
+          ['Still using it a week after joining (of families who joined over a week ago)', of(u.stillAfterAWeek, u.joinedOverAWeekAgo)],
+          ['Still using it a month after joining (of families who joined over a month ago)', of(u.stillAfterAMonth, u.joinedOverAMonthAgo)],
+          ['Gone quiet: came back at least once, but not seen for 30 days', u.goneQuiet || 0]];
+        rows($('use'), use);
         rows($('top'), top); rows($('age'), age); rows($('cond'), cond); $('note').textContent = j.note;
-        $('txt').value = ['My Turn totals as of ' + when, ''].concat(top.map(function(r){ return r[0] + ': ' + r[1]; }), ['', 'By age range'], age.map(function(r){ return '  ' + r[0] + ': ' + r[1]; }), ['', 'By condition (a child can have more than one)'], cond.map(function(r){ return '  ' + r[0] + ': ' + r[1]; })).join('\n');
+        $('txt').value = ['My Turn totals as of ' + when, ''].concat(top.map(function(r){ return r[0] + ': ' + r[1]; }), ['', 'Who keeps using it (counts of families)'], use.map(function(r){ return '  ' + r[0] + ': ' + r[1]; }), ['', 'By age range'], age.map(function(r){ return '  ' + r[0] + ': ' + r[1]; }), ['', 'By condition (a child can have more than one)'], cond.map(function(r){ return '  ' + r[0] + ': ' + r[1]; })).join('\n');
         $('out').hidden = false;
       }, function(e){ $('err').textContent = e.message; });
   }
